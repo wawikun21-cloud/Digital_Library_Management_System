@@ -1,0 +1,147 @@
+/* ── Topbar ───────────────────────────────────── */
+.topbar {
+  height: 58px;
+  background: #ffffff;
+  border-bottom: 1px solid #e8ecf0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: 0 1px 4px rgba(19, 47, 69, 0.07);
+}
+
+.topbar-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #132F45;
+  margin: 0;
+  letter-spacing: 0.1px;
+}
+
+/* Profile */
+.topbar-right {
+  position: relative;
+}
+
+.profile-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 5px 10px;
+  border-radius: 8px;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.profile-wrapper:hover {
+  background: #f0f7ff;
+}
+
+.profile-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #EEA23A;
+}
+
+.profile-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #132F45;
+}
+
+.chevron {
+  color: #32667F;
+  transition: transform 0.2s;
+}
+
+.chevron--open {
+  transform: rotate(180deg);
+}
+
+/* Dropdown */
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #dde8ef;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(19, 47, 69, 0.12);
+  width: 160px;
+  padding: 6px;
+  animation: fadeInDown 0.15s ease;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  font-size: 13px;
+  color: #132F45;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.dropdown-item:hover {
+  background: #f0f7ff;
+  color: #32667F;
+}
+
+.dropdown-item--danger {
+  color: #c0392b;
+}
+
+.dropdown-item--danger:hover {
+  background: #fff0ee;
+  color: #c0392b;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: #edf3f7;
+  margin: 4px 0;
+}
+
+/* ── Hamburger ────────────────────────────────── */
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hamburger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  background: none;
+  border-radius: 7px;
+  cursor: pointer;
+  color: #32667F;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.hamburger:hover {
+  background: rgba(238, 162, 58, 0.12);
+  color: #EEA23A;
+}
