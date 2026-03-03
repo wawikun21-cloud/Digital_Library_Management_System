@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   Search, ChevronDown, QrCode, PenLine, Camera,
   Star, X, BookOpen, ImagePlus, Trash2, Loader2,
-  CheckCircle2, AlertCircle, Sparkles,
+  CheckCircle2, AlertCircle, Sparkles, SlidersHorizontal,
 } from "lucide-react";
 
 /* ─── API base ──────────────────────────────────── */
@@ -79,9 +79,12 @@ const blurRing = (err) => e => {
 
 /* ══════════════════════════════════════════════ */
 export default function Books() {
-  const [books,    setBooks]    = useState(INITIAL_BOOKS);
-  const [query,    setQuery]    = useState("");
-  const [ddOpen,   setDdOpen]   = useState(false);
+  const [books,        setBooks]        = useState(INITIAL_BOOKS);
+  const [query,        setQuery]        = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [genreFilter,  setGenreFilter]  = useState("");
+  const [sortBy,       setSortBy]       = useState("");
+  const [ddOpen,       setDdOpen]       = useState(false);
   const [modal,    setModal]    = useState(false);
   const [form,     setForm]     = useState(EMPTY_FORM);
   const [errors,   setErrors]   = useState({});
@@ -120,10 +123,27 @@ export default function Books() {
     }
   }, [modal]);
 
-  const filtered = books.filter(b =>
-    b.title.toLowerCase().includes(query.toLowerCase()) ||
-    b.author.toLowerCase().includes(query.toLowerCase())
+  /* Derived: unique genres for the filter dropdown */
+  const genres = useMemo(
+    () => [...new Set(books.map(b => b.genre))].sort(),
+    [books]
   );
+
+  /* Filtered + sorted book list */
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    const result = books.filter(b => {
+      if (q && !["title","author","genre","isbn","publisher"]
+          .some(k => b[k]?.toLowerCase().includes(q))) return false;
+      if (statusFilter !== "All" && b.status !== statusFilter) return false;
+      if (genreFilter && b.genre !== genreFilter) return false;
+      return true;
+    });
+    if (sortBy === "title")  result.sort((a, b) => a.title.localeCompare(b.title));
+    if (sortBy === "author") result.sort((a, b) => a.author.localeCompare(b.author));
+    if (sortBy === "year")   result.sort((a, b) => b.year - a.year);
+    return result;
+  }, [books, query, statusFilter, genreFilter, sortBy]);
 
   /* ── Handlers ── */
   function openModal(mode) {
@@ -286,65 +306,170 @@ export default function Books() {
     <div className="flex flex-col gap-5">
 
       {/* ── Toolbar ── */}
-      <div className="flex flex-wrap items-center gap-3 justify-between">
+      <div className="flex flex-col gap-2.5">
 
-        {/* Search */}
-        <div
-          className="flex items-center gap-2 px-3 py-2 rounded-lg flex-1 min-w-[180px] max-w-xs"
-          style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-sm)" }}
-        >
-          <Search size={15} style={{ color:"var(--text-secondary)" }} className="shrink-0" />
-          <input
-            className="border-none outline-none text-[13px] bg-transparent w-full"
-            style={{ color:"var(--text-primary)" }}
-            placeholder="Search books or authors…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
-        </div>
+        {/* Row 1 — search + selects + add button */}
+        <div className="flex flex-wrap items-center gap-2.5 justify-between">
 
-        {/* Add Book dropdown */}
-        <div className="relative shrink-0" ref={ddRef}>
-          <button
-            onClick={() => setDdOpen(o => !o)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-colors duration-150"
-            style={{ background:"var(--accent-amber)", boxShadow:"0 2px 6px rgba(238,162,58,0.3)" }}
-            onMouseEnter={e => e.currentTarget.style.background = "var(--accent-orange)"}
-            onMouseLeave={e => e.currentTarget.style.background = "var(--accent-amber)"}
-          >
-            + Add Book
-            <ChevronDown
-              size={14}
-              className="transition-transform duration-200"
-              style={{ transform: ddOpen ? "rotate(180deg)" : "rotate(0deg)" }}
-            />
-          </button>
+          {/* Left: search + genre + sort */}
+          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
 
-          {ddOpen && (
+            {/* Search input */}
             <div
-              className="anim-drop absolute right-0 top-[calc(100%+6px)] w-48 rounded-xl p-1.5 z-20"
-              style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-lg)" }}
+              className="relative flex items-center gap-2 px-3 py-2 rounded-lg flex-1 min-w-[200px] max-w-sm"
+              style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-sm)" }}
             >
-              {[
-                { mode:"scan-cover", Icon: Camera,      label:"Scan Cover (OCR)" },
-                { mode:"scan",       Icon: QrCode,   label:"Scan Barcode" },
-                { mode:"manual",     Icon: PenLine,      label:"Add Manually" },
-              ].map(({ mode, Icon, label }) => (
+              <Search size={14} className="shrink-0" style={{ color:"var(--text-secondary)" }} />
+              <input
+                className="border-none outline-none text-[13px] bg-transparent w-full"
+                style={{ color:"var(--text-primary)" }}
+                placeholder="Search title, author, genre, ISBN…"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+              />
+              {query && (
                 <button
-                  key={mode}
-                  onClick={() => openModal(mode)}
-                  className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors duration-100"
-                  style={{ color:"var(--text-primary)" }}
-                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(238,162,58,0.1)"; e.currentTarget.style.color = "#EEA23A"; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-primary)"; }}
+                  onClick={() => setQuery("")}
+                  className="shrink-0 flex items-center justify-center w-4 h-4 rounded-full transition-colors duration-100"
+                  style={{ color:"var(--text-muted)" }}
+                  onMouseEnter={e => e.currentTarget.style.color = "var(--accent-amber)"}
+                  onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
                 >
-                  <Icon size={15} /> {label}
+                  <X size={12} />
                 </button>
-              ))}
+              )}
             </div>
-          )}
+
+            {/* Genre filter */}
+            <div className="relative flex items-center">
+              <SlidersHorizontal
+                size={13}
+                className="absolute left-2.5 pointer-events-none"
+                style={{ color:"var(--text-secondary)" }}
+              />
+              <select
+                value={genreFilter}
+                onChange={e => setGenreFilter(e.target.value)}
+                className="pl-7 pr-3 py-2 rounded-lg text-[12.5px] font-medium border outline-none appearance-none cursor-pointer transition-colors duration-150"
+                style={{
+                  background:  "var(--bg-surface)",
+                  border:      "1px solid var(--border)",
+                  color:       genreFilter ? "var(--accent-amber)" : "var(--text-secondary)",
+                  boxShadow:   "var(--shadow-sm)",
+                  fontFamily:  "inherit",
+                }}
+                onFocus={e => { e.target.style.borderColor="#EEA23A"; e.target.style.boxShadow="0 0 0 3px rgba(238,162,58,0.12)"; }}
+                onBlur={e  => { e.target.style.borderColor="var(--border)"; e.target.style.boxShadow="var(--shadow-sm)"; }}
+              >
+                <option value="">All Genres</option>
+                {genres.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+
+            {/* Sort */}
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value)}
+              className="px-3 py-2 rounded-lg text-[12.5px] font-medium border outline-none appearance-none cursor-pointer transition-colors duration-150"
+              style={{
+                background: "var(--bg-surface)",
+                border:     "1px solid var(--border)",
+                color:      sortBy ? "var(--accent-amber)" : "var(--text-secondary)",
+                boxShadow:  "var(--shadow-sm)",
+                fontFamily: "inherit",
+              }}
+              onFocus={e => { e.target.style.borderColor="#EEA23A"; e.target.style.boxShadow="0 0 0 3px rgba(238,162,58,0.12)"; }}
+              onBlur={e  => { e.target.style.borderColor="var(--border)"; e.target.style.boxShadow="var(--shadow-sm)"; }}
+            >
+              <option value="">Sort: Default</option>
+              <option value="title">Title A–Z</option>
+              <option value="author">Author A–Z</option>
+              <option value="year">Newest First</option>
+            </select>
+          </div>
+
+          {/* Add Book dropdown */}
+          <div className="relative shrink-0" ref={ddRef}>
+            <button
+              onClick={() => setDdOpen(o => !o)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-colors duration-150"
+              style={{ background:"var(--accent-amber)", boxShadow:"0 2px 6px rgba(238,162,58,0.3)" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--accent-orange)"}
+              onMouseLeave={e => e.currentTarget.style.background = "var(--accent-amber)"}
+            >
+              + Add Book
+              <ChevronDown
+                size={14}
+                className="transition-transform duration-200"
+                style={{ transform: ddOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+              />
+            </button>
+
+            {ddOpen && (
+              <div
+                className="anim-drop absolute right-0 top-[calc(100%+6px)] w-48 rounded-xl p-1.5 z-20"
+                style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-lg)" }}
+              >
+                {[
+                  { mode:"scan-cover", Icon: Camera,  label:"Scan Cover (OCR)" },
+                  { mode:"scan",       Icon: QrCode,   label:"Scan Barcode" },
+                  { mode:"manual",     Icon: PenLine,  label:"Add Manually" },
+                ].map(({ mode, Icon, label }) => (
+                  <button
+                    key={mode}
+                    onClick={() => openModal(mode)}
+                    className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors duration-100"
+                    style={{ color:"var(--text-primary)" }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(238,162,58,0.1)"; e.currentTarget.style.color = "#EEA23A"; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-primary)"; }}
+                  >
+                    <Icon size={15} /> {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>{/* /Row 1 */}
+
+        {/* Row 2 — status chips + result count */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          {/* Status filter chips */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {["All","Available","Borrowed","Overdue"].map(s => {
+              const active = statusFilter === s;
+              const chipColor = s === "Available" ? "#32667F" : s === "Borrowed" ? "#b87a1a" : s === "Overdue" ? "#c05a0a" : null;
+              return (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className="px-3 py-1 rounded-full text-[11.5px] font-semibold transition-all duration-150"
+                  style={{
+                    background:  active
+                      ? (s === "All" ? "var(--accent-amber)" : (STATUS_STYLE[s]?.bg ?? "var(--accent-amber)"))
+                      : "var(--bg-surface)",
+                    color:       active
+                      ? (s === "All" ? "#fff" : chipColor)
+                      : "var(--text-secondary)",
+                    border:      active
+                      ? `1.5px solid ${s === "All" ? "var(--accent-amber)" : (chipColor ?? "var(--accent-amber)")}`
+                      : "1.5px solid var(--border)",
+                    boxShadow:   active ? "var(--shadow-sm)" : "none",
+                  }}
+                >
+                  {s}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Result count */}
+          <p className="text-[12px] tabular-nums" style={{ color:"var(--text-muted)" }}>
+            {filtered.length === books.length
+              ? `${books.length} book${books.length !== 1 ? "s" : ""}`
+              : `${filtered.length} of ${books.length} books`}
+          </p>
         </div>
-      </div>
+      </div>{/* /Toolbar */}
 
       {/* ── Book Card Grid ── */}
       {filtered.length === 0 ? (
