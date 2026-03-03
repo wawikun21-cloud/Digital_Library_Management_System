@@ -195,14 +195,14 @@ export default function Books() {
       setScanMessage("Please select an image file (JPEG, PNG, WEBP, etc.)");
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > 1 * 1024 * 1024) {
       setScanState(SCAN_STATE.ERROR);
-      setScanMessage("Image is too large. Maximum size is 5 MB.");
+      setScanMessage("Image is too large. Maximum size is 1 MB. Please compress the photo first.");
       return;
     }
 
     setScanState(SCAN_STATE.SCANNING);
-    setScanMessage("Scanning cover with Google Vision OCR…");
+    setScanMessage("Scanning cover with OCR.space…");
     setOcrRawText("");
     setShowOcrText(false);
 
@@ -604,7 +604,7 @@ export default function Books() {
                         OCR Book Cover Scanner
                       </p>
                       <p className="text-[12px]" style={{ color:"var(--text-secondary)" }}>
-                        Upload a photo of a book cover. Google Vision will read the text, detect the ISBN,
+                        Upload a photo of a book cover. OCR.space will read the text, detect the ISBN,
                         and auto-fill the form using Google Books metadata.
                       </p>
                     </div>
@@ -625,7 +625,7 @@ export default function Books() {
                     {scanState === SCAN_STATE.SCANNING ? (
                       <>
                         <Loader2 size={16} className="animate-spin" />
-                        Scanning with Google Vision…
+                        Scanning with OCR.space…
                       </>
                     ) : (
                       <>
@@ -784,7 +784,7 @@ export default function Books() {
                       or drag &amp; drop
                     </p>
                     <p className="text-[11px]" style={{ color:"var(--text-muted)" }}>
-                      PNG, JPG, WEBP — max 5 MB
+                      PNG, JPG, WEBP — max 1 MB
                     </p>
                   </div>
                 )}
