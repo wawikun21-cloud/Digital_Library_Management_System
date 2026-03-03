@@ -1,14 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import {
-  Search, ChevronDown, QrCode, PenLine,
-  Star, X, BookOpen, ImagePlus, Trash2,
+  Search, ChevronDown, QrCode, PenLine, Camera,
+  Star, X, BookOpen, ImagePlus, Trash2, Loader2,
+  CheckCircle2, AlertCircle, Sparkles,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "../components/DropdownMenu";
+
+/* ─── API base ──────────────────────────────────── */
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 /* ─── Data ─────────────────────────────────────── */
 const INITIAL_BOOKS = [
@@ -37,6 +35,14 @@ const GRADIENTS = [
   ["#EA8B33","#F3B940"], ["#1d3f57","#32667F"], ["#b87a1a","#EEA23A"],
 ];
 
+/* ─── Scan states ─────────────────────────────── */
+const SCAN_STATE = {
+  IDLE:     "idle",      // waiting for user to pick image
+  SCANNING: "scanning",  // OCR request in-flight
+  SUCCESS:  "success",   // metadata returned and applied
+  ERROR:    "error",     // something went wrong
+};
+
 /* ─── Cover placeholder ──────────────────────── */
 function CoverPlaceholder({ title, idx }) {
   const [a, b] = GRADIENTS[idx % GRADIENTS.length];
@@ -54,7 +60,7 @@ function CoverPlaceholder({ title, idx }) {
   );
 }
 
-/* ─── Shared input style helper ─────────────── */
+/* ─── Shared input style helpers ─────────────── */
 const inputCls = "w-full px-3 py-2.5 rounded-lg text-[13px] border-[1.5px] outline-none transition-colors duration-150";
 const inputStyle = (err = false) => ({
   background:  "var(--bg-input)",
@@ -64,11 +70,11 @@ const inputStyle = (err = false) => ({
 });
 const focusRing = e => {
   e.target.style.borderColor = "#EEA23A";
-  e.target.style.boxShadow  = "0 0 0 3px rgba(238,162,58,0.13)";
+  e.target.style.boxShadow   = "0 0 0 3px rgba(238,162,58,0.13)";
 };
 const blurRing = (err) => e => {
   e.target.style.borderColor = err ? "#EA8B33" : "var(--border)";
-  e.target.style.boxShadow  = "none";
+  e.target.style.boxShadow   = "none";
 };
 
 /* ══════════════════════════════════════════════ */
@@ -80,19 +86,16 @@ export default function Books() {
   const [form,     setForm]     = useState(EMPTY_FORM);
   const [errors,   setErrors]   = useState({});
   const [dragOver, setDragOver] = useState(false);
-  const [isDark,   setIsDark]   = useState(document.documentElement.getAttribute("data-theme") === "dark");
 
-  const ddRef   = useRef(null);
-  const fileRef = useRef(null);
+  // ── OCR scan state ──
+  const [scanState,   setScanState]   = useState(SCAN_STATE.IDLE);
+  const [scanMessage, setScanMessage] = useState("");
+  const [ocrRawText,  setOcrRawText]  = useState("");
+  const [showOcrText, setShowOcrText] = useState(false);
 
-  /* Track theme changes */
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.getAttribute("data-theme") === "dark");
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => observer.disconnect();
-  }, []);
+  const ddRef     = useRef(null);
+  const fileRef   = useRef(null);
+  const scanRef   = useRef(null); // hidden input for scan-cover upload
 
   /* Close dropdown on outside click */
   useEffect(() => {
@@ -105,6 +108,16 @@ export default function Books() {
   useEffect(() => {
     document.body.style.overflow = modal ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
+  }, [modal]);
+
+  /* Reset scan state when modal is closed */
+  useEffect(() => {
+    if (!modal) {
+      setScanState(SCAN_STATE.IDLE);
+      setScanMessage("");
+      setOcrRawText("");
+      setShowOcrText(false);
+    }
   }, [modal]);
 
   const filtered = books.filter(b =>
@@ -141,25 +154,105 @@ export default function Books() {
   function handleSubmit() {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
-    
-    if (form._mode === "edit") {
-      // Edit existing book
-      setBooks(p => p.map(book => 
-        book.id === form.id 
-          ? { ...form, year: Number(form.year) } 
-          : book
-      ));
-    } else {
-      // Add new book
-      setBooks(p => [...p, { ...form, id: Date.now(), year: Number(form.year) }]);
-    }
-    
+    setBooks(p => [...p, { ...form, id: Date.now(), year: Number(form.year) }]);
     setModal(false);
     setForm(EMPTY_FORM);
   }
 
-  function handleDelete(bookId) {
-    setBooks(p => p.filter(book => book.id !== bookId));
+  /* ── OCR Scan Cover ─────────────────────────────────────
+     1. User picks an image file via the hidden scanRef input
+     2. We POST it as multipart/form-data to /api/scan-book-cover
+     3. Backend runs Vision OCR → Google Books lookup
+     4. We auto-fill form fields with returned metadata
+     5. User can edit any field before saving
+  ──────────────────────────────────────────────────────── */
+  async function handleScanFile(file) {
+    if (!file) return;
+
+    // Client-side validation (mirrors server-side)
+    if (!file.type.startsWith("image/")) {
+      setScanState(SCAN_STATE.ERROR);
+      setScanMessage("Please select an image file (JPEG, PNG, WEBP, etc.)");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setScanState(SCAN_STATE.ERROR);
+      setScanMessage("Image is too large. Maximum size is 5 MB.");
+      return;
+    }
+
+    setScanState(SCAN_STATE.SCANNING);
+    setScanMessage("Scanning cover with Google Vision OCR…");
+    setOcrRawText("");
+    setShowOcrText(false);
+
+    // Also set the image as the cover preview
+    const r = new FileReader();
+    r.onload = e => setForm(f => ({ ...f, cover: e.target.result }));
+    r.readAsDataURL(file);
+
+    try {
+      const formData = new FormData();
+      formData.append("cover", file);   // must match upload.single("cover") in backend
+
+      const res = await fetch(`${API_BASE}/api/scan-book-cover`, {
+        method: "POST",
+        body:   formData,
+        // Do NOT set Content-Type header — browser sets it with boundary automatically
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setScanState(SCAN_STATE.ERROR);
+        setScanMessage(data.error || "Scan failed. Please try again.");
+        return;
+      }
+
+      // Store raw OCR text for optional display
+      if (data.ocrText) setOcrRawText(data.ocrText);
+
+      // No text detected at all
+      if (!data.ocrText) {
+        setScanState(SCAN_STATE.ERROR);
+        setScanMessage(data.message || "No text detected in image. Try a clearer photo.");
+        return;
+      }
+
+      // Auto-fill form fields with book metadata (allow manual override)
+      if (data.book) {
+        const b = data.book;
+        setForm(f => ({
+          ...f,
+          title:       b.title       || f.title,
+          author:      (b.authors || []).join(", ") || f.author,
+          publisher:   b.publisher   || f.publisher,
+          year:        b.publishedDate ? b.publishedDate.slice(0, 4) : f.year,
+          description: b.description || f.description,
+          isbn:        data.isbn      || f.isbn,
+          // Use Google Books thumbnail as cover if no custom cover already
+          cover:       b.thumbnail   || f.cover,
+        }));
+        // Clear field errors for filled values
+        setErrors({});
+
+        const isbnNote = data.isbn ? ` (ISBN: ${data.isbn})` : "";
+        setScanState(SCAN_STATE.SUCCESS);
+        setScanMessage(`Book identified${isbnNote}. Fields filled — review and edit as needed.`);
+      } else {
+        // OCR ran but no book found — at least fill ISBN if detected
+        setForm(f => ({
+          ...f,
+          isbn: data.isbn || f.isbn,
+        }));
+        setScanState(SCAN_STATE.ERROR);
+        setScanMessage(data.message || "OCR complete but no book metadata found. Fill in fields manually.");
+      }
+    } catch (networkErr) {
+      console.error("[Scan error]", networkErr);
+      setScanState(SCAN_STATE.ERROR);
+      setScanMessage("Could not reach the server. Make sure the backend is running on port 3001.");
+    }
   }
 
   /* ── Reusable form field ── */
@@ -193,183 +286,161 @@ export default function Books() {
     <div className="flex flex-col gap-5">
 
       {/* ── Toolbar ── */}
-      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 justify-between">
+      <div className="flex flex-wrap items-center gap-3 justify-between">
 
-        {/* Search - Full width on mobile, auto on desktop */}
+        {/* Search */}
         <div
-          className="flex items-center gap-2 px-2 sm:px-3 py-2 rounded-lg flex-1 min-w-[120px] sm:min-w-[180px]"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg flex-1 min-w-[180px] max-w-xs"
           style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-sm)" }}
         >
-          <Search size={14} style={{ color:"var(--text-secondary)" }} className="shrink-0" />
+          <Search size={15} style={{ color:"var(--text-secondary)" }} className="shrink-0" />
           <input
-            className="border-none outline-none text-[12px] sm:text-[13px] bg-transparent w-full"
+            className="border-none outline-none text-[13px] bg-transparent w-full"
             style={{ color:"var(--text-primary)" }}
-            placeholder="Search…"
+            placeholder="Search books or authors…"
             value={query}
             onChange={e => setQuery(e.target.value)}
           />
         </div>
 
-        {/* Action buttons - Flex row on mobile, collapse menu on desktop */}
-        <DropdownMenu open={ddOpen} onOpenChange={setDdOpen}>
-          <DropdownMenuTrigger asChild>
-            <button
-              className="flex items-center gap-1 px-2 sm:px-3 py-2 rounded-lg text-[12px] sm:text-[13px] font-semibold transition-colors duration-150"
-              style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", color:"var(--text-secondary)" }}
-              onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text-primary)"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "var(--bg-surface)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+        {/* Add Book dropdown */}
+        <div className="relative shrink-0" ref={ddRef}>
+          <button
+            onClick={() => setDdOpen(o => !o)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-colors duration-150"
+            style={{ background:"var(--accent-amber)", boxShadow:"0 2px 6px rgba(238,162,58,0.3)" }}
+            onMouseEnter={e => e.currentTarget.style.background = "var(--accent-orange)"}
+            onMouseLeave={e => e.currentTarget.style.background = "var(--accent-amber)"}
+          >
+            + Add Book
+            <ChevronDown
+              size={14}
+              className="transition-transform duration-200"
+              style={{ transform: ddOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+            />
+          </button>
+
+          {ddOpen && (
+            <div
+              className="anim-drop absolute right-0 top-[calc(100%+6px)] w-48 rounded-xl p-1.5 z-20"
+              style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-lg)" }}
             >
-              ＋ Add
-              <ChevronDown size={12} style={{ transition:"transform 150ms" }} />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => openModal("manual")}>
-              <PenLine size={14} className="mr-2" />
-              <span>Add Manually</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => openModal("scan")}>
-              <QrCode size={14} className="mr-2" />
-              <span>Scan Barcode</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              {[
+                { mode:"scan-cover", Icon: Camera,      label:"Scan Cover (OCR)" },
+                { mode:"scan",       Icon: QrCode,   label:"Scan Barcode" },
+                { mode:"manual",     Icon: PenLine,      label:"Add Manually" },
+              ].map(({ mode, Icon, label }) => (
+                <button
+                  key={mode}
+                  onClick={() => openModal(mode)}
+                  className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors duration-100"
+                  style={{ color:"var(--text-primary)" }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(238,162,58,0.1)"; e.currentTarget.style.color = "#EEA23A"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-primary)"; }}
+                >
+                  <Icon size={15} /> {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Books Grid - Mobile-First Responsive */}
-      {/* Mobile: 3 cols, sm: 3 cols, md: 4 cols, lg: 5 cols, xl: 6 cols, 2xl: 7 cols */}
-      <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-1 sm:gap-2 md:gap-3">
-        {filtered.length > 0 ? (
-          filtered.map((book, idx) => (
-            <div key={book.id} className="group flex flex-col rounded-lg overflow-hidden" style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-sm)", transition:"all 200ms ease-out" }}>
-              {/* Cover - 2:3 Aspect Ratio with zoom on hover */}
-              <div className="relative w-full bg-gray-300 overflow-hidden group/cover" style={{ aspectRatio:"2/3" }}>
-                {book.cover ? (
-                  <img src={book.cover} alt={book.title} className="w-full h-full object-cover transition-transform duration-300 group-hover/cover:scale-110" />
-                ) : (
-                  <div 
-                    className="transition-transform duration-300 group-hover/cover:scale-110"
+      {/* ── Book Card Grid ── */}
+      {filtered.length === 0 ? (
+        <p className="text-center py-10 text-sm" style={{ color:"var(--text-secondary)" }}>
+          No books found.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
+          {filtered.map((b, idx) => {
+            const sc = STATUS_STYLE[b.status] ?? STATUS_STYLE.Available;
+            return (
+              <div
+                key={b.id}
+                className="flex flex-col rounded-xl overflow-hidden cursor-pointer transition-all duration-200 hover:-translate-y-1"
+                style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-sm)" }}
+              >
+                {/* Cover */}
+                <div className="relative w-full shrink-0" style={{ aspectRatio:"2/3", overflow:"hidden" }}>
+                  {b.cover
+                    ? <img src={b.cover} alt={b.title} className="w-full h-full object-cover" />
+                    : <CoverPlaceholder title={b.title} idx={idx} />
+                  }
+                  <span
+                    className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background:sc.bg, color:sc.color }}
                   >
-                    <CoverPlaceholder title={book.title} idx={idx} />
-                  </div>
-                )}
-                
-                {/* Status Badge */}
-                <div
-                  className="absolute top-1 right-1 px-1.5 py-0.5 rounded text-[8px] sm:text-[10px] font-bold"
-                  style={STATUS_STYLE[book.status]}
-                >
-                  {book.status}
+                    {b.status}
+                  </span>
                 </div>
 
-                {/* Hover Actions - Desktop Only with theme-aware background */}
-                <div 
-                  className="hidden lg:flex absolute inset-0 transition-colors duration-200 items-center justify-center gap-2 opacity-0 group-hover:opacity-100"
-                  style={{ background: "var(--bg-cover-overlay)" }}
-                >
-                  <button
-                    onClick={() => {
-                      setForm({ ...book, _mode: "edit" });
-                      setModal(true);
-                    }}
-                    className="p-2 rounded-lg text-white hover:bg-opacity-90 transition-colors duration-150"
-                    style={{ background: "var(--accent-amber)" }}
-                    title="Edit"
+                {/* Meta row */}
+                <div className="px-3 pt-2.5 pb-1 flex items-center gap-1 flex-wrap">
+                  <Star size={11} fill="#EEA23A" color="#EEA23A" />
+                  <span className="text-[11px]" style={{ color:"var(--text-secondary)" }}>N/A</span>
+                  <span className="text-[11px]" style={{ color:"var(--border)" }}>·</span>
+                  <span
+                    className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded"
+                    style={{ background:"rgba(238,162,58,0.1)", color:"var(--accent-amber)" }}
                   >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(book.id)}
-                    className="p-2 rounded-lg text-white hover:bg-opacity-90 transition-colors duration-150"
-                    style={{ background: "var(--accent-danger)" }}
-                    title="Delete"
-                  >
-                    Delete
-                  </button>
+                    {b.genre}
+                  </span>
+                  <span className="text-[11px]" style={{ color:"var(--border)" }}>·</span>
+                  <span className="text-[11px]" style={{ color:"var(--text-secondary)" }}>{b.year}</span>
                 </div>
-              </div>
 
-              {/* Book Info - Compact for mobile */}
-              <div className="flex flex-col gap-0.5 p-1.5 sm:p-2 flex-1">
-                <div>
-                  <h4 className="text-[10px] sm:text-[12px] font-bold line-clamp-2 leading-tight" style={{ color:"var(--text-primary)" }}>
-                    {book.title}
-                  </h4>
-                  <p className="text-[8px] sm:text-[10px] mt-0.5 line-clamp-1" style={{ color:"var(--text-secondary)" }}>
-                    {book.author}
+                {/* Title + author */}
+                <div className="px-3 pb-2 flex-1">
+                  <p className="text-[13px] font-bold leading-snug mb-0.5 clamp-2" style={{ color:"var(--text-primary)" }}>
+                    {b.title}
+                  </p>
+                  <p className="text-[11.5px] truncate" style={{ color:"var(--text-secondary)" }}>
+                    {b.author}
                   </p>
                 </div>
-                
-                <div className="flex items-center gap-0.5 text-[8px] sm:text-[10px]" style={{ color:"var(--text-secondary)" }}>
-                  <span>📅</span> {book.year}
-                </div>
 
-                {/* View Details Button - Hidden on mobile, visible on tablet+ */}
+                {/* Action */}
                 <button
-                  onClick={() => {
-                    setForm({ ...book, _mode: "edit" });
-                    setModal(true);
-                  }}
-                  className="hidden sm:block mt-auto text-[10px] font-semibold px-2 py-1 rounded border-[1px] transition-colors duration-150 w-full"
-                  style={{ background:"rgba(238,162,58,0.1)", borderColor:"rgba(238,162,58,0.3)", color:"#b87a1a" }}
-                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(238,162,58,0.25)"; e.currentTarget.style.borderColor = "rgba(238,162,58,0.5)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(238,162,58,0.1)"; e.currentTarget.style.borderColor = "rgba(238,162,58,0.3)"; }}
+                  className="flex items-center justify-center gap-1.5 w-full py-2.5 text-[12px] font-semibold text-white transition-colors duration-150"
+                  style={{ background:"var(--bg-sidebar)" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#32667F"}
+                  onMouseLeave={e => e.currentTarget.style.background = "var(--bg-sidebar)"}
                 >
-                  View
+                  <BookOpen size={13} /> View Details
                 </button>
-
-                {/* Mobile Action Buttons - Show on mobile, hide on lg+ */}
-                <div className="flex gap-1 sm:hidden mt-1">
-                  <button
-                    onClick={() => {
-                      setForm({ ...book, _mode: "edit" });
-                      setModal(true);
-                    }}
-                    className="flex-1 text-[8px] font-semibold px-1 py-0.5 rounded border-[1px] transition-colors duration-150"
-                    style={{ background:"rgba(50,102,127,0.1)", borderColor:"rgba(50,102,127,0.3)", color:"#32667F" }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(book.id)}
-                    className="flex-1 text-[8px] font-semibold px-1 py-0.5 rounded border-[1px] transition-colors duration-150"
-                    style={{ background:"rgba(234,139,51,0.1)", borderColor:"rgba(234,139,51,0.3)", color:"#c05a0a" }}
-                  >
-                    Delete
-                  </button>
-                </div>
               </div>
-            </div>
-          ))
-        ) : (
-          <div className="col-span-full flex flex-col items-center justify-center gap-2 py-12" style={{ color:"var(--text-secondary)" }}>
-            <BookOpen size={32} />
-            <p className="text-[13px]">No books found</p>
-          </div>
-        )}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
-      {/* Modal */}
+      {/* ════════ ADD BOOK MODAL ════════ */}
       {modal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background:"rgba(0,0,0,0.6)" }} onClick={() => setModal(false)}>
+        <div
+          className="anim-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background:"rgba(10,22,34,0.6)", backdropFilter:"blur(3px)" }}
+          onClick={e => e.target === e.currentTarget && setModal(false)}
+        >
           <div
-            className="flex flex-col rounded-2xl w-11/12 max-w-md max-h-[90vh] overflow-hidden"
-            style={{ 
-              background: isDark ? "#1a2332" : "#ffffff",
-              boxShadow:"var(--shadow-xl)", 
-              border: isDark ? "1px solid #2a3f57" : "1px solid #e5e7eb",
-              transition: "background 0.3s, border-color 0.3s"
-            }}
-            onClick={e => e.stopPropagation()}
+            className="anim-modal w-full max-w-[640px] max-h-[90vh] flex flex-col rounded-2xl overflow-hidden"
+            style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-xl)" }}
           >
             {/* Header */}
             <div
-              className="flex items-center justify-between px-6 py-4 shrink-0"
-              style={{ borderBottom: isDark ? "1px solid #2a3f57" : "1px solid #e5e7eb" }}
+              className="flex items-center justify-between px-6 py-5 shrink-0"
+              style={{ borderBottom:"1px solid var(--border-light)" }}
             >
-              <h3 className="text-[15px] font-bold" style={{ color: isDark ? "#ffffff" : "#000000" }}>
-                {form._mode === "scan" ? "Scan Barcode" : form._mode === "edit" ? "Edit Book" : "Add Book Manually"}
-              </h3>
+              <div className="flex items-center gap-2.5">
+                {form._mode === "scan-cover" && <Camera size={18} style={{ color:"var(--accent-amber)" }} />}
+                {form._mode === "scan"       && <QrCode size={18} style={{ color:"var(--accent-amber)" }} />}
+                {form._mode === "manual"     && <PenLine size={18} style={{ color:"var(--accent-amber)" }} />}
+                <h2 className="text-base font-bold" style={{ color:"var(--text-primary)" }}>
+                  {form._mode === "scan-cover" ? "Scan Book Cover (OCR)"
+                   : form._mode === "scan"     ? "Scan Barcode"
+                   :                             "Add Book Manually"}
+                </h2>
+              </div>
               <button
                 onClick={() => setModal(false)}
                 className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors duration-150"
@@ -382,9 +453,138 @@ export default function Books() {
             </div>
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4" style={{ background: isDark ? "#0f1823" : "#ffffff" }}>
+            <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
 
-              {/* Barcode hint */}
+              {/* ══ SCAN COVER MODE — OCR section ══ */}
+              {form._mode === "scan-cover" && (
+                <div className="flex flex-col gap-3">
+
+                  {/* Hidden file input for scan */}
+                  <input
+                    ref={scanRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => handleScanFile(e.target.files[0])}
+                  />
+
+                  {/* Instruction banner */}
+                  <div
+                    className="flex items-start gap-3 p-4 rounded-xl"
+                    style={{ background:"rgba(238,162,58,0.08)", border:"1.5px solid rgba(238,162,58,0.2)" }}
+                  >
+                    <Sparkles size={18} style={{ color:"var(--accent-amber)", flexShrink:0, marginTop:1 }} />
+                    <div>
+                      <p className="text-[13px] font-semibold mb-0.5" style={{ color:"var(--text-primary)" }}>
+                        OCR Book Cover Scanner
+                      </p>
+                      <p className="text-[12px]" style={{ color:"var(--text-secondary)" }}>
+                        Upload a photo of a book cover. Google Vision will read the text, detect the ISBN,
+                        and auto-fill the form using Google Books metadata.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Upload trigger */}
+                  <button
+                    onClick={() => scanRef.current?.click()}
+                    disabled={scanState === SCAN_STATE.SCANNING}
+                    className="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-xl text-[13px] font-semibold border-2 border-dashed transition-colors duration-150"
+                    style={{
+                      background:   scanState === SCAN_STATE.SCANNING ? "var(--bg-subtle)" : "rgba(238,162,58,0.05)",
+                      borderColor:  scanState === SCAN_STATE.SCANNING ? "var(--border)"    : "rgba(238,162,58,0.35)",
+                      color:        scanState === SCAN_STATE.SCANNING ? "var(--text-muted)" : "var(--accent-amber)",
+                      cursor:       scanState === SCAN_STATE.SCANNING ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {scanState === SCAN_STATE.SCANNING ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Scanning with Google Vision…
+                      </>
+                    ) : (
+                      <>
+                        <Camera size={16} />
+                        {form.cover ? "Scan a Different Cover" : "Upload Cover Image to Scan"}
+                      </>
+                    )}
+                  </button>
+
+                  {/* Status feedback banner */}
+                  {scanState !== SCAN_STATE.IDLE && (
+                    <div
+                      className="flex items-start gap-2.5 p-3.5 rounded-xl text-[12.5px]"
+                      style={{
+                        background: scanState === SCAN_STATE.SUCCESS
+                          ? "rgba(50,127,79,0.08)"
+                          : scanState === SCAN_STATE.ERROR
+                          ? "rgba(234,139,51,0.08)"
+                          : "rgba(50,102,127,0.08)",
+                        border: `1px solid ${
+                          scanState === SCAN_STATE.SUCCESS
+                            ? "rgba(50,127,79,0.2)"
+                            : scanState === SCAN_STATE.ERROR
+                            ? "rgba(234,139,51,0.25)"
+                            : "rgba(50,102,127,0.2)"
+                        }`,
+                        color: scanState === SCAN_STATE.SUCCESS
+                          ? "#2d7a47"
+                          : scanState === SCAN_STATE.ERROR
+                          ? "#c05a0a"
+                          : "#32667F",
+                      }}
+                    >
+                      {scanState === SCAN_STATE.SUCCESS  && <CheckCircle2 size={15} style={{ flexShrink:0, marginTop:1 }} />}
+                      {scanState === SCAN_STATE.ERROR    && <AlertCircle  size={15} style={{ flexShrink:0, marginTop:1 }} />}
+                      {scanState === SCAN_STATE.SCANNING && <Loader2      size={15} className="animate-spin" style={{ flexShrink:0, marginTop:1 }} />}
+                      <span>{scanMessage}</span>
+                    </div>
+                  )}
+
+                  {/* OCR raw text collapsible */}
+                  {ocrRawText && (
+                    <div>
+                      <button
+                        onClick={() => setShowOcrText(v => !v)}
+                        className="text-[11px] font-semibold flex items-center gap-1 mb-1"
+                        style={{ color:"var(--text-muted)" }}
+                      >
+                        <ChevronDown
+                          size={12}
+                          style={{ transform: showOcrText ? "rotate(180deg)" : "rotate(0deg)", transition:"transform 0.15s" }}
+                        />
+                        {showOcrText ? "Hide" : "Show"} raw OCR text
+                      </button>
+                      {showOcrText && (
+                        <pre
+                          className="text-[11px] p-3 rounded-lg overflow-x-auto whitespace-pre-wrap"
+                          style={{
+                            background:  "var(--bg-subtle)",
+                            border:      "1px solid var(--border-light)",
+                            color:       "var(--text-secondary)",
+                            maxHeight:   120,
+                            overflowY:   "auto",
+                            fontFamily:  "monospace",
+                          }}
+                        >
+                          {ocrRawText}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Divider */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-px" style={{ background:"var(--border-light)" }} />
+                    <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-muted)" }}>
+                      Review &amp; Edit Fields
+                    </span>
+                    <div className="flex-1 h-px" style={{ background:"var(--border-light)" }} />
+                  </div>
+                </div>
+              )}
+
+              {/* ══ BARCODE MODE ══ */}
               {form._mode === "scan" && (
                 <div
                   className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-dashed text-[13px] text-center"
@@ -395,7 +595,7 @@ export default function Books() {
                 </div>
               )}
 
-              {/* ── Cover Upload ── */}
+              {/* ── Cover Upload (shared across all modes) ── */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-secondary)" }}>
                   Book Cover
@@ -409,7 +609,6 @@ export default function Books() {
                 />
 
                 {form.cover ? (
-                  /* Preview */
                   <div
                     className="flex items-start gap-4 p-3.5 rounded-xl"
                     style={{ background:"var(--bg-subtle)", border:"1.5px solid var(--border)" }}
@@ -429,8 +628,7 @@ export default function Books() {
                         <ImagePlus size={14} /> Change
                       </button>
                       <button
-                        onClick={e => {
-                          e.stopPropagation();
+                        onClick={() => {
                           setForm(f => ({ ...f, cover:null }));
                           if (fileRef.current) fileRef.current.value = "";
                         }}
@@ -442,7 +640,6 @@ export default function Books() {
                     </div>
                   </div>
                 ) : (
-                  /* Drop zone */
                   <div
                     className="flex flex-col items-center justify-center gap-2 py-7 rounded-xl border-2 border-dashed cursor-pointer text-center select-none transition-colors duration-150"
                     style={{
@@ -450,7 +647,7 @@ export default function Books() {
                       borderColor: dragOver ? "var(--accent-amber)"   : "var(--border)",
                     }}
                     onClick={() => fileRef.current?.click()}
-                    onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                    onDragOver={e  => { e.preventDefault(); setDragOver(true); }}
                     onDragLeave={() => setDragOver(false)}
                     onDrop={e => { e.preventDefault(); setDragOver(false); readFile(e.dataTransfer.files[0]); }}
                   >
@@ -518,10 +715,10 @@ export default function Books() {
             {/* Footer */}
             <div
               className="flex justify-end gap-2.5 px-6 py-4 shrink-0"
-              style={{ borderTop: isDark ? "1px solid #2a3f57" : "1px solid #e5e7eb" }}
+              style={{ borderTop:"1px solid var(--border-light)" }}
             >
               <ModalBtn secondary onClick={() => setModal(false)}>Cancel</ModalBtn>
-              <ModalBtn onClick={handleSubmit}>{form._mode === "edit" ? "Update Book" : "Save Book"}</ModalBtn>
+              <ModalBtn onClick={handleSubmit}>Save Book</ModalBtn>
             </div>
           </div>
         </div>
