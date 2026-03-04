@@ -1,7 +1,9 @@
+import { useState, useMemo } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   PieChart, Pie, Cell, AreaChart, Area, ResponsiveContainer,
 } from "recharts";
+import { ChevronLeft, ChevronRight, Search, Filter, ChevronsLeft, ChevronsRight } from "lucide-react";
 import StatsCard from "../components/StatsCard";
 
 const STATS = [
@@ -11,11 +13,107 @@ const STATS = [
   { label: "Overdue",     value: "24",    change: "-3 from last week", accent: "#EA8B33", percentage: 2 },
 ];
 
-const ACTIVITY = [
-  { book: "Clean Code",               member: "Alice M.",  action: "Borrowed", date: "Feb 22" },
-  { book: "The Pragmatic Programmer", member: "Bob K.",    action: "Returned", date: "Feb 21" },
-  { book: "Design Patterns",          member: "Carol T.",  action: "Borrowed", date: "Feb 20" },
-  { book: "Refactoring",              member: "David L.",  action: "Overdue",  date: "Feb 15" },
+const AUDIT_LOGS = [
+  {
+    id: "TXN-0041",
+    timestamp: "Mar 05, 2026 09:14 AM",
+    admin: "Admin Jane",
+    category: "Book",
+    description: 'Added new book "The Staff Engineer\'s Path"',
+    target: "The Staff Engineer's Path",
+    ip: "192.168.1.10",
+    status: "Success",
+  },
+  {
+    id: "TXN-0040",
+    timestamp: "Mar 05, 2026 08:52 AM",
+    admin: "Admin John",
+    category: "Member",
+    description: "Deactivated member account — repeated overdue violations",
+    target: "David L.",
+    ip: "192.168.1.12",
+    status: "Success",
+  },
+  {
+    id: "TXN-0039",
+    timestamp: "Mar 04, 2026 04:30 PM",
+    admin: "Admin Jane",
+    category: "Borrow",
+    description: "Manually issued book to member at front desk",
+    target: "Clean Code → Alice M.",
+    ip: "192.168.1.10",
+    status: "Success",
+  },
+  {
+    id: "TXN-0038",
+    timestamp: "Mar 04, 2026 02:15 PM",
+    admin: "Admin John",
+    category: "Borrow",
+    description: "Fine waived upon member appeal",
+    target: "Bob K. — ₱45.00",
+    ip: "192.168.1.12",
+    status: "Success",
+  },
+  {
+    id: "TXN-0037",
+    timestamp: "Mar 04, 2026 11:08 AM",
+    admin: "Admin Jane",
+    category: "Book",
+    description: 'Edited book details — updated copies from 3 to 5',
+    target: "Design Patterns",
+    ip: "192.168.1.10",
+    status: "Success",
+  },
+  {
+    id: "TXN-0036",
+    timestamp: "Mar 03, 2026 05:47 PM",
+    admin: "Admin John",
+    category: "System",
+    description: "Exported monthly borrowing report as PDF",
+    target: "February 2026 Report",
+    ip: "192.168.1.12",
+    status: "Success",
+  },
+  {
+    id: "TXN-0035",
+    timestamp: "Mar 03, 2026 03:22 PM",
+    admin: "Admin Jane",
+    category: "Member",
+    description: "Reset password for member account",
+    target: "Carol T.",
+    ip: "192.168.1.10",
+    status: "Success",
+  },
+  {
+    id: "TXN-0034",
+    timestamp: "Mar 03, 2026 01:05 PM",
+    admin: "Admin John",
+    category: "Book",
+    description: "Marked book as lost — reported by borrower",
+    target: "Refactoring",
+    ip: "192.168.1.12",
+    status: "Success",
+  },
+  {
+    id: "TXN-0033",
+    timestamp: "Mar 03, 2026 09:30 AM",
+    admin: "Admin Jane",
+    category: "System",
+    description: "Failed login attempt — incorrect password",
+    target: "admin@library.com",
+    ip: "203.0.113.45",
+    status: "Failed",
+  },
+  {
+    id: "TXN-0032",
+    timestamp: "Mar 02, 2026 04:00 PM",
+    admin: "Admin John",
+    category: "Member",
+    description: "Added new member account",
+    target: "Emily R.",
+    ip: "192.168.1.12",
+    status: "Success",
+  },
 ];
 
 const MONTHLY_DATA = [
@@ -237,6 +335,442 @@ function ReturnRateGauge() {
   );
 }
 
+/* ── Pagination Controls ──────────────────────── */
+function PaginationControls({ 
+  currentPage, 
+  totalPages, 
+  itemsPerPage, 
+  totalItems,
+  onPageChange, 
+  onItemsPerPageChange 
+}) {
+  const startItem = totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
+  const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+  
+  const pageNumbers = [];
+  const maxVisiblePages = 5;
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+  let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+  
+  if (endPage - startPage + 1 < maxVisiblePages) {
+    startPage = Math.max(1, endPage - maxVisiblePages + 1);
+  }
+  
+  for (let i = startPage; i <= endPage; i++) {
+    pageNumbers.push(i);
+  }
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3" style={{ borderTop: "1px solid var(--border-light)" }}>
+      {/* Left side: Items per page and showing text */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px]" style={{ color: "var(--text-secondary)" }}>Show</span>
+          <select
+            value={itemsPerPage}
+            onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
+            className="px-2 py-1 text-[11px] rounded border outline-none cursor-pointer"
+            style={{ 
+              background: "var(--bg-surface)", 
+              borderColor: "var(--border)",
+              color: "var(--text-primary)"
+            }}
+          >
+            {[5, 10, 20].map(num => (
+              <option key={num} value={num}>{num}</option>
+            ))}
+          </select>
+          <span className="text-[11px]" style={{ color: "var(--text-secondary)" }}>entries</span>
+        </div>
+        <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+          Showing {startItem} to {endItem} of {totalItems}
+        </span>
+      </div>
+
+      {/* Right side: Page navigation */}
+      <div className="flex items-center gap-1">
+        {/* First page */}
+        <button
+          onClick={() => onPageChange(1)}
+          disabled={currentPage === 1}
+          className="p-1.5 rounded transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ color: "var(--text-secondary)" }}
+          onMouseEnter={e => currentPage !== 1 && (e.currentTarget.style.background = "var(--bg-hover)")}
+          onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+        >
+          <ChevronsLeft size={16} />
+        </button>
+
+        {/* Previous page */}
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="p-1.5 rounded transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ color: "var(--text-secondary)" }}
+          onMouseEnter={e => currentPage !== 1 && (e.currentTarget.style.background = "var(--bg-hover)")}
+          onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+        >
+          <ChevronLeft size={16} />
+        </button>
+
+        {/* Page numbers */}
+        {startPage > 1 && (
+          <>
+            <button
+              onClick={() => onPageChange(1)}
+              className="min-w-[28px] h-7 px-2 rounded text-[11px] font-medium transition-colors duration-150"
+              style={{ color: "var(--text-secondary)" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            >
+              1
+            </button>
+            {startPage > 2 && <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>...</span>}
+          </>
+        )}
+
+        {pageNumbers.map(num => (
+          <button
+            key={num}
+            onClick={() => onPageChange(num)}
+            className="min-w-[28px] h-7 px-2 rounded text-[11px] font-medium transition-colors duration-150"
+            style={{
+              background: currentPage === num ? "var(--accent-amber)" : "transparent",
+              color: currentPage === num ? "#fff" : "var(--text-primary)",
+            }}
+            onMouseEnter={e => currentPage !== num && (e.currentTarget.style.background = "var(--bg-hover)")}
+            onMouseLeave={e => e.currentTarget.style.background = currentPage === num ? "var(--accent-amber)" : "transparent"}
+          >
+            {num}
+          </button>
+        ))}
+
+        {endPage < totalPages && (
+          <>
+            {endPage < totalPages - 1 && <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>...</span>}
+            <button
+              onClick={() => onPageChange(totalPages)}
+              className="min-w-[28px] h-7 px-2 rounded text-[11px] font-medium transition-colors duration-150"
+              style={{ color: "var(--text-secondary)" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            >
+              {totalPages}
+            </button>
+          </>
+        )}
+
+        {/* Next page */}
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="p-1.5 rounded transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ color: "var(--text-secondary)" }}
+          onMouseEnter={e => currentPage !== totalPages && (e.currentTarget.style.background = "var(--bg-hover)")}
+          onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+        >
+          <ChevronRight size={16} />
+        </button>
+
+        {/* Last page */}
+        <button
+          onClick={() => onPageChange(totalPages)}
+          disabled={currentPage === totalPages}
+          className="p-1.5 rounded transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ color: "var(--text-secondary)" }}
+          onMouseEnter={e => currentPage !== totalPages && (e.currentTarget.style.background = "var(--bg-hover)")}
+          onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+        >
+          <ChevronsRight size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Admin Audit Trail with Pagination ────────── */
+function AdminAuditTrail() {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("All");
+
+  const categories = ["All", ...new Set(AUDIT_LOGS.map(log => log.category))];
+
+  // Filter logs based on search and category
+  const filteredLogs = useMemo(() => {
+    return AUDIT_LOGS.filter(log => {
+      const matchesSearch = searchQuery === "" || 
+        log.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        log.target.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        log.admin.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        log.id.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesCategory = categoryFilter === "All" || log.category === categoryFilter;
+      
+      return matchesSearch && matchesCategory;
+    });
+  }, [searchQuery, categoryFilter]);
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedLogs = filteredLogs.slice(startIndex, startIndex + itemsPerPage);
+
+  // Reset to page 1 when filters change
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [searchQuery, categoryFilter, itemsPerPage]);
+
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const handleCategoryChange = (e) => {
+    setCategoryFilter(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
+
+  return (
+    <div
+      className="rounded-2xl overflow-hidden"
+      style={{
+        background: "var(--bg-surface)",
+        border: "1px solid var(--border)",
+        boxShadow: "var(--shadow-sm)",
+      }}
+    >
+      {/* Header */}
+      <div
+        className="px-5 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+        style={{ borderBottom: "1px solid var(--border-light)" }}
+      >
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            Admin Audit Trail
+          </h2>
+          <span
+            className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+            style={{ background: "rgba(50,102,127,0.12)", color: "#32667F" }}
+          >
+            {filteredLogs.length} {filteredLogs.length === 1 ? 'entry' : 'entries'}
+          </span>
+        </div>
+        <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+          Last updated: Mar 05, 2026 09:14 AM
+        </span>
+      </div>
+
+      {/* Search and Filter Bar */}
+      <div
+        className="px-4 py-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-3"
+        style={{ borderBottom: "1px solid var(--border-light)", background: "var(--bg-subtle)" }}
+      >
+        {/* Search Input */}
+        <div className="relative flex-1 max-w-sm">
+          <Search 
+            size={14} 
+            className="absolute left-3 top-1/2 -translate-y-1/2"
+            style={{ color: "var(--text-muted)" }}
+          />
+          <input
+            type="text"
+            placeholder="Search logs..."
+            value={searchQuery}
+            onChange={handleSearchChange}
+            className="w-full pl-9 pr-3 py-2 text-[12px] rounded-lg border outline-none transition-colors duration-150"
+            style={{
+              background: "var(--bg-surface)",
+              borderColor: "var(--border)",
+              color: "var(--text-primary)",
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = "#EEA23A";
+              e.target.style.boxShadow = "0 0 0 3px rgba(238,162,58,0.12)";
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = "var(--border)";
+              e.target.style.boxShadow = "none";
+            }}
+          />
+        </div>
+
+        {/* Category Filter */}
+        <div className="relative flex items-center gap-2">
+          <Filter size={14} style={{ color: "var(--text-muted)" }} />
+          <select
+            value={categoryFilter}
+            onChange={handleCategoryChange}
+            className="px-3 py-2 text-[12px] rounded-lg border outline-none appearance-none cursor-pointer transition-colors duration-150"
+            style={{
+              background: "var(--bg-surface)",
+              borderColor: "var(--border)",
+              color: "var(--text-primary)",
+              paddingRight: "2rem",
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = "#EEA23A";
+              e.target.style.boxShadow = "0 0 0 3px rgba(238,162,58,0.12)";
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = "var(--border)";
+              e.target.style.boxShadow = "none";
+            }}
+          >
+            {categories.map(cat => (
+              <option key={cat} value={cat}>{cat === "All" ? "All Categories" : cat}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse" aria-label="Admin Audit Trail">
+          <thead>
+            <tr>
+              {["Txn ID", "Timestamp", "Admin", "Category", "Description", "Target", "IP Address", "Status"].map(h => (
+                <th
+                  key={h}
+                  scope="col"
+                  className="text-left px-4 py-3 text-[10px] font-600 uppercase tracking-wider whitespace-nowrap"
+                  style={{ color: "var(--text-secondary)", borderBottom: "1px solid var(--border-light)", background: "var(--bg-surface)" }}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {paginatedLogs.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-[12px]" style={{ color: "var(--text-muted)" }}>
+                  No audit logs found matching your criteria.
+                </td>
+              </tr>
+            ) : (
+              paginatedLogs.map((row, i) => {
+                const categoryColors = {
+                  Book:   { bg: "rgba(19,47,69,0.1)",    color: "#132F45" },
+                  Member: { bg: "rgba(50,102,127,0.12)", color: "#32667F" },
+                  Borrow: { bg: "rgba(238,162,58,0.13)", color: "#b87a1a" },
+                  System: { bg: "rgba(234,139,51,0.12)", color: "#c05a0a" },
+                };
+                const cat = categoryColors[row.category] || categoryColors.System;
+                const isSuccess = row.status === "Success";
+                const rowIndex = filteredLogs.indexOf(row);
+
+                return (
+                  <tr
+                    key={row.id}
+                    className="transition-all duration-150 hover:bg-[var(--bg-hover)]"
+                    style={{ borderBottom: rowIndex < filteredLogs.length - 1 ? "1px solid var(--border-light)" : "none" }}
+                  >
+                    {/* Txn ID */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className="text-[11px] font-mono font-semibold" style={{ color: "var(--text-muted)" }}>
+                        {row.id}
+                      </span>
+                    </td>
+
+                    {/* Timestamp */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className="text-[11px]" style={{ color: "var(--text-secondary)" }}>
+                        {row.timestamp}
+                      </span>
+                    </td>
+
+                    {/* Admin */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0"
+                          style={{ background: "rgba(50,102,127,0.15)", color: "#32667F" }}
+                        >
+                          {row.admin.split(" ").map(w => w[0]).join("").slice(0,2)}
+                        </div>
+                        <span className="text-[12px] font-medium" style={{ color: "var(--text-primary)" }}>
+                          {row.admin}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Category */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span
+                        className="text-[10px] font-semibold px-2 py-0.5 rounded-md"
+                        style={{ background: cat.bg, color: cat.color }}
+                      >
+                        {row.category}
+                      </span>
+                    </td>
+
+                    {/* Description */}
+                    <td className="px-4 py-3" style={{ minWidth: 240 }}>
+                      <span className="text-[12px] line-clamp-1" style={{ color: "var(--text-primary)" }}>
+                        {row.description}
+                      </span>
+                    </td>
+
+                    {/* Target */}
+                    <td className="px-4 py-3" style={{ minWidth: 140 }}>
+                      <span className="text-[11px] line-clamp-1" style={{ color: "var(--text-secondary)" }}>
+                        {row.target}
+                      </span>
+                    </td>
+
+                    {/* IP Address */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>
+                        {row.ip}
+                      </span>
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span
+                        className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                        style={{
+                          background: isSuccess ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+                          color: isSuccess ? "#16a34a" : "#dc2626",
+                        }}
+                      >
+                        <span
+                          className="w-1.5 h-1.5 rounded-full inline-block"
+                          style={{ background: isSuccess ? "#16a34a" : "#dc2626" }}
+                        />
+                        {row.status}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {filteredLogs.length > 0 && (
+        <PaginationControls
+          currentPage={currentPage}
+          totalPages={totalPages}
+          itemsPerPage={itemsPerPage}
+          totalItems={filteredLogs.length}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={handleItemsPerPageChange}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   return (
     <div className="flex flex-col gap-4">
@@ -343,64 +877,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Row 5: Audit Trail full width ── */}
-      <div
-        className="rounded-2xl overflow-hidden"
-        style={{
-          background: "var(--bg-surface)",
-          border: "1px solid var(--border)",
-          boxShadow: "var(--shadow-sm)",
-        }}
-      >
-        <div
-          className="px-5 sm:px-6 py-4 flex items-center justify-between"
-          style={{ borderBottom: "1px solid var(--border-light)" }}
-        >
-          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-            Audit Trail
-          </h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse" aria-label="Audit Trail">
-            <thead>
-              <tr>
-                {["Book", "Member", "Action", "Date"].map(h => (
-                  <th
-                    key={h}
-                    scope="col"
-                    className="text-left px-5 py-3 text-[10px] sm:text-[11px] font-medium uppercase tracking-wider whitespace-nowrap"
-                    style={{ color: "var(--text-secondary)", borderBottom: "1px solid var(--border-light)" }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {ACTIVITY.map((row, i) => (
-                <tr
-                  key={i}
-                  className="transition-all duration-200 hover:bg-[var(--bg-hover)]"
-                  style={{ borderBottom: i < ACTIVITY.length - 1 ? "1px solid var(--border-light)" : "none" }}
-                >
-                  <td className="px-5 py-3 text-[12px] sm:text-[13px]" style={{ color: "var(--text-primary)" }}>
-                    <span className="line-clamp-1">{row.book}</span>
-                  </td>
-                  <td className="px-5 py-3 text-[12px] sm:text-[13px]" style={{ color: "var(--text-primary)" }}>
-                    <span className="line-clamp-1">{row.member}</span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <Badge type={row.action}>{row.action}</Badge>
-                  </td>
-                  <td className="px-5 py-3 text-[12px] sm:text-[13px]" style={{ color: "var(--text-secondary)" }}>
-                    {row.date}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* ── Row 5: Admin Audit Trail full width ── */}
+      <AdminAuditTrail />
 
     </div>
   );
