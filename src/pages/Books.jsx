@@ -3,31 +3,38 @@ import {
   Search, ChevronDown, QrCode, PenLine, Camera,
   Star, X, BookOpen, ImagePlus, Trash2, Loader2,
   CheckCircle2, AlertCircle, Sparkles, SlidersHorizontal,
+  Edit2, PackageX,
 } from "lucide-react";
+
+/* ─── Helper ───────────────────────────────────── */
+function isOutOfStock(book) {
+  return book.quantity === 0 || book.status === "OutOfStock";
+}
 
 /* ─── API base ──────────────────────────────────── */
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 /* ─── Data ─────────────────────────────────────── */
 const INITIAL_BOOKS = [
-  { id:1, title:"Clean Code",               author:"Robert C. Martin", genre:"Programming",  isbn:"978-0132350884", year:2008, publisher:"Prentice Hall",  description:"A handbook of agile software craftsmanship.",           status:"Available", cover:null },
-  { id:2, title:"The Pragmatic Programmer", author:"Hunt & Thomas",    genre:"Programming",  isbn:"978-0135957059", year:2019, publisher:"Addison-Wesley", description:"Your journey to mastery in software development.",     status:"Borrowed",  cover:null },
-  { id:3, title:"Design Patterns",          author:"Gang of Four",     genre:"Architecture", isbn:"978-0201633610", year:1994, publisher:"Addison-Wesley", description:"Elements of reusable object-oriented software.",      status:"Available", cover:null },
-  { id:4, title:"Refactoring",              author:"Martin Fowler",    genre:"Programming",  isbn:"978-0134757599", year:2018, publisher:"Addison-Wesley", description:"Improving the design of existing code.",              status:"Overdue",   cover:null },
-  { id:5, title:"You Don't Know JS",        author:"Kyle Simpson",     genre:"JavaScript",   isbn:"978-1491924464", year:2015, publisher:"O'Reilly Media", description:"A deep dive into the core mechanisms of JavaScript.", status:"Available", cover:null },
-  { id:6, title:"The Mythical Man-Month",   author:"Frederick Brooks", genre:"Management",   isbn:"978-0201835953", year:1995, publisher:"Addison-Wesley", description:"Essays on software engineering and project management.", status:"Borrowed", cover:null },
+  { id:1, title:"Clean Code",               author:"Robert C. Martin", genre:"Programming",  isbn:"978-0132350884", year:2008, publisher:"Prentice Hall",  description:"A handbook of agile software craftsmanship.",           status:"Available", cover:null, quantity:5 },
+  { id:2, title:"The Pragmatic Programmer", author:"Hunt & Thomas",    genre:"Programming",  isbn:"978-0135957059", year:2019, publisher:"Addison-Wesley", description:"Your journey to mastery in software development.",     status:"Borrowed",  cover:null, quantity:3 },
+  { id:3, title:"Design Patterns",          author:"Gang of Four",     genre:"Architecture", isbn:"978-0201633610", year:1994, publisher:"Addison-Wesley", description:"Elements of reusable object-oriented software.",      status:"Available", cover:null, quantity:8 },
+  { id:4, title:"Refactoring",              author:"Martin Fowler",    genre:"Programming",  isbn:"978-0134757599", year:2018, publisher:"Addison-Wesley", description:"Improving the design of existing code.",              status:"Overdue",   cover:null, quantity:0 },
+  { id:5, title:"You Don't Know JS",        author:"Kyle Simpson",     genre:"JavaScript",   isbn:"978-1491924464", year:2015, publisher:"O'Reilly Media", description:"A deep dive into the core mechanisms of JavaScript.", status:"Available", cover:null, quantity:4 },
+  { id:6, title:"The Mythical Man-Month",   author:"Frederick Brooks", genre:"Management",   isbn:"978-0201835953", year:1995, publisher:"Addison-Wesley", description:"Essays on software engineering and project management.", status:"Borrowed", cover:null, quantity:2 },
 ];
 
 const EMPTY_FORM = {
   title:"", author:"", genre:"", isbn:"", year:"",
   publisher:"", description:"", status:"Available",
-  cover:null, _mode:"manual",
+  cover:null, quantity:1, _mode:"manual",
 };
 
 const STATUS_STYLE = {
   Available: { bg:"rgba(50,102,127,0.12)",  color:"#32667F" },
   Borrowed:  { bg:"rgba(238,162,58,0.18)",  color:"#b87a1a" },
   Overdue:   { bg:"rgba(234,139,51,0.18)",  color:"#c05a0a" },
+  OutOfStock: { bg:"rgba(220,38,38,0.18)",  color:"#dc2626" },
 };
 
 const GRADIENTS = [
@@ -85,10 +92,14 @@ export default function Books() {
   const [genreFilter,  setGenreFilter]  = useState("");
   const [sortBy,       setSortBy]       = useState("");
   const [ddOpen,       setDdOpen]       = useState(false);
-  const [modal,    setModal]    = useState(false);
-  const [form,     setForm]     = useState(EMPTY_FORM);
-  const [errors,   setErrors]   = useState({});
-  const [dragOver, setDragOver] = useState(false);
+  const [modal,        setModal]        = useState(false);
+  const [form,         setForm]         = useState(EMPTY_FORM);
+  const [errors,       setErrors]       = useState({});
+  const [dragOver,     setDragOver]     = useState(false);
+
+  // ── CRUD state ──
+  const [selectedBook, setSelectedBook] = useState(null);
+  const [modalMode,    setModalMode]    = useState("add"); // "add", "view", "edit"
 
   // ── OCR scan state ──
   const [scanState,   setScanState]   = useState(SCAN_STATE.IDLE);
@@ -123,6 +134,13 @@ export default function Books() {
     }
   }, [modal]);
 
+  /* Auto-set OutOfStock status when quantity is 0 */
+  useEffect(() => {
+    if (form.quantity === 0 && form.status === "Available") {
+      setForm(f => ({ ...f, status: "OutOfStock" }));
+    }
+  }, [form.quantity]);
+
   /* Derived: unique genres for the filter dropdown */
   const genres = useMemo(
     () => [...new Set(books.map(b => b.genre))].sort(),
@@ -151,6 +169,7 @@ export default function Books() {
     setForm({ ...EMPTY_FORM, _mode: mode });
     setErrors({});
     setModal(true);
+    setModalMode("add");
   }
 
   function readFile(file) {
@@ -174,9 +193,47 @@ export default function Books() {
   function handleSubmit() {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
-    setBooks(p => [...p, { ...form, id: Date.now(), year: Number(form.year) }]);
+    setBooks(p => [...p, { ...form, id: Date.now(), year: Number(form.year), quantity: Number(form.quantity) || 0 }]);
     setModal(false);
     setForm(EMPTY_FORM);
+  }
+
+  /* ── CRUD Handlers ── */
+  function handleViewDetails(book) {
+    setSelectedBook(book);
+    setModalMode("view");
+    setForm({ ...book, _mode: "manual" });
+    setModal(true);
+  }
+
+  function handleEdit(book) {
+    setSelectedBook(book);
+    setModalMode("edit");
+    setForm({ ...book, _mode: "manual" });
+    setErrors({});
+    setModal(true);
+  }
+
+  function handleDelete(bookId) {
+    if (window.confirm("Are you sure you want to delete this book?")) {
+      setBooks(books.filter(b => b.id !== bookId));
+    }
+  }
+
+  function handleUpdate() {
+    const e = validate();
+    if (Object.keys(e).length) { setErrors(e); return; }
+    setBooks(books.map(b => b.id === selectedBook.id ? { ...form, id: selectedBook.id, year: Number(form.year), quantity: Number(form.quantity) || 0 } : b));
+    setModal(false);
+    setForm(EMPTY_FORM);
+    setSelectedBook(null);
+  }
+
+  function handleCloseModal() {
+    setModal(false);
+    setForm(EMPTY_FORM);
+    setSelectedBook(null);
+    setModalMode("add");
   }
 
   /* ── OCR Scan Cover ─────────────────────────────────────
@@ -197,7 +254,7 @@ export default function Books() {
     }
     if (file.size > 1 * 1024 * 1024) {
       setScanState(SCAN_STATE.ERROR);
-      setScanMessage("Image is too large. Maximum size is 1 MB. Please compress the photo first.");
+      setScanMessage("Image is too large. Maximum size is 1 MB (OCR.space free tier limit).");
       return;
     }
 
@@ -244,23 +301,43 @@ export default function Books() {
         const b = data.book;
         setForm(f => ({
           ...f,
-          title:       b.title       || f.title,
-          author:      (b.authors || []).join(", ") || f.author,
-          publisher:   b.publisher   || f.publisher,
+          title:       b.title                    || f.title,
+          author:      b.author                   || f.author,
+          publisher:   b.publisher                || f.publisher,
           year:        b.publishedDate ? b.publishedDate.slice(0, 4) : f.year,
-          description: b.description || f.description,
-          isbn:        data.isbn      || f.isbn,
-          // Use Google Books thumbnail as cover if no custom cover already
-          cover:       b.thumbnail   || f.cover,
+          description: b.description              || f.description,
+          isbn:        b.isbn || data.isbn        || f.isbn,
+          cover:       b.thumbnail               || f.cover,
         }));
-        // Clear field errors for filled values
         setErrors({});
 
-        const isbnNote = data.isbn ? ` (ISBN: ${data.isbn})` : "";
+        const isbnNote = (b.isbn || data.isbn) ? ` (ISBN: ${b.isbn || data.isbn})` : "";
+        const src      = data.strategy === "open-library" ? "Open Library"
+                       : data.strategy === "google-books" ? "Google Books"
+                       : data.strategy?.includes("isbn") ? "ISBN lookup"
+                       : "metadata lookup";
         setScanState(SCAN_STATE.SUCCESS);
-        setScanMessage(`Book identified${isbnNote}. Fields filled — review and edit as needed.`);
+        setScanMessage(`Book identified via ${src}${isbnNote}. Fields filled — review and edit as needed.`);
+
+      } else if (data.parsed) {
+        // Open Library had no match — use Claude AI extracted metadata directly
+        const p = data.parsed;
+        setForm(f => ({
+          ...f,
+          title:     p.title                                       || f.title,
+          author:    Array.isArray(p.authors)
+                       ? p.authors.join(", ")
+                       : p.authors                                 || f.author,
+          publisher: p.publisher                                   || f.publisher,
+          year:      p.published_date ? String(p.published_date).slice(0, 4) : f.year,
+          isbn:      data.isbn || p.isbn                           || f.isbn,
+        }));
+        setErrors({});
+        setScanState(SCAN_STATE.SUCCESS);
+        setScanMessage("Cover scanned — fields filled from AI extraction. Review and edit as needed.");
+
       } else {
-        // OCR ran but no book found — at least fill ISBN if detected
+        // OCR ran but nothing useful found — at least fill ISBN if detected
         setForm(f => ({
           ...f,
           isbn: data.isbn || f.isbn,
@@ -273,32 +350,6 @@ export default function Books() {
       setScanState(SCAN_STATE.ERROR);
       setScanMessage("Could not reach the server. Make sure the backend is running on port 3001.");
     }
-  }
-
-  /* ── Reusable form field ── */
-  function Field({ label, fkey, type = "text", placeholder = "" }) {
-    const err = errors[fkey];
-    return (
-      <div className="flex flex-col gap-1">
-        <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-secondary)" }}>
-          {label}
-        </label>
-        <input
-          className={inputCls}
-          style={inputStyle(!!err)}
-          onFocus={focusRing}
-          onBlur={blurRing(!!err)}
-          type={type}
-          placeholder={placeholder || label}
-          value={form[fkey]}
-          onChange={e => {
-            setForm(f => ({ ...f, [fkey]: e.target.value }));
-            if (err) setErrors(v => { const n = { ...v }; delete n[fkey]; return n; });
-          }}
-        />
-        {err && <span className="text-[11px] font-medium text-orange-500">{err}</span>}
-      </div>
-    );
   }
 
   /* ════════════════ RENDER ════════════════ */
@@ -435,9 +486,9 @@ export default function Books() {
         <div className="flex items-center justify-between flex-wrap gap-2">
           {/* Status filter chips */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            {["All","Available","Borrowed","Overdue"].map(s => {
+            {["All","Available","Borrowed","Overdue","OutOfStock"].map(s => {
               const active = statusFilter === s;
-              const chipColor = s === "Available" ? "#32667F" : s === "Borrowed" ? "#b87a1a" : s === "Overdue" ? "#c05a0a" : null;
+              const chipColor = s === "Available" ? "#32667F" : s === "Borrowed" ? "#b87a1a" : s === "Overdue" ? "#c05a0a" : s === "OutOfStock" ? "#dc2626" : null;
               return (
                 <button
                   key={s}
@@ -498,6 +549,14 @@ export default function Books() {
                   >
                     {b.status}
                   </span>
+                  {isOutOfStock(b) && (
+                    <div
+                      className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-1"
+                    >
+                      <PackageX size={24} color="#dc2626" />
+                      <span className="text-[10px] font-bold text-red-500">OUT OF STOCK</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Meta row */}
@@ -513,6 +572,16 @@ export default function Books() {
                   </span>
                   <span className="text-[11px]" style={{ color:"var(--border)" }}>·</span>
                   <span className="text-[11px]" style={{ color:"var(--text-secondary)" }}>{b.year}</span>
+                  <span className="text-[11px]" style={{ color:"var(--border)" }}>·</span>
+                  <span 
+                    className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded"
+                    style={{ 
+                      background: isOutOfStock(b) ? "rgba(220,38,38,0.15)" : "rgba(50,127,79,0.15)", 
+                      color: isOutOfStock(b) ? "#dc2626" : "#2d7a47" 
+                    }}
+                  >
+                    {b.quantity || 0} pcs
+                  </span>
                 </div>
 
                 {/* Title + author */}
@@ -526,14 +595,35 @@ export default function Books() {
                 </div>
 
                 {/* Action */}
-                <button
-                  className="flex items-center justify-center gap-1.5 w-full py-2.5 text-[12px] font-semibold text-white transition-colors duration-150"
-                  style={{ background:"var(--bg-sidebar)" }}
-                  onMouseEnter={e => e.currentTarget.style.background = "#32667F"}
-                  onMouseLeave={e => e.currentTarget.style.background = "var(--bg-sidebar)"}
-                >
-                  <BookOpen size={13} /> View Details
-                </button>
+                <div className="flex">
+                  <button
+                    onClick={() => handleViewDetails(b)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-[11px] font-semibold text-white transition-colors duration-150"
+                    style={{ background:"var(--bg-sidebar)" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#32667F"}
+                    onMouseLeave={e => e.currentTarget.style.background = "var(--bg-sidebar)"}
+                  >
+                    <BookOpen size={12} /> View
+                  </button>
+                  <button
+                    onClick={() => handleEdit(b)}
+                    className="flex items-center justify-center px-3 py-2 text-[11px] font-semibold text-white transition-colors duration-150"
+                    style={{ background:"rgba(50,102,127,0.8)" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#32667F"}
+                    onMouseLeave={e => e.currentTarget.style.background = "rgba(50,102,127,0.8)"}
+                  >
+                    <Edit2 size={12} />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(b.id)}
+                    className="flex items-center justify-center px-3 py-2 text-[11px] font-semibold text-white transition-colors duration-150"
+                    style={{ background:"rgba(234,139,51,0.8)" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#c05a0a"}
+                    onMouseLeave={e => e.currentTarget.style.background = "rgba(234,139,51,0.8)"}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -557,17 +647,21 @@ export default function Books() {
               style={{ borderBottom:"1px solid var(--border-light)" }}
             >
               <div className="flex items-center gap-2.5">
-                {form._mode === "scan-cover" && <Camera size={18} style={{ color:"var(--accent-amber)" }} />}
-                {form._mode === "scan"       && <QrCode size={18} style={{ color:"var(--accent-amber)" }} />}
-                {form._mode === "manual"     && <PenLine size={18} style={{ color:"var(--accent-amber)" }} />}
+                {modalMode === "view" && <BookOpen size={18} style={{ color:"var(--accent-amber)" }} />}
+                {modalMode === "edit" && <PenLine size={18} style={{ color:"var(--accent-amber)" }} />}
+                {modalMode === "add" && form._mode === "scan-cover" && <Camera size={18} style={{ color:"var(--accent-amber)" }} />}
+                {modalMode === "add" && form._mode === "scan" && <QrCode size={18} style={{ color:"var(--accent-amber)" }} />}
+                {modalMode === "add" && form._mode === "manual" && <PenLine size={18} style={{ color:"var(--accent-amber)" }} />}
                 <h2 className="text-base font-bold" style={{ color:"var(--text-primary)" }}>
-                  {form._mode === "scan-cover" ? "Scan Book Cover (OCR)"
-                   : form._mode === "scan"     ? "Scan Barcode"
-                   :                             "Add Book Manually"}
+                  {modalMode === "view" ? "Book Details"
+                   : modalMode === "edit" ? "Edit Book"
+                   : form._mode === "scan-cover" ? "Scan Book Cover (OCR)"
+                   : form._mode === "scan" ? "Scan Barcode"
+                   : "Add Book Manually"}
                 </h2>
               </div>
               <button
-                onClick={() => setModal(false)}
+                onClick={handleCloseModal}
                 className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors duration-150"
                 style={{ background:"var(--bg-hover)", color:"var(--text-secondary)" }}
                 onMouseEnter={e => { e.currentTarget.style.background = "rgba(238,162,58,0.15)"; e.currentTarget.style.color = "#EEA23A"; }}
@@ -580,6 +674,174 @@ export default function Books() {
             {/* Body */}
             <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
 
+              {/* ══ VIEW MODE — Read-only details ══ */}
+              {modalMode === "view" && (
+                <div className="flex flex-col gap-5">
+                  {/* Cover */}
+                  <div className="flex items-start gap-5">
+                    {form.cover ? (
+                      <img
+                        src={form.cover}
+                        alt={form.title}
+                        className="w-32 h-44 object-cover rounded-lg shrink-0"
+                        style={{ boxShadow:"var(--shadow-md)" }}
+                      />
+                    ) : (
+                      <div
+                        className="w-32 h-44 rounded-lg shrink-0 flex items-center justify-center"
+                        style={{ background:"var(--bg-subtle)", border:"1px solid var(--border)" }}
+                      >
+                        <BookOpen size={32} style={{ color:"var(--text-muted)" }} />
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-2 flex-1">
+                      <div>
+                        <h3 className="text-lg font-bold" style={{ color:"var(--text-primary)" }}>{form.title}</h3>
+                        <p className="text-sm" style={{ color:"var(--text-secondary)" }}>{form.author}</p>
+                      </div>
+                      <span
+                        className="text-[11px] font-semibold px-2 py-1 rounded w-fit"
+                        style={STATUS_STYLE[form.status] || STATUS_STYLE.Available}
+                      >
+                        {form.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Details Grid */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <DetailItem label="Genre" value={form.genre} />
+                    <DetailItem label="ISBN" value={form.isbn} />
+                    <DetailItem label="Year" value={form.year} />
+                    <DetailItem label="Publisher" value={form.publisher} />
+                    <DetailItem label="Quantity" value={form.quantity} />
+                    <DetailItem label="Availability" value={isOutOfStock(form) ? "Out of Stock" : "In Stock"} />
+                  </div>
+
+                  {/* Description */}
+                  {form.description && (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-secondary)" }}>
+                        Description
+                      </label>
+                      <p className="text-sm" style={{ color:"var(--text-primary)" }}>{form.description}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ══ EDIT MODE — Form fields ══ */}
+              {modalMode === "edit" && (
+                <div className="flex flex-col gap-4">
+                  {/* Cover Upload */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-secondary)" }}>
+                      Book Cover
+                    </label>
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={e => readFile(e.target.files[0])}
+                    />
+
+                    {form.cover ? (
+                      <div
+                        className="flex items-start gap-4 p-3.5 rounded-xl"
+                        style={{ background:"var(--bg-subtle)", border:"1.5px solid var(--border)" }}
+                      >
+                        <img
+                          src={form.cover}
+                          alt="Cover preview"
+                          className="w-20 h-28 object-cover rounded-lg shrink-0"
+                          style={{ boxShadow:"var(--shadow-md)", border:"2px solid var(--bg-surface)" }}
+                        />
+                        <div className="flex flex-col gap-2 pt-1">
+                          <button
+                            onClick={() => fileRef.current?.click()}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border-[1.5px] transition-colors duration-150"
+                            style={{ background:"rgba(238,162,58,0.1)", borderColor:"rgba(238,162,58,0.3)", color:"#b87a1a" }}
+                          >
+                            <ImagePlus size={14} /> Change
+                          </button>
+                          <button
+                            onClick={() => {
+                              setForm(f => ({ ...f, cover:null }));
+                              if (fileRef.current) fileRef.current.value = "";
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border-[1.5px] transition-colors duration-150"
+                            style={{ background:"rgba(234,139,51,0.08)", borderColor:"rgba(234,139,51,0.25)", color:"#c05a0a" }}
+                          >
+                            <Trash2 size={14} /> Remove
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className="flex flex-col items-center justify-center gap-2 py-7 rounded-xl border-2 border-dashed cursor-pointer text-center select-none transition-colors duration-150"
+                        style={{ background:"var(--bg-subtle)", borderColor:"var(--border)" }}
+                        onClick={() => fileRef.current?.click()}
+                      >
+                        <ImagePlus size={28} style={{ color:"var(--text-secondary)" }} />
+                        <p className="text-[13px]" style={{ color:"var(--text-secondary)" }}>Click to upload cover</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Text fields 2-col */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <Field label="Title"          fkey="title"       form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
+                    <Field label="Author"         fkey="author"      form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
+                    <Field label="Genre"          fkey="genre"       form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
+                    <Field label="ISBN Number"    fkey="isbn"        placeholder="e.g. 978-0000000000" form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
+                    <Field label="Year Published" fkey="year"        type="number" placeholder="e.g. 2024" form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
+                    <Field label="Publisher"      fkey="publisher"   form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
+                    <Field label="Quantity"       fkey="quantity"    type="number" placeholder="e.g. 5" form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
+                  </div>
+
+                  {/* Description */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-secondary)" }}>
+                      Description
+                    </label>
+                    <textarea
+                      className={`${inputCls} resize-y`}
+                      style={inputStyle()}
+                      onFocus={focusRing}
+                      onBlur={blurRing(false)}
+                      rows={3}
+                      placeholder="Short description of the book…"
+                      value={form.description}
+                      onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Status */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-secondary)" }}>
+                      Status
+                    </label>
+                    <select
+                      className={inputCls}
+                      style={inputStyle()}
+                      onFocus={focusRing}
+                      onBlur={blurRing(false)}
+                      value={form.status}
+                      onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+                    >
+                      <option>Available</option>
+                      <option>Borrowed</option>
+                      <option>Overdue</option>
+                      <option>OutOfStock</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* ══ ADD MODE — Form fields ══ */}
+              {(modalMode === "add") && (
+                <>
               {/* ══ SCAN COVER MODE — OCR section ══ */}
               {form._mode === "scan-cover" && (
                 <div className="flex flex-col gap-3">
@@ -604,8 +866,8 @@ export default function Books() {
                         OCR Book Cover Scanner
                       </p>
                       <p className="text-[12px]" style={{ color:"var(--text-secondary)" }}>
-                        Upload a photo of a book cover. OCR.space will read the text, detect the ISBN,
-                        and auto-fill the form using Google Books metadata.
+                        Upload a photo of a book cover. OCR.space will read the text, then
+                        Open Library and Google Books will auto-fill the form fields.
                       </p>
                     </div>
                   </div>
@@ -625,8 +887,7 @@ export default function Books() {
                     {scanState === SCAN_STATE.SCANNING ? (
                       <>
                         <Loader2 size={16} className="animate-spin" />
-                        Scanning with OCR.space…
-                      </>
+                        Scanning with OCR.space…                      </>
                     ) : (
                       <>
                         <Camera size={16} />
@@ -784,7 +1045,7 @@ export default function Books() {
                       or drag &amp; drop
                     </p>
                     <p className="text-[11px]" style={{ color:"var(--text-muted)" }}>
-                      PNG, JPG, WEBP — max 1 MB
+                      PNG, JPG, WEBP — max 5 MB
                     </p>
                   </div>
                 )}
@@ -792,12 +1053,13 @@ export default function Books() {
 
               {/* ── Text fields 2-col ── */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <Field label="Title"          fkey="title" />
-                <Field label="Author"         fkey="author" />
-                <Field label="Genre"          fkey="genre" />
-                <Field label="ISBN Number"    fkey="isbn"  placeholder="e.g. 978-0000000000" />
-                <Field label="Year Published" fkey="year"  type="number" placeholder="e.g. 2024" />
-                <Field label="Publisher"      fkey="publisher" />
+                <Field label="Title"          fkey="title"       form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
+                <Field label="Author"         fkey="author"      form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
+                <Field label="Genre"          fkey="genre"       form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
+                <Field label="ISBN Number"    fkey="isbn"        placeholder="e.g. 978-0000000000" form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
+                <Field label="Year Published" fkey="year"        type="number" placeholder="e.g. 2024" form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
+                <Field label="Publisher"      fkey="publisher"   form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
+                <Field label="Quantity"       fkey="quantity"    type="number" placeholder="e.g. 5" form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
               </div>
 
               {/* Description */}
@@ -833,8 +1095,11 @@ export default function Books() {
                   <option>Available</option>
                   <option>Borrowed</option>
                   <option>Overdue</option>
+                  <option>OutOfStock</option>
                 </select>
               </div>
+                </>
+              )}
             </div>
 
             {/* Footer */}
@@ -842,8 +1107,32 @@ export default function Books() {
               className="flex justify-end gap-2.5 px-6 py-4 shrink-0"
               style={{ borderTop:"1px solid var(--border-light)" }}
             >
-              <ModalBtn secondary onClick={() => setModal(false)}>Cancel</ModalBtn>
-              <ModalBtn onClick={handleSubmit}>Save Book</ModalBtn>
+              {modalMode === "view" && (
+                <>
+                  <ModalBtn 
+                    onClick={() => handleDelete(selectedBook.id)}
+                    style={{ background:"rgba(234,139,51,0.1)", color:"#c05a0a", border:"1.5px solid rgba(234,139,51,0.3)" }}
+                  >
+                    Delete
+                  </ModalBtn>
+                  <ModalBtn secondary onClick={() => { setModalMode("edit"); setForm({ ...selectedBook, _mode: "manual" }); }}>
+                    Edit
+                  </ModalBtn>
+                  <ModalBtn onClick={handleCloseModal}>Close</ModalBtn>
+                </>
+              )}
+              {modalMode === "edit" && (
+                <>
+                  <ModalBtn secondary onClick={handleCloseModal}>Cancel</ModalBtn>
+                  <ModalBtn onClick={handleUpdate}>Update Book</ModalBtn>
+                </>
+              )}
+              {modalMode === "add" && (
+                <>
+                  <ModalBtn secondary onClick={handleCloseModal}>Cancel</ModalBtn>
+                  <ModalBtn onClick={handleSubmit}>Save Book</ModalBtn>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -852,20 +1141,62 @@ export default function Books() {
   );
 }
 
+/* ── Reusable form field ── */
+function Field({ label, fkey, type = "text", placeholder = "", form, setForm, errors, setErrors }) {
+  const err = errors[fkey];
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-secondary)" }}>
+        {label}
+      </label>
+      <input
+        className={inputCls}
+        style={inputStyle(!!err)}
+        onFocus={focusRing}
+        onBlur={blurRing(!!err)}
+        type={type}
+        placeholder={placeholder || label}
+        value={form[fkey]}
+        onChange={e => {
+          setForm(f => ({ ...f, [fkey]: e.target.value }));
+          if (err) setErrors(v => { const n = { ...v }; delete n[fkey]; return n; });
+        }}
+      />
+      {err && <span className="text-[11px] font-medium text-orange-500">{err}</span>}
+    </div>
+  );
+}
+
 /* ── Reusable modal button ── */
-function ModalBtn({ children, onClick, secondary }) {
+function ModalBtn({ children, onClick, secondary, style }) {
+  const defaultStyle = secondary
+    ? { background:"var(--bg-surface)", color:"var(--text-secondary)", border:"1.5px solid var(--border)" }
+    : { background:"var(--accent-amber)", color:"#fff", border:"none" };
+  const mergedStyle = style ? { ...defaultStyle, ...style } : defaultStyle;
+  
   return (
     <button
       onClick={onClick}
       className="px-4 py-2.5 rounded-lg text-[13px] font-semibold transition-colors duration-150"
-      style={secondary
-        ? { background:"var(--bg-surface)", color:"var(--text-secondary)", border:"1.5px solid var(--border)" }
-        : { background:"var(--accent-amber)", color:"#fff", border:"none" }
-      }
+      style={mergedStyle}
       onMouseEnter={e => e.currentTarget.style.background = secondary ? "var(--bg-hover)" : "var(--accent-orange)"}
-      onMouseLeave={e => e.currentTarget.style.background = secondary ? "var(--bg-surface)" : "var(--accent-amber)"}
+      onMouseLeave={e => e.currentTarget.style.background = mergedStyle.background}
     >
       {children}
     </button>
+  );
+}
+
+/* ── Detail item for view mode ── */
+function DetailItem({ label, value }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <label className="text-[10px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-muted)" }}>
+        {label}
+      </label>
+      <span className="text-[13px]" style={{ color:"var(--text-primary)" }}>
+        {value || "—"}
+      </span>
+    </div>
   );
 }
