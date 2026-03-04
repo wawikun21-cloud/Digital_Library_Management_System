@@ -11,6 +11,10 @@ function isOutOfStock(book) {
   return book.quantity === 0 || book.status === "OutOfStock";
 }
 
+function getAutoStatus(quantity) {
+  return quantity === 0 ? "OutOfStock" : "Available";
+}
+
 /* ─── API base ──────────────────────────────────── */
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
@@ -193,7 +197,9 @@ export default function Books() {
   function handleSubmit() {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
-    setBooks(p => [...p, { ...form, id: Date.now(), year: Number(form.year), quantity: Number(form.quantity) || 0 }]);
+    const quantity = Number(form.quantity) || 0;
+    const autoStatus = getAutoStatus(quantity);
+    setBooks(p => [...p, { ...form, id: Date.now(), year: Number(form.year), quantity, status: autoStatus }]);
     setModal(false);
     setForm(EMPTY_FORM);
   }
@@ -223,7 +229,9 @@ export default function Books() {
   function handleUpdate() {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
-    setBooks(books.map(b => b.id === selectedBook.id ? { ...form, id: selectedBook.id, year: Number(form.year), quantity: Number(form.quantity) || 0 } : b));
+    const quantity = Number(form.quantity) || 0;
+    const autoStatus = getAutoStatus(quantity);
+    setBooks(books.map(b => b.id === selectedBook.id ? { ...form, id: selectedBook.id, year: Number(form.year), quantity, status: autoStatus } : b));
     setModal(false);
     setForm(EMPTY_FORM);
     setSelectedBook(null);
@@ -543,12 +551,14 @@ export default function Books() {
                     ? <img src={b.cover} alt={b.title} className="w-full h-full object-cover" />
                     : <CoverPlaceholder title={b.title} idx={idx} />
                   }
-                  <span
-                    className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-full"
-                    style={{ background:sc.bg, color:sc.color }}
-                  >
-                    {b.status}
-                  </span>
+                  {(b.status === "Available" || b.status === "OutOfStock") && (
+                    <span
+                      className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                      style={sc}
+                    >
+                      {b.status}
+                    </span>
+                  )}
                   {isOutOfStock(b) && (
                     <div
                       className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-1"
@@ -580,7 +590,7 @@ export default function Books() {
                       color: isOutOfStock(b) ? "#dc2626" : "#2d7a47" 
                     }}
                   >
-                    {b.quantity || 0} pcs
+                    {b.quantity}/{b.quantity + ((b.status === "Borrowed" || b.status === "Overdue") ? 1 : 0) || 1}
                   </span>
                 </div>
 
@@ -699,12 +709,6 @@ export default function Books() {
                         <h3 className="text-lg font-bold" style={{ color:"var(--text-primary)" }}>{form.title}</h3>
                         <p className="text-sm" style={{ color:"var(--text-secondary)" }}>{form.author}</p>
                       </div>
-                      <span
-                        className="text-[11px] font-semibold px-2 py-1 rounded w-fit"
-                        style={STATUS_STYLE[form.status] || STATUS_STYLE.Available}
-                      >
-                        {form.status}
-                      </span>
                     </div>
                   </div>
 
@@ -815,26 +819,6 @@ export default function Books() {
                       value={form.description}
                       onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                     />
-                  </div>
-
-                  {/* Status */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-secondary)" }}>
-                      Status
-                    </label>
-                    <select
-                      className={inputCls}
-                      style={inputStyle()}
-                      onFocus={focusRing}
-                      onBlur={blurRing(false)}
-                      value={form.status}
-                      onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
-                    >
-                      <option>Available</option>
-                      <option>Borrowed</option>
-                      <option>Overdue</option>
-                      <option>OutOfStock</option>
-                    </select>
                   </div>
                 </div>
               )}
@@ -1077,26 +1061,6 @@ export default function Books() {
                   value={form.description}
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 />
-              </div>
-
-              {/* Status */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-secondary)" }}>
-                  Status
-                </label>
-                <select
-                  className={inputCls}
-                  style={inputStyle()}
-                  onFocus={focusRing}
-                  onBlur={blurRing(false)}
-                  value={form.status}
-                  onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
-                >
-                  <option>Available</option>
-                  <option>Borrowed</option>
-                  <option>Overdue</option>
-                  <option>OutOfStock</option>
-                </select>
               </div>
                 </>
               )}

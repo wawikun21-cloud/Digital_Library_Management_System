@@ -5,10 +5,10 @@ import {
 import StatsCard from "../components/StatsCard";
 
 const STATS = [
-  { label: "Total Books", value: "1,284", change: "+12 this month", accent: "#132F45" },
-  { label: "Borrowed",    value: "340",   change: "+5 today",        accent: "#EEA23A" },
-  { label: "Returned",    value: "920",   change: "+8 this week",    accent: "#32667F" },
-  { label: "Overdue",     value: "24",    change: "-3 from last week", accent: "#EA8B33" },
+  { label: "Total Books", value: "1,284", change: "+12 this month", accent: "#132F45", percentage: 85 },
+  { label: "Borrowed",    value: "340",   change: "+5 today",        accent: "#EEA23A", percentage: 26 },
+  { label: "Returned",    value: "920",   change: "+8 this week",    accent: "#32667F", percentage: 72 },
+  { label: "Overdue",     value: "24",    change: "-3 from last week", accent: "#EA8B33", percentage: 2 },
 ];
 
 const ACTIVITY = [
@@ -18,13 +18,6 @@ const ACTIVITY = [
   { book: "Refactoring",              member: "David L.",  action: "Overdue",  date: "Feb 15" },
 ];
 
-const BADGE = {
-  Borrowed: { bg: "rgba(238,162,58,0.15)", color: "#b87a1a" },
-  Returned: { bg: "rgba(50,102,127,0.12)", color: "#32667F" },
-  Overdue:  { bg: "rgba(234,139,51,0.15)", color: "#c05a0a" },
-};
-
-/* ── Chart data ────────────────────────────── */
 const MONTHLY_DATA = [
   { month: "Sep", Borrowed: 48, Returned: 40 },
   { month: "Oct", Borrowed: 62, Returned: 55 },
@@ -61,23 +54,27 @@ const GENRE_DATA = [
   { genre: "DevOps",       books: 63  },
 ];
 
-/* ── Custom tooltip shared style ─────────────── */
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
     <div
-      className="rounded-xl px-3 py-2.5 text-[12px]"
+      className="rounded-lg px-3 py-2 text-[11px] sm:text-[12px]"
       style={{
         background: "var(--bg-surface)",
-        border:     "1px solid var(--border)",
-        boxShadow:  "var(--shadow-md)",
-        color:      "var(--text-primary)",
+        border: "1px solid var(--border)",
+        boxShadow: "var(--shadow-md)",
+        color: "var(--text-primary)",
       }}
     >
-      {label && <p className="font-semibold mb-1" style={{ color: "var(--text-secondary)" }}>{label}</p>}
+      {label && (
+        <p className="font-semibold mb-1.5 pb-1.5 border-b border-[var(--border-light)]"
+          style={{ color: "var(--text-secondary)" }}>
+          {label}
+        </p>
+      )}
       {payload.map(p => (
-        <p key={p.name} className="flex items-center gap-1.5">
-          <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: p.fill || p.color }} />
+        <p key={p.name} className="flex items-center gap-2">
+          <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ background: p.fill || p.color }} />
           <span style={{ color: "var(--text-secondary)" }}>{p.name}:</span>
           <span className="font-bold">{p.value}</span>
         </p>
@@ -86,36 +83,54 @@ function ChartTooltip({ active, payload, label }) {
   );
 }
 
-/* ── Shared card wrapper ─────────────────────── */
-function ChartCard({ title, children }) {
+function ChartCard({ title, children, icon, className = "" }) {
   return (
     <div
-      className="rounded-xl overflow-hidden"
+      className={`rounded-2xl overflow-hidden flex flex-col ${className}`}
       style={{
         background: "var(--bg-surface)",
-        border:     "1px solid var(--border)",
-        boxShadow:  "var(--shadow-sm)",
+        border: "1px solid var(--border)",
+        boxShadow: "var(--shadow-sm)",
       }}
     >
       <div
-        className="px-4 sm:px-5 md:px-6 py-4 sm:py-5"
+        className="px-5 py-4 flex items-center justify-between flex-shrink-0"
         style={{ borderBottom: "1px solid var(--border-light)" }}
       >
-        <h2 className="text-sm sm:text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+        <h2 className="text-sm font-semibold flex items-center gap-2"
+          style={{ color: "var(--text-primary)" }}>
+          {icon && <span>{icon}</span>}
           {title}
         </h2>
       </div>
-      <div className="px-2 sm:px-4 py-5">{children}</div>
+      <div className="px-3 py-4 flex-1 flex flex-col justify-center">{children}</div>
     </div>
+  );
+}
+
+function Badge({ children, type }) {
+  const styles = {
+    Borrowed: { bg: "rgba(238,162,58,0.15)", color: "#b87a1a" },
+    Returned: { bg: "rgba(50,102,127,0.15)", color: "#32667F" },
+    Overdue:  { bg: "rgba(234,139,51,0.15)", color: "#c05a0a" },
+  };
+  const style = styles[type] || styles.Borrowed;
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold px-2.5 py-1 rounded-lg"
+      style={{ background: style.bg, color: style.color }}
+    >
+      {children}
+    </span>
   );
 }
 
 export default function Dashboard() {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
 
-      {/* ── Stats Grid ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
+      {/* ── Row 1: 4 Stats Cards ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {STATS.map(stat => (
           <StatsCard
             key={stat.label}
@@ -123,171 +138,116 @@ export default function Dashboard() {
             value={stat.value}
             change={stat.change}
             accent={stat.accent}
+            percentage={stat.percentage}
           />
         ))}
       </div>
 
-      {/* ── Charts Row ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-
-        {/* Bar Chart — Monthly Borrowing Trends */}
-        <ChartCard title="Monthly Borrowing Trends">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={MONTHLY_DATA} barCategoryGap="30%" barGap={4}>
-              <CartesianGrid vertical={false} stroke="var(--border-light)" />
-              <XAxis
-                dataKey="month"
-                tick={{ fontSize: 11, fill: "var(--text-secondary)" }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: "var(--text-secondary)" }}
-                axisLine={false}
-                tickLine={false}
-                width={28}
-              />
-              <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--bg-hover)" }} />
-              <Legend
-                iconType="circle"
-                iconSize={8}
-                wrapperStyle={{ fontSize: 11, color: "var(--text-secondary)", paddingTop: 8 }}
-              />
-              <Bar dataKey="Borrowed" fill="#EEA23A" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Returned" fill="#32667F" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Pie Chart — Book Status Distribution */}
-        <ChartCard title="Book Status Distribution">
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie
-                data={STATUS_PIE}
-                cx="50%"
-                cy="50%"
-                innerRadius={55}
-                outerRadius={85}
-                paddingAngle={3}
-                dataKey="value"
-              >
-                {STATUS_PIE.map((entry, i) => (
-                  <Cell key={entry.name} fill={PIE_COLORS[i]} stroke="none" />
-                ))}
-              </Pie>
-              <Tooltip content={<ChartTooltip />} />
-              <Legend
-                iconType="circle"
-                iconSize={8}
-                wrapperStyle={{ fontSize: 11, color: "var(--text-secondary)", paddingTop: 8 }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Area Chart — Weekly Activity */}
-        <ChartCard title="Weekly Activity">
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={WEEKLY_DATA}>
-              <defs>
-                <linearGradient id="gradBorrowed" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#EEA23A" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#EEA23A" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="gradReturned" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#32667F" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#32667F" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid vertical={false} stroke="var(--border-light)" />
-              <XAxis
-                dataKey="day"
-                tick={{ fontSize: 11, fill: "var(--text-secondary)" }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: "var(--text-secondary)" }}
-                axisLine={false}
-                tickLine={false}
-                width={24}
-              />
-              <Tooltip content={<ChartTooltip />} cursor={{ stroke: "var(--border)", strokeWidth: 1 }} />
-              <Legend
-                iconType="circle"
-                iconSize={8}
-                wrapperStyle={{ fontSize: 11, color: "var(--text-secondary)", paddingTop: 8 }}
-              />
-              <Area type="monotone" dataKey="Borrowed" stroke="#EEA23A" strokeWidth={2} fill="url(#gradBorrowed)" dot={false} activeDot={{ r: 4, fill: "#EEA23A" }} />
-              <Area type="monotone" dataKey="Returned" stroke="#32667F" strokeWidth={2} fill="url(#gradReturned)" dot={false} activeDot={{ r: 4, fill: "#32667F" }} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Horizontal Bar Chart — Books by Genre */}
-        <ChartCard title="Books by Genre">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={GENRE_DATA} layout="vertical" barCategoryGap="25%">
-              <CartesianGrid horizontal={false} stroke="var(--border-light)" />
-              <XAxis
-                type="number"
-                tick={{ fontSize: 11, fill: "var(--text-secondary)" }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                type="category"
-                dataKey="genre"
-                tick={{ fontSize: 11, fill: "var(--text-secondary)" }}
-                axisLine={false}
-                tickLine={false}
-                width={82}
-              />
-              <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--bg-hover)" }} />
-              <Bar dataKey="books" fill="#132F45" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-      </div>
-
-      {/* ── Recent Activity ── */}
-      <div
-        className="rounded-xl overflow-hidden"
-        style={{
-          background: "var(--bg-surface)",
-          border:     "1px solid var(--border)",
-          boxShadow:  "var(--shadow-sm)",
-        }}
-      >
-        {/* Header */}
-        <div
-          className="px-4 sm:px-5 md:px-6 py-4 sm:py-5"
-          style={{ borderBottom: "1px solid var(--border-light)" }}
-        >
-          <h2 className="text-sm sm:text-base font-semibold" style={{ color: "var(--text-primary)" }}>
-            Recent Activity
-          </h2>
+      {/* ── Row 2: Monthly (wide 3fr) + Pie (2fr) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        <div className="lg:col-span-3">
+          <ChartCard title="Monthly Borrowing Trends">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={MONTHLY_DATA} barCategoryGap="30%" barGap={4}>
+                <CartesianGrid vertical={false} stroke="var(--border-light)" />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} width={28} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--bg-hover)" }} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: "var(--text-secondary)", paddingTop: 8 }} />
+                <Bar dataKey="Borrowed" fill="#EEA23A" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Returned" fill="#32667F" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
         </div>
 
-        {/* Table */}
+        <div className="lg:col-span-2">
+          <ChartCard title="Book Status Distribution">
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={STATUS_PIE} cx="50%" cy="45%" innerRadius={50} outerRadius={78} paddingAngle={3} dataKey="value">
+                  {STATUS_PIE.map((entry, i) => (
+                    <Cell key={entry.name} fill={PIE_COLORS[i]} stroke="none" />
+                  ))}
+                </Pie>
+                <Tooltip content={<ChartTooltip />} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: "var(--text-secondary)", paddingTop: 8 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </div>
+      </div>
+
+      {/* ── Row 3: Genre (2fr) + Weekly Area (3fr) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        <div className="lg:col-span-2">
+          <ChartCard title="Books by Genre">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={GENRE_DATA} layout="vertical" barCategoryGap="25%">
+                <CartesianGrid horizontal={false} stroke="var(--border-light)" />
+                <XAxis type="number" tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="genre" tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} width={82} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--bg-hover)" }} />
+                <Bar dataKey="books" fill="#132F45" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </div>
+
+        <div className="lg:col-span-3">
+          <ChartCard title="Weekly Activity">
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={WEEKLY_DATA}>
+                <defs>
+                  <linearGradient id="gradBorrowed" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#EEA23A" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#EEA23A" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gradReturned" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#32667F" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#32667F" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke="var(--border-light)" />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} width={24} />
+                <Tooltip content={<ChartTooltip />} cursor={{ stroke: "var(--border)", strokeWidth: 1 }} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: "var(--text-secondary)", paddingTop: 8 }} />
+                <Area type="monotone" dataKey="Borrowed" stroke="#EEA23A" strokeWidth={2} fill="url(#gradBorrowed)" dot={false} activeDot={{ r: 4, fill: "#EEA23A" }} />
+                <Area type="monotone" dataKey="Returned" stroke="#32667F" strokeWidth={2} fill="url(#gradReturned)" dot={false} activeDot={{ r: 4, fill: "#32667F" }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </div>
+      </div>
+
+      {/* ── Row 4: Audit Trail full width ── */}
+      <div
+        className="rounded-2xl overflow-hidden"
+        style={{
+          background: "var(--bg-surface)",
+          border: "1px solid var(--border)",
+          boxShadow: "var(--shadow-sm)",
+        }}
+      >
+        <div
+          className="px-5 sm:px-6 py-4 flex items-center justify-between"
+          style={{ borderBottom: "1px solid var(--border-light)" }}
+        >
+          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            Audit Trail
+          </h2>
+        </div>
         <div className="overflow-x-auto">
-          <table
-            className="w-full text-sm border-collapse"
-            aria-label="Recent Activity"
-          >
+          <table className="w-full text-sm border-collapse" aria-label="Audit Trail">
             <thead>
               <tr>
                 {["Book", "Member", "Action", "Date"].map(h => (
                   <th
                     key={h}
                     scope="col"
-                    className="text-left px-3 sm:px-4 md:px-5 py-3 text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider whitespace-nowrap"
-                    style={{
-                      color:        "var(--text-secondary)",
-                      borderBottom: "1px solid var(--border-light)",
-                    }}
+                    className="text-left px-5 py-3 text-[10px] sm:text-[11px] font-medium uppercase tracking-wider whitespace-nowrap"
+                    style={{ color: "var(--text-secondary)", borderBottom: "1px solid var(--border-light)" }}
                   >
                     {h}
                   </th>
@@ -295,51 +255,31 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {ACTIVITY.map((row, i) => {
-                const badge = BADGE[row.action];
-                return (
-                  <tr
-                    key={i}
-                    className="transition-colors duration-100"
-                    onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
-                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                  >
-                    <td
-                      className="px-3 sm:px-4 md:px-5 py-3 text-[11px] sm:text-[12px] md:text-[13px]"
-                      style={{ color: "var(--text-primary)", borderBottom: "1px solid var(--border-light)" }}
-                    >
-                      <span className="line-clamp-1">{row.book}</span>
-                    </td>
-                    <td
-                      className="px-3 sm:px-4 md:px-5 py-3 text-[11px] sm:text-[12px] md:text-[13px]"
-                      style={{ color: "var(--text-primary)", borderBottom: "1px solid var(--border-light)" }}
-                    >
-                      <span className="line-clamp-1">{row.member}</span>
-                    </td>
-                    <td
-                      className="px-3 sm:px-4 md:px-5 py-3"
-                      style={{ borderBottom: "1px solid var(--border-light)" }}
-                    >
-                      <span
-                        className="inline-block text-[10px] sm:text-[11px] font-semibold px-1.5 sm:px-2 sm:py-0.5 py-0.5 rounded-full whitespace-nowrap"
-                        style={badge}
-                      >
-                        {row.action}
-                      </span>
-                    </td>
-                    <td
-                      className="px-3 sm:px-4 md:px-5 py-3 text-[11px] sm:text-[12px] md:text-[13px]"
-                      style={{ color: "var(--text-secondary)", borderBottom: "1px solid var(--border-light)" }}
-                    >
-                      {row.date}
-                    </td>
-                  </tr>
-                );
-              })}
+              {ACTIVITY.map((row, i) => (
+                <tr
+                  key={i}
+                  className="transition-all duration-200 hover:bg-[var(--bg-hover)]"
+                  style={{ borderBottom: i < ACTIVITY.length - 1 ? "1px solid var(--border-light)" : "none" }}
+                >
+                  <td className="px-5 py-3 text-[12px] sm:text-[13px]" style={{ color: "var(--text-primary)" }}>
+                    <span className="line-clamp-1">{row.book}</span>
+                  </td>
+                  <td className="px-5 py-3 text-[12px] sm:text-[13px]" style={{ color: "var(--text-primary)" }}>
+                    <span className="line-clamp-1">{row.member}</span>
+                  </td>
+                  <td className="px-5 py-3">
+                    <Badge type={row.action}>{row.action}</Badge>
+                  </td>
+                  <td className="px-5 py-3 text-[12px] sm:text-[13px]" style={{ color: "var(--text-secondary)" }}>
+                    {row.date}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </div>
+
     </div>
   );
 }

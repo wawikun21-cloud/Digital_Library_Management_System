@@ -1,94 +1,118 @@
-import { useTilt } from "../hooks/useTilt";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 
-export default function StatsCard({ label, value, change, accent }) {
+export default function StatsCard({ label, value, change, accent, percentage }) {
   const up   = change?.startsWith("+");
   const down = change?.startsWith("-");
 
-  const { ref, tiltProps, cardStyle, glare } = useTilt({
-    maxTilt:      13,
-    perspective:  700,
-    glareOpacity: 0.10,
-    scale:        1.035,
-    transitionMs: 140,
-  });
+  // Donut chart data
+  const pieData = percentage !== undefined ? [
+    { name: "value", value: percentage },
+    { name: "remaining", value: 100 - percentage },
+  ] : [];
 
   return (
     <div
-      ref={ref}
-      {...tiltProps}
-      className="relative rounded-xl p-4 sm:p-5 overflow-hidden cursor-default"
+      className="relative rounded-2xl p-3 sm:p-4 overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-lg stats-card"
       style={{
         background: "var(--bg-surface)",
-        border:     "1px solid var(--border)",
-        boxShadow:  "var(--shadow-sm)",
-        willChange: "transform",
-        transformStyle: "preserve-3d",
-        ...cardStyle,
+        border: "1px solid var(--border)",
+        boxShadow: "var(--shadow-sm)",
       }}
     >
-      {/* ── Glare overlay ── */}
+      {/* ── Top accent bar ── */}
       <div
-        aria-hidden="true"
-        className="absolute inset-0 rounded-xl pointer-events-none"
-        style={{
-          background: `radial-gradient(circle at ${glare.x} ${glare.y}, rgba(255,255,255,${glare.opacity * 2.5}) 0%, transparent 65%)`,
-          transition: "opacity 200ms ease",
-          zIndex: 10,
+        className="absolute top-0 left-0 right-0 h-[2px]"
+        style={{ 
+          background: accent,
+          boxShadow: `0 0 12px ${accent}40`,
         }}
       />
 
-      {/* ── Top accent bar ── */}
+      {/* ── Left accent ── */}
       <div
-        className="absolute top-0 left-0 right-0 h-[3px] rounded-t-xl"
-        style={{ background: accent }}
+        className="absolute left-0 top-2.5 bottom-2.5 w-[2px] rounded-r-full"
+        style={{ 
+          background: accent,
+        }}
       />
 
-      {/* ── Left accent glow ── */}
-      <div
-        className="absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full opacity-30"
-        style={{ background: accent }}
-      />
-
-      {/* ── Content (slightly lifted in Z) ── */}
-      <div style={{ transform: "translateZ(20px)", transformStyle: "preserve-3d" }}>
-        <p
-          className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider mt-1 mb-2"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          {label}
-        </p>
-
-        <p
-          className="text-[26px] sm:text-[30px] font-black leading-none mb-2 tabular-nums"
-          style={{ color: "var(--text-primary)" }}
-        >
-          {value}
-        </p>
-
-        <div className="flex items-center gap-1.5">
-          {(up || down) && (
-            <span
-              className="text-[10px] font-black px-1.5 py-0.5 rounded-full"
-              style={{
-                background: up
-                  ? "rgba(50,127,79,0.12)"
-                  : down
-                  ? "rgba(234,139,51,0.12)"
-                  : "transparent",
-                color: up ? "#2d7a47" : down ? "#c05a0a" : "var(--text-muted)",
-              }}
+      {/* ── Content ── */}
+      <div>
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <p
+              className="text-[9px] sm:text-[10px] font-medium uppercase tracking-wider mt-0.5 mb-1 truncate"
+              style={{ color: "var(--text-secondary)" }}
             >
-              {up ? "▲" : "▼"}
-            </span>
+              {label}
+            </p>
+
+            <p
+              className="text-[22px] sm:text-[26px] font-bold leading-tight mb-1 tabular-nums tracking-tight"
+              style={{ color: "var(--text-primary)" }}
+            >
+              {value}
+            </p>
+
+            <div className="flex items-center gap-1.5">
+              {(up || down) && (
+                <span
+                  className="text-[8px] font-bold px-1.5 py-0.5 rounded-md flex items-center"
+                  style={{
+                    background: up
+                      ? "rgba(34,197,94,0.15)"
+                      : down
+                      ? "rgba(239,68,68,0.15)"
+                      : "transparent",
+                    color: up ? "#22c55e" : down ? "#ef4444" : "var(--text-muted)",
+                  }}
+                >
+                  {up ? "↑" : "↓"}
+                </span>
+              )}
+              <p
+                className="text-[10px] sm:text-[11px] truncate"
+                style={{ color: "var(--text-muted)" }}
+              >
+                {change}
+              </p>
+            </div>
+          </div>
+
+          {/* ── Donut Chart ── */}
+          {percentage !== undefined && (
+            <div className="relative flex-shrink-0" style={{ width: 48, height: 48 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={15}
+                    outerRadius={22}
+                    startAngle={90}
+                    endAngle={-270}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    <Cell key="value" fill={accent} stroke="none" />
+                    <Cell key="remaining" fill="var(--border-light)" stroke="none" />
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span
+                  className="text-[9px] font-bold"
+                  style={{ color: accent }}
+                >
+                  {percentage}%
+                </span>
+              </div>
+            </div>
           )}
-          <p
-            className="text-[11px] sm:text-[12px]"
-            style={{ color: "var(--text-muted)" }}
-          >
-            {change}
-          </p>
         </div>
       </div>
     </div>
   );
 }
+
