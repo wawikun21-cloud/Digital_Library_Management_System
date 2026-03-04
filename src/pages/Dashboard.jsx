@@ -44,6 +44,16 @@ const WEEKLY_DATA = [
   { day: "Sun", Borrowed: 5,  Returned: 4  },
 ];
 
+const TOP_BOOKS = [
+  { title: "Clean Code",               author: "R. Martin",  borrows: 87, color: "#EEA23A" },
+  { title: "The Pragmatic Programmer", author: "Hunt & Thomas", borrows: 74, color: "#32667F" },
+  { title: "Design Patterns",          author: "GoF",        borrows: 61, color: "#132F45" },
+  { title: "Refactoring",              author: "M. Fowler",  borrows: 55, color: "#EA8B33" },
+  { title: "You Don't Know JS",        author: "K. Simpson", borrows: 48, color: "#32667F" },
+];
+
+const RETURN_RATE = 73; // percentage
+
 const GENRE_DATA = [
   { genre: "Programming",  books: 420 },
   { genre: "Architecture", books: 210 },
@@ -86,7 +96,7 @@ function ChartTooltip({ active, payload, label }) {
 function ChartCard({ title, children, icon, className = "" }) {
   return (
     <div
-      className={`rounded-2xl overflow-hidden flex flex-col ${className}`}
+      className={`rounded-2xl overflow-hidden flex flex-col flex-1 ${className}`}
       style={{
         background: "var(--bg-surface)",
         border: "1px solid var(--border)",
@@ -103,7 +113,7 @@ function ChartCard({ title, children, icon, className = "" }) {
           {title}
         </h2>
       </div>
-      <div className="px-3 py-4 flex-1 flex flex-col justify-center">{children}</div>
+      <div className="px-3 py-4 flex-1 flex flex-col">{children}</div>
     </div>
   );
 }
@@ -122,6 +132,108 @@ function Badge({ children, type }) {
     >
       {children}
     </span>
+  );
+}
+
+/* ── Top Borrowed Books ──────────────────────── */
+function TopBorrowedBooks() {
+  const max = TOP_BOOKS[0].borrows;
+  return (
+    <ChartCard title="Top Borrowed Books" className="h-full">
+      <div className="flex flex-col justify-evenly flex-1 px-1">
+        {TOP_BOOKS.map((book, i) => (
+          <div key={book.title} className="flex items-center gap-3">
+            {/* Rank */}
+            <span
+              className="text-[11px] font-bold w-5 text-center flex-shrink-0"
+              style={{ color: i === 0 ? "#EEA23A" : "var(--text-muted)" }}
+            >
+              {i + 1}
+            </span>
+            {/* Info + Bar */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[12px] font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+                  {book.title}
+                </span>
+                <span className="text-[11px] font-bold ml-2 flex-shrink-0" style={{ color: book.color }}>
+                  {book.borrows}x
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border-light)" }}>
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${(book.borrows / max) * 100}%`, background: book.color }}
+                />
+              </div>
+              <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{book.author}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </ChartCard>
+  );
+}
+
+/* ── Return Rate Radial Gauge ────────────────── */
+function ReturnRateGauge() {
+  const rate = RETURN_RATE;
+  const radius = 70;
+  const stroke = 10;
+  const normalizedRadius = radius - stroke / 2;
+  const circumference = normalizedRadius * 2 * Math.PI;
+  // Only use top 180° arc (semicircle)
+  const arcLength = circumference * 0.75;
+  const offset = arcLength - (rate / 100) * arcLength;
+
+  return (
+    <ChartCard title="Return Rate">
+      <div className="flex flex-col items-center justify-center gap-2 py-1">
+        <div className="relative" style={{ width: 160, height: 160 }}>
+          <svg width="160" height="160" viewBox="0 0 160 160">
+            {/* Background arc */}
+            <circle
+              cx="80" cy="80" r={normalizedRadius}
+              fill="none"
+              stroke="var(--border-light)"
+              strokeWidth={stroke}
+              strokeDasharray={`${arcLength} ${circumference}`}
+              strokeDashoffset={-(circumference - arcLength) / 2}
+              strokeLinecap="round"
+              transform="rotate(135 80 80)"
+            />
+            {/* Value arc */}
+            <circle
+              cx="80" cy="80" r={normalizedRadius}
+              fill="none"
+              stroke="#32667F"
+              strokeWidth={stroke}
+              strokeDasharray={`${arcLength} ${circumference}`}
+              strokeDashoffset={offset + (circumference - arcLength) / 2}
+              strokeLinecap="round"
+              transform="rotate(135 80 80)"
+              style={{ transition: "stroke-dashoffset 0.6s ease" }}
+            />
+          </svg>
+          {/* Center label */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-[28px] font-bold leading-none" style={{ color: "#32667F" }}>{rate}%</span>
+            <span className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>of borrowed</span>
+          </div>
+        </div>
+        {/* Legend row */}
+        <div className="flex gap-6 text-[11px]">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full inline-block" style={{ background: "#32667F" }} />
+            <span style={{ color: "var(--text-secondary)" }}>Returned <strong style={{ color: "var(--text-primary)" }}>920</strong></span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full inline-block" style={{ background: "var(--border-light)" }} />
+            <span style={{ color: "var(--text-secondary)" }}>Pending <strong style={{ color: "var(--text-primary)" }}>260</strong></span>
+          </div>
+        </div>
+      </div>
+    </ChartCard>
   );
 }
 
@@ -221,7 +333,17 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Row 4: Audit Trail full width ── */}
+      {/* ── Row 4: Top Borrowed Books (3fr) + Return Rate Gauge (2fr) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-stretch">
+        <div className="lg:col-span-3 flex flex-col">
+          <TopBorrowedBooks />
+        </div>
+        <div className="lg:col-span-2 flex flex-col">
+          <ReturnRateGauge />
+        </div>
+      </div>
+
+      {/* ── Row 5: Audit Trail full width ── */}
       <div
         className="rounded-2xl overflow-hidden"
         style={{
