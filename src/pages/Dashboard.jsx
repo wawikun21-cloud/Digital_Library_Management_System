@@ -589,7 +589,7 @@ function AdminAuditTrail() {
               background: "var(--bg-surface)",
               borderColor: "var(--border)",
               color: "var(--text-primary)",
-            }}
+                                                                       }}
             onFocus={(e) => {
               e.target.style.borderColor = "#EEA23A";
               e.target.style.boxShadow = "0 0 0 3px rgba(238,162,58,0.12)";

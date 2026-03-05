@@ -8,6 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "../DropdownMenu";
+import Toast from "../Toast";
 
 const PAGE_TITLES = {
   "/":         "Analytics Dashboard",
@@ -23,6 +24,7 @@ export default function Topbar({ collapsed, onToggle, onMobileToggle }) {
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
   const fileInputRef = useRef(null);
   
   // Profile form state
@@ -52,11 +54,15 @@ export default function Topbar({ collapsed, onToggle, onMobileToggle }) {
     // Add your save logic here
     console.log("Saving profile:", profile);
     setProfileModalOpen(false);
-    alert("Profile updated successfully!");
+    setSuccessModalOpen(true);
   };
 
   const handleProfileClick = () => {
     setProfileModalOpen(true);
+  };
+
+  const handleCloseSuccessModal = () => {
+    setSuccessModalOpen(false);
   };
 
   return (
@@ -362,6 +368,14 @@ export default function Topbar({ collapsed, onToggle, onMobileToggle }) {
           </div>
         </div>
       )}
+
+      {/* Success Toast */}
+      <Toast
+        message="Profile updated successfully!"
+        type="success"
+        isVisible={successModalOpen}
+        onClose={handleCloseSuccessModal}
+      />
     </>
   );
 }

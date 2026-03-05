@@ -5,6 +5,8 @@ import {
   CheckCircle2, AlertCircle, Sparkles, SlidersHorizontal,
   Edit2, PackageX,
 } from "lucide-react";
+import ConfirmationModal from "../components/ConfirmationModal";
+import Toast from "../components/Toast";
 
 /* ─── Helper ───────────────────────────────────── */
 function isOutOfStock(book) {
@@ -105,6 +107,12 @@ export default function Books() {
   const [selectedBook, setSelectedBook] = useState(null);
   const [modalMode,    setModalMode]    = useState("add"); // "add", "view", "edit"
 
+  // ── Delete confirmation modal state ──
+  const [deleteModal, setDeleteModal] = useState({ open: false, bookId: null, bookTitle: "" });
+
+  // ── Toast state ──
+  const [toast, setToast] = useState({ visible: false, message: "", type: "info" });
+
   // ── OCR scan state ──
   const [scanState,   setScanState]   = useState(SCAN_STATE.IDLE);
   const [scanMessage, setScanMessage] = useState("");
@@ -202,6 +210,7 @@ export default function Books() {
     setBooks(p => [...p, { ...form, id: Date.now(), year: Number(form.year), quantity, status: autoStatus }]);
     setModal(false);
     setForm(EMPTY_FORM);
+    showToast("Book added successfully!", "success");
   }
 
   /* ── CRUD Handlers ── */
@@ -220,10 +229,28 @@ export default function Books() {
     setModal(true);
   }
 
-  function handleDelete(bookId) {
-    if (window.confirm("Are you sure you want to delete this book?")) {
-      setBooks(books.filter(b => b.id !== bookId));
+  function handleDeleteClick(book) {
+    setDeleteModal({ open: true, bookId: book.id, bookTitle: book.title });
+  }
+
+  function confirmDelete() {
+    if (deleteModal.bookId) {
+      setBooks(books.filter(b => b.id !== deleteModal.bookId));
+      showToast("Book deleted successfully!", "success");
     }
+    setDeleteModal({ open: false, bookId: null, bookTitle: "" });
+  }
+
+  function cancelDelete() {
+    setDeleteModal({ open: false, bookId: null, bookTitle: "" });
+  }
+
+  function showToast(message, type = "info") {
+    setToast({ visible: true, message, type });
+  }
+
+  function hideToast() {
+    setToast((prev) => ({ ...prev, visible: false }));
   }
 
   function handleUpdate() {
@@ -235,6 +262,7 @@ export default function Books() {
     setModal(false);
     setForm(EMPTY_FORM);
     setSelectedBook(null);
+    showToast("Book updated successfully!", "success");
   }
 
   function handleCloseModal() {
@@ -625,7 +653,7 @@ export default function Books() {
                     <Edit2 size={12} />
                   </button>
                   <button
-                    onClick={() => handleDelete(b.id)}
+                    onClick={() => handleDeleteClick(b)}
                     className="flex items-center justify-center px-3 py-2 text-[11px] font-semibold text-white transition-colors duration-150"
                     style={{ background:"rgba(234,139,51,0.8)" }}
                     onMouseEnter={e => e.currentTarget.style.background = "#c05a0a"}
@@ -1074,7 +1102,7 @@ export default function Books() {
               {modalMode === "view" && (
                 <>
                   <ModalBtn 
-                    onClick={() => handleDelete(selectedBook.id)}
+                    onClick={() => handleDeleteClick(selectedBook)}
                     style={{ background:"rgba(234,139,51,0.1)", color:"#c05a0a", border:"1.5px solid rgba(234,139,51,0.3)" }}
                   >
                     Delete
@@ -1101,6 +1129,25 @@ export default function Books() {
           </div>
         </div>
       )}
+      {/* ════════ DELETE CONFIRMATION MODAL ════════ */}
+      <ConfirmationModal
+        isOpen={deleteModal.open}
+        title="Delete Book"
+        message={`Are you sure you want to delete "${deleteModal.bookTitle}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
+
+      {/* ════════ TOAST NOTIFICATION ════════ */}
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        isVisible={toast.visible}
+        onClose={hideToast}
+      />
     </div>
   );
 }
