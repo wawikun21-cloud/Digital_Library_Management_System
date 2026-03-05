@@ -165,7 +165,8 @@ export default function Books() {
     const result = books.filter(b => {
       if (q && !["title","author","genre","isbn","publisher"]
           .some(k => b[k]?.toLowerCase().includes(q))) return false;
-      if (statusFilter !== "All" && b.status !== statusFilter) return false;
+      if (statusFilter !== "All" && statusFilter === "OutOfStock" && !isOutOfStock(b)) return false;
+      if (statusFilter !== "All" && statusFilter !== "OutOfStock" && b.status !== statusFilter) return false;
       if (genreFilter && b.genre !== genreFilter) return false;
       return true;
     });
@@ -522,7 +523,7 @@ export default function Books() {
         <div className="flex items-center justify-between flex-wrap gap-2">
           {/* Status filter chips */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            {["All","Available","Borrowed","Overdue","OutOfStock"].map(s => {
+            {["All","Available","OutOfStock"].map(s => {
               const active = statusFilter === s;
               const chipColor = s === "Available" ? "#32667F" : s === "Borrowed" ? "#b87a1a" : s === "Overdue" ? "#c05a0a" : s === "OutOfStock" ? "#dc2626" : null;
               return (
@@ -564,7 +565,7 @@ export default function Books() {
           No books found.
         </p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
           {filtered.map((b, idx) => {
             const sc = STATUS_STYLE[b.status] ?? STATUS_STYLE.Available;
             return (
@@ -598,7 +599,7 @@ export default function Books() {
                 </div>
 
                 {/* Meta row */}
-                <div className="px-3 pt-2.5 pb-1 flex items-center gap-1 flex-wrap">
+                <div className="px-2.5 pt-2 pb-1 flex items-center gap-1 flex-wrap">
                   <Star size={11} fill="#EEA23A" color="#EEA23A" />
                   <span className="text-[11px]" style={{ color:"var(--text-secondary)" }}>N/A</span>
                   <span className="text-[11px]" style={{ color:"var(--border)" }}>·</span>
@@ -623,7 +624,7 @@ export default function Books() {
                 </div>
 
                 {/* Title + author */}
-                <div className="px-3 pb-2 flex-1">
+                <div className="px-2.5 pb-1.5 flex-1">
                   <p className="text-[13px] font-bold leading-snug mb-0.5 clamp-2" style={{ color:"var(--text-primary)" }}>
                     {b.title}
                   </p>
@@ -636,7 +637,7 @@ export default function Books() {
                 <div className="flex">
                   <button
                     onClick={() => handleViewDetails(b)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-[11px] font-semibold text-white transition-colors duration-150"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-white transition-colors duration-150"
                     style={{ background:"var(--bg-sidebar)" }}
                     onMouseEnter={e => e.currentTarget.style.background = "#32667F"}
                     onMouseLeave={e => e.currentTarget.style.background = "var(--bg-sidebar)"}
@@ -645,7 +646,7 @@ export default function Books() {
                   </button>
                   <button
                     onClick={() => handleEdit(b)}
-                    className="flex items-center justify-center px-3 py-2 text-[11px] font-semibold text-white transition-colors duration-150"
+                    className="flex items-center justify-center px-2.5 py-1.5 text-[11px] font-semibold text-white transition-colors duration-150"
                     style={{ background:"rgba(50,102,127,0.8)" }}
                     onMouseEnter={e => e.currentTarget.style.background = "#32667F"}
                     onMouseLeave={e => e.currentTarget.style.background = "rgba(50,102,127,0.8)"}
@@ -654,7 +655,7 @@ export default function Books() {
                   </button>
                   <button
                     onClick={() => handleDeleteClick(b)}
-                    className="flex items-center justify-center px-3 py-2 text-[11px] font-semibold text-white transition-colors duration-150"
+                    className="flex items-center justify-center px-2.5 py-1.5 text-[11px] font-semibold text-white transition-colors duration-150"
                     style={{ background:"rgba(234,139,51,0.8)" }}
                     onMouseEnter={e => e.currentTarget.style.background = "#c05a0a"}
                     onMouseLeave={e => e.currentTarget.style.background = "rgba(234,139,51,0.8)"}
