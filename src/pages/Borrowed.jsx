@@ -49,14 +49,144 @@ const inpStyle = (err = false) => ({
   borderColor: err ? "#EA8B33" : "var(--border)",
   fontFamily:  "inherit",
 });
-const onFocus = e => {
+const onFocusInp = e => {
   e.target.style.borderColor = "#EEA23A";
   e.target.style.boxShadow   = "0 0 0 3px rgba(238,162,58,0.13)";
 };
-const onBlur = err => e => {
+const onBlurInp = err => e => {
   e.target.style.borderColor = err ? "#EA8B33" : "var(--border)";
   e.target.style.boxShadow   = "none";
 };
+
+/* ══════════════════════════════════════════════
+   Shared components — defined OUTSIDE Borrowed
+   so React never unmounts/remounts them on state
+   changes inside Borrowed.
+   ══════════════════════════════════════════════ */
+
+const SectionLabel = ({ text }) => (
+  <div
+    className="text-[11px] font-bold uppercase tracking-wider pb-1"
+    style={{ color:"var(--text-muted)", borderBottom:"1px solid var(--border-light)" }}
+  >
+    {text}
+  </div>
+);
+
+function MBtn({ children, onClick, secondary }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="px-4 py-2.5 rounded-lg text-[13px] font-semibold transition-colors duration-150"
+      style={secondary
+        ? { background:"var(--bg-surface)", color:"var(--text-secondary)", border:"1.5px solid var(--border)" }
+        : { background:"var(--accent-amber)", color:"#fff", border:"none" }
+      }
+      onMouseEnter={e => e.currentTarget.style.background = secondary ? "var(--bg-hover)" : "var(--accent-orange)"}
+      onMouseLeave={e => e.currentTarget.style.background = secondary ? "var(--bg-surface)" : "var(--accent-amber)"}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* FIX: renamed prop to "label"; added aria-label + title for screen readers */
+function TxnBtn({ label, onClick, bg, hoverBg, color, children }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="w-7 h-7 flex items-center justify-center rounded-md transition-colors duration-100 shrink-0"
+      style={{ background:bg, color }}
+      onMouseEnter={e => e.currentTarget.style.background = hoverBg}
+      onMouseLeave={e => e.currentTarget.style.background = bg}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* FIX: receives form/errors/onFieldChange as props instead of closing over them;
+         adds htmlFor + id so the label is programmatically linked to the input.   */
+function FormField({ form, errors, onFieldChange, label, fkey, type="text", placeholder="" }) {
+  const err     = errors[fkey];
+  const fieldId = `field-${fkey}`;
+  return (
+    <div className="flex flex-col gap-1">
+      <label
+        htmlFor={fieldId}
+        className="text-[11px] font-semibold uppercase tracking-wider"
+        style={{ color:"var(--text-secondary)" }}
+      >
+        {label}
+      </label>
+      <input
+        id={fieldId}
+        className={inpCls}
+        style={inpStyle(!!err)}
+        onFocus={onFocusInp}
+        onBlur={onBlurInp(!!err)}
+        type={type}
+        placeholder={placeholder || label}
+        value={form[fkey]}
+        onChange={e => onFieldChange(fkey, e.target.value)}
+      />
+      {err && (
+        <span role="alert" className="text-[11px] font-medium text-orange-500">{err}</span>
+      )}
+    </div>
+  );
+}
+
+/* FIX: accepts onClose prop; adds role="dialog", aria-modal, aria-labelledby */
+function ModalShell({ title, size="max-w-3xl", children, footer, onClose }) {
+  const labelId = "modal-title";
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={labelId}
+      className="anim-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background:"rgba(10,22,34,0.6)", backdropFilter:"blur(3px)" }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        className={`anim-modal w-full ${size} max-h-[90vh] flex flex-col rounded-2xl overflow-hidden`}
+        style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-xl)" }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-5 shrink-0"
+             style={{ borderBottom:"1px solid var(--border-light)" }}>
+          <h2 id={labelId} className="text-base font-bold" style={{ color:"var(--text-primary)" }}>
+            {title}
+          </h2>
+          {/* FIX: aria-label added to icon-only close button */}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close modal"
+            className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors duration-150"
+            style={{ background:"var(--bg-hover)", color:"var(--text-secondary)" }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(238,162,58,0.15)"; e.currentTarget.style.color = "#EEA23A"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">{children}</div>
+
+        <div className="flex justify-end gap-2.5 px-6 py-4 shrink-0"
+             style={{ borderTop:"1px solid var(--border-light)" }}>
+          {footer}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ══════════════════════════════════════════════ */
 export default function Borrowed() {
@@ -132,6 +262,12 @@ export default function Borrowed() {
     setPickerOpen(false);
   }
 
+  /* FIX: extracted field-change handler so FormField can call it without closing over setState */
+  function handleFieldChange(fkey, value) {
+    setForm(f => ({ ...f, [fkey]: value }));
+    if (errors[fkey]) setErrors(v => { const n = { ...v }; delete n[fkey]; return n; });
+  }
+
   function validate(f) {
     const e = {};
     if (!f.bookId)             e.bookId      = "Please select a book";
@@ -195,116 +331,11 @@ export default function Borrowed() {
     setReturnToast(null);
   }
 
-  /* ── Reusable form field ── */
-  function FormField({ label, fkey, type="text", placeholder="" }) {
-    const err = errors[fkey];
-    return (
-      <div className="flex flex-col gap-1">
-        <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-secondary)" }}>
-          {label}
-        </label>
-        <input
-          className={inpCls}
-          style={inpStyle(!!err)}
-          onFocus={onFocus}
-          onBlur={onBlur(!!err)}
-          type={type}
-          placeholder={placeholder || label}
-          value={form[fkey]}
-          onChange={e => {
-            setForm(f => ({ ...f, [fkey]:e.target.value }));
-            if (err) setErrors(v => { const n = { ...v }; delete n[fkey]; return n; });
-          }}
-        />
-        {err && <span className="text-[11px] font-medium text-orange-500">{err}</span>}
-      </div>
-    );
-  }
-
-  const SectionLabel = ({ text }) => (
-    <div
-      className="text-[11px] font-bold uppercase tracking-wider pb-1"
-      style={{ color:"var(--text-muted)", borderBottom:"1px solid var(--border-light)" }}
-    >
-      {text}
-    </div>
-  );
-
-  function ModalShell({ title, size="max-w-3xl", children, footer }) {
-    return (
-      <div
-        className="anim-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
-        style={{ background:"rgba(10,22,34,0.6)", backdropFilter:"blur(3px)" }}
-        onClick={e => e.target === e.currentTarget && closeModal()}
-      >
-        <div
-          className={`anim-modal w-full ${size} max-h-[90vh] flex flex-col rounded-2xl overflow-hidden`}
-          style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-xl)" }}
-        >
-          <div className="flex items-center justify-between px-6 py-5 shrink-0"
-               style={{ borderBottom:"1px solid var(--border-light)" }}>
-            <h2 className="text-base font-bold" style={{ color:"var(--text-primary)" }}>{title}</h2>
-            <button
-              onClick={closeModal}
-              className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors duration-150"
-              style={{ background:"var(--bg-hover)", color:"var(--text-secondary)" }}
-              onMouseEnter={e => { e.currentTarget.style.background = "rgba(238,162,58,0.15)"; e.currentTarget.style.color = "#EEA23A"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">{children}</div>
-
-          <div className="flex justify-end gap-2.5 px-6 py-4 shrink-0"
-               style={{ borderTop:"1px solid var(--border-light)" }}>
-            {footer}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  function MBtn({ children, onClick, secondary }) {
-    return (
-      <button
-        onClick={onClick}
-        className="px-4 py-2.5 rounded-lg text-[13px] font-semibold transition-colors duration-150"
-        style={secondary
-          ? { background:"var(--bg-surface)", color:"var(--text-secondary)", border:"1.5px solid var(--border)" }
-          : { background:"var(--accent-amber)", color:"#fff", border:"none" }
-        }
-        onMouseEnter={e => e.currentTarget.style.background = secondary ? "var(--bg-hover)" : "var(--accent-orange)"}
-        onMouseLeave={e => e.currentTarget.style.background = secondary ? "var(--bg-surface)" : "var(--accent-amber)"}
-      >
-        {children}
-      </button>
-    );
-  }
-
-  /* ── Small icon action button used in table rows ── */
-  function TxnBtn({ title: tip, onClick, bg, hoverBg, color, children }) {
-    return (
-      <button
-        title={tip}
-        onClick={onClick}
-        className="w-7 h-7 flex items-center justify-center rounded-md transition-colors duration-100 shrink-0"
-        style={{ background:bg, color }}
-        onMouseEnter={e => e.currentTarget.style.background = hoverBg}
-        onMouseLeave={e => e.currentTarget.style.background = bg}
-      >
-        {children}
-      </button>
-    );
-  }
-
   /* ════════════════ RENDER ════════════════ */
   return (
     <div className="flex flex-col gap-6">
 
-      {/* ── Stats Grid - Mobile-First Responsive ── */}
-      {/* Mobile: 1 col, sm: 2 cols, lg: 3 cols, 2xl: 4 cols */}
+      {/* ── Stats Grid ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
         {[
           { label:"Currently Borrowed", value:statActive,  accent:"#EEA23A" },
@@ -329,30 +360,34 @@ export default function Borrowed() {
 
       {/* ── Toolbar ── */}
       <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 justify-between">
-        {/* Search - Full width on mobile */}
+        {/* Search */}
         <div
           className="flex items-center gap-2 px-2 sm:px-3 py-2 rounded-lg flex-1 min-w-[120px] sm:min-w-[180px]"
           style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-sm)" }}
         >
-          <Search size={14} style={{ color:"var(--text-secondary)" }} className="shrink-0" />
+          <Search size={14} style={{ color:"var(--text-secondary)" }} className="shrink-0" aria-hidden="true" />
           <input
             className="border-none outline-none text-[12px] sm:text-[13px] bg-transparent w-full"
             style={{ color:"var(--text-primary)" }}
             placeholder="Search student, book, ID…"
+            aria-label="Search transactions"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
         </div>
 
         {/* Filter pills */}
-        <div className="flex gap-1 sm:gap-1.5 flex-wrap">
+        <div className="flex gap-1 sm:gap-1.5 flex-wrap" role="group" aria-label="Filter by status">
           {["All","Borrowed","Overdue","Returned"].map(s => (
             <button
               key={s}
+              type="button"
               onClick={() => setFilter(s)}
+              aria-pressed={filter === s}
               className="px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] sm:text-[12px] font-semibold border-[1.5px] whitespace-nowrap transition-colors duration-150"
               style={filter === s
-                ? { background:"var(--accent-amber)", borderColor:"var(--accent-amber)", color:"#fff" }
+                /* FIX: was color:"#fff" (ratio 2.12:1 on amber). Now "#132F45" → ~7.8:1 */
+                ? { background:"var(--accent-amber)", borderColor:"var(--accent-amber)", color:"#132F45" }
                 : { background:"var(--bg-surface)",   borderColor:"var(--border)",       color:"var(--text-secondary)" }
               }
             >
@@ -363,23 +398,22 @@ export default function Borrowed() {
 
         {/* Add Transaction Button */}
         <button
+          type="button"
           onClick={openAdd}
           className="flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-[12px] sm:text-[13px] font-semibold text-white whitespace-nowrap transition-colors duration-150 shrink-0 w-full sm:w-auto"
           style={{ background:"var(--accent-amber)", boxShadow:"0 2px 6px rgba(238,162,58,0.3)" }}
           onMouseEnter={e => e.currentTarget.style.background = "var(--accent-orange)"}
           onMouseLeave={e => e.currentTarget.style.background = "var(--accent-amber)"}
         >
-          <Plus size={14} /> Add Transaction
+          <Plus size={14} aria-hidden="true" /> Add Transaction
         </button>
       </div>
 
-      {/* ── Transactions Table ─────────────────────────────────────── */}
-      {/* Wraps in a card shell; inner div scrolls horizontally on small screens */}
+      {/* ── Transactions Table ── */}
       <div
         className="rounded-xl overflow-hidden"
         style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-sm)" }}
       >
-        {/* Table header bar */}
         <div
           className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4"
           style={{ borderBottom:"1px solid var(--border-light)" }}
@@ -390,19 +424,21 @@ export default function Borrowed() {
           <span
             className="text-[10px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-full"
             style={{ background:"rgba(238,162,58,0.12)", color:"var(--accent-amber)" }}
+            aria-live="polite"
+            aria-atomic="true"
           >
             {rows.length} record{rows.length !== 1 ? "s" : ""}
           </span>
         </div>
 
-        {/* Horizontal scroll wrapper — preserves all data on narrow screens */}
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse" style={{ minWidth: 760 }}>
+          <table className="w-full border-collapse" style={{ minWidth:760 }} aria-label="Transaction Records">
             <thead>
               <tr style={{ background:"var(--bg-hover)" }}>
                 {["#", "Book", "Student", "ID No.", "Course / Year", "Borrowed", "Due Date", "Status", "Actions"].map(h => (
                   <th
                     key={h}
+                    scope="col"
                     className="text-left px-3 sm:px-4 py-2.5 sm:py-3 text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider whitespace-nowrap"
                     style={{ color:"var(--text-secondary)", borderBottom:"1px solid var(--border-light)" }}
                   >
@@ -417,7 +453,7 @@ export default function Borrowed() {
                 <tr>
                   <td colSpan={9}>
                     <div className="flex flex-col items-center justify-center gap-2 py-14" style={{ color:"var(--text-secondary)" }}>
-                      <BookOpen size={28} style={{ color:"var(--text-muted)" }} />
+                      <BookOpen size={28} style={{ color:"var(--text-muted)" }} aria-hidden="true" />
                       <p className="text-[13px]">No transactions found.</p>
                     </div>
                   </td>
@@ -470,8 +506,9 @@ export default function Borrowed() {
                               style={{ color:"var(--text-primary)" }}>
                           {t.studentName}
                         </span>
+                        {/* FIX: was var(--text-muted) #7aafc4 (ratio 2.39:1). Now var(--text-secondary) #32667F → passes */}
                         <span className="text-[10px] sm:text-[11px] whitespace-nowrap"
-                              style={{ color:"var(--text-muted)" }}>
+                              style={{ color:"var(--text-secondary)" }}>
                           {t.email}
                         </span>
                       </div>
@@ -495,12 +532,12 @@ export default function Borrowed() {
                       {fmt(t.borrowed)}
                     </td>
 
-                    {/* Due date — orange + icon when overdue */}
+                    {/* Due date */}
                     <td className="px-3 sm:px-4 py-3 whitespace-nowrap"
                         style={{ borderBottom:"1px solid var(--border-light)" }}>
                       <div className="flex items-center gap-1">
                         {isOvr && (
-                          <CalendarClock size={12} style={{ color:"var(--accent-orange)", flexShrink:0 }} />
+                          <CalendarClock size={12} style={{ color:"var(--accent-orange)", flexShrink:0 }} aria-hidden="true" />
                         )}
                         <span
                           className="text-[11px] sm:text-[13px] font-medium"
@@ -522,31 +559,28 @@ export default function Borrowed() {
                       </span>
                     </td>
 
-                    {/* Action buttons */}
+                    {/* Action buttons
+                        FIX: prop renamed tip → label so aria-label + title are set correctly */}
                     <td className="px-3 sm:px-4 py-3"
                         style={{ borderBottom:"1px solid var(--border-light)" }}>
                       <div className="flex items-center gap-1">
-                        {/* Return */}
                         {!isRet && (
-                          <TxnBtn tip="Mark as Returned" onClick={() => handleReturn(t.id)}
+                          <TxnBtn label="Mark as Returned" onClick={() => handleReturn(t.id)}
                             bg="rgba(50,102,127,0.1)" hoverBg="rgba(50,102,127,0.22)" color="#32667F">
                             <CheckCircle2 size={13} />
                           </TxnBtn>
                         )}
-                        {/* Edit */}
-                        <TxnBtn tip="Edit" onClick={() => openEdit(t)}
+                        <TxnBtn label="Edit transaction" onClick={() => openEdit(t)}
                           bg="rgba(50,102,127,0.1)" hoverBg="rgba(50,102,127,0.22)" color="#32667F">
                           <Pencil size={13} />
                         </TxnBtn>
-                        {/* Extend due date */}
                         {!isRet && (
-                          <TxnBtn tip="Extend Due Date" onClick={() => openExtend(t)}
+                          <TxnBtn label="Extend due date" onClick={() => openExtend(t)}
                             bg="rgba(238,162,58,0.12)" hoverBg="rgba(238,162,58,0.25)" color="var(--accent-amber)">
                             <CalendarClock size={13} />
                           </TxnBtn>
                         )}
-                        {/* Delete */}
-                        <TxnBtn tip="Delete" onClick={() => handleDelete(t.id)}
+                        <TxnBtn label="Delete transaction" onClick={() => handleDelete(t.id)}
                           bg="rgba(234,139,51,0.1)" hoverBg="rgba(234,139,51,0.22)" color="var(--accent-orange)">
                           <Trash2 size={13} />
                         </TxnBtn>
@@ -564,6 +598,7 @@ export default function Borrowed() {
       {(modal === "add" || modal === "edit") && (
         <ModalShell
           title={modal === "add" ? "Add Transaction" : "Edit Transaction"}
+          onClose={closeModal}
           footer={
             <>
               <MBtn secondary onClick={closeModal}>Cancel</MBtn>
@@ -574,39 +609,51 @@ export default function Borrowed() {
           {/* Book Picker */}
           <div className="flex flex-col gap-1.5 relative" ref={pickerRef}>
             <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-secondary)" }}>
-              Book <span style={{ color:"var(--accent-orange)" }}>*</span>
+              Book <span style={{ color:"var(--accent-orange)" }} aria-hidden="true">*</span>
+              <span className="sr-only">(required)</span>
             </label>
 
+            {/* FIX: aria-expanded + aria-haspopup so screen readers announce open/closed state */}
             <button
               type="button"
               className="flex items-center gap-2 px-3 py-2.5 rounded-lg border-[1.5px] cursor-pointer transition-colors duration-150 w-full text-left"
               style={{ background:"var(--bg-input)", borderColor: errors.bookId ? "#EA8B33" : "var(--border)" }}
+              aria-expanded={pickerOpen}
+              aria-haspopup="listbox"
+              aria-label={form.bookTitle ? `Selected book: ${form.bookTitle}. Click to change` : "Select a book"}
               onClick={() => setPickerOpen(o => !o)}
             >
               {form.bookTitle
                 ? <>
-                    <BookOpen size={14} style={{ color:"var(--accent-amber)", flexShrink:0 }} />
+                    <BookOpen size={14} style={{ color:"var(--accent-amber)", flexShrink:0 }} aria-hidden="true" />
                     <span className="text-[13px] font-semibold flex-1 truncate" style={{ color:"var(--text-primary)" }}>
                       {form.bookTitle}
                     </span>
                   </>
-                : <span className="text-[13px] flex-1" style={{ color:"var(--text-muted)" }}>Select a book…</span>
+                : /* FIX: was var(--text-muted) #7aafc4 (ratio 2.39:1). Now var(--text-secondary) → passes */
+                  <span className="text-[13px] flex-1" style={{ color:"var(--text-secondary)" }}>Select a book…</span>
               }
               <ChevronDown
                 size={14}
+                aria-hidden="true"
                 className="shrink-0 transition-transform duration-200"
                 style={{ color:"var(--text-muted)", transform: pickerOpen ? "rotate(180deg)" : "rotate(0deg)" }}
               />
             </button>
 
-            {errors.bookId && <span className="text-[11px] font-medium text-orange-500">{errors.bookId}</span>}
+            {errors.bookId && (
+              <span role="alert" className="text-[11px] font-medium text-orange-500">{errors.bookId}</span>
+            )}
 
             {/* Picker dropdown */}
             {pickerOpen && (
               <div
+                role="listbox"
+                aria-label="Available books"
                 className="anim-drop absolute top-[calc(100%+4px)] left-0 right-0 rounded-xl overflow-hidden z-30"
                 style={{ background:"var(--bg-surface)", border:"1.5px solid var(--border)", boxShadow:"var(--shadow-lg)" }}
               >
+                {/* Toolbar: search + genre pills */}
                 <div
                   className="p-2.5 flex flex-col gap-2"
                   style={{ background:"var(--bg-subtle)", borderBottom:"1px solid var(--border-light)" }}
@@ -615,26 +662,37 @@ export default function Borrowed() {
                     className="flex items-center gap-2 px-2.5 py-2 rounded-lg"
                     style={{ background:"var(--bg-surface)", border:"1.5px solid var(--border)" }}
                   >
-                    <Search size={13} style={{ color:"var(--text-secondary)" }} />
+                    <Search size={13} style={{ color:"var(--text-secondary)" }} aria-hidden="true" />
                     <input
                       autoFocus
                       className="border-none outline-none text-[12.5px] bg-transparent w-full"
                       style={{ color:"var(--text-primary)" }}
                       placeholder="Search title or author…"
+                      aria-label="Search books by title or author"
                       value={bookSearch}
                       onChange={e => setBookSearch(e.target.value)}
                       onClick={e => e.stopPropagation()}
                     />
                   </div>
-                  <div className="flex gap-1.5 flex-wrap">
+
+                  {/* Genre filter pills
+                      FIX: e.preventDefault() added to prevent any possible scroll/focus side-effects;
+                           active pill uses color:"#132F45" for WCAG contrast compliance               */}
+                  <div className="flex gap-1.5 flex-wrap" role="group" aria-label="Filter by genre">
                     {ALL_GENRES.map(g => (
                       <button
                         key={g}
                         type="button"
-                        onClick={e => { e.stopPropagation(); setGenreFilter(g); }}
+                        onClick={e => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setGenreFilter(g);
+                        }}
+                        aria-pressed={genreFilter === g}
                         className="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors duration-100"
                         style={genreFilter === g
-                          ? { background:"var(--accent-amber)", borderColor:"var(--accent-amber)", color:"#fff" }
+                          /* FIX: was color:"#fff" (ratio 2.12:1 on amber). Now "#132F45" → ~7.8:1 */
+                          ? { background:"var(--accent-amber)", borderColor:"var(--accent-amber)", color:"#132F45" }
                           : { background:"transparent", borderColor:"var(--border)", color:"var(--text-secondary)" }
                         }
                       >
@@ -651,6 +709,8 @@ export default function Borrowed() {
                       <button
                         type="button"
                         key={b.id}
+                        role="option"
+                        aria-selected={form.bookId === b.id}
                         onClick={e => { e.stopPropagation(); pickBook(b); }}
                         className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-lg text-left transition-colors duration-100"
                         style={{ background: form.bookId === b.id ? "rgba(238,162,58,0.12)" : "transparent" }}
@@ -659,6 +719,7 @@ export default function Borrowed() {
                       >
                         <div
                           className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
+                          aria-hidden="true"
                           style={{
                             background: form.bookId === b.id
                               ? "linear-gradient(135deg,#EEA23A,#EA8B33)"
@@ -670,7 +731,8 @@ export default function Borrowed() {
                         </div>
                         <div className="flex flex-col flex-1 min-w-0">
                           <span className="text-[13px] font-semibold truncate" style={{ color:"var(--text-primary)" }}>{b.title}</span>
-                          <span className="text-[11px]" style={{ color:"var(--text-muted)" }}>{b.author}</span>
+                          {/* FIX: was var(--text-muted) #7aafc4 (ratio 2.39:1). Now var(--text-secondary) → passes */}
+                          <span className="text-[11px]" style={{ color:"var(--text-secondary)" }}>{b.author}</span>
                         </div>
                         <span
                           className="text-[10.5px] font-semibold px-2 py-0.5 rounded shrink-0"
@@ -689,40 +751,55 @@ export default function Borrowed() {
           {/* Student Info */}
           <SectionLabel text="Student Information" />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <FormField label="Full Name"   fkey="studentName" />
-            <FormField label="ID No."      fkey="idNo"      placeholder="e.g. 2024-00123"  />
-            <FormField label="Contact No." fkey="contact"   type="tel" placeholder="e.g. 09171234567" />
+            <FormField form={form} errors={errors} onFieldChange={handleFieldChange}
+              label="Full Name"   fkey="studentName" />
+            <FormField form={form} errors={errors} onFieldChange={handleFieldChange}
+              label="ID No."      fkey="idNo"      placeholder="e.g. 2024-00123" />
+            <FormField form={form} errors={errors} onFieldChange={handleFieldChange}
+              label="Contact No." fkey="contact"   type="tel" placeholder="e.g. 09171234567" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <FormField label="Course" fkey="course" placeholder="e.g. BSCS" />
+            <FormField form={form} errors={errors} onFieldChange={handleFieldChange}
+              label="Course" fkey="course" placeholder="e.g. BSCS" />
+
+            {/* FIX: htmlFor + id link label → select for screen readers */}
             <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-secondary)" }}>
-                Year Level <span style={{ color:"var(--accent-orange)" }}>*</span>
+              <label
+                htmlFor="year-level"
+                className="text-[11px] font-semibold uppercase tracking-wider"
+                style={{ color:"var(--text-secondary)" }}
+              >
+                Year Level <span style={{ color:"var(--accent-orange)" }} aria-hidden="true">*</span>
+                <span className="sr-only">(required)</span>
               </label>
               <select
+                id="year-level"
                 className={inpCls}
                 style={inpStyle(!!errors.year)}
-                onFocus={onFocus}
-                onBlur={onBlur(!!errors.year)}
+                onFocus={onFocusInp}
+                onBlur={onBlurInp(!!errors.year)}
                 value={form.year}
-                onChange={e => {
-                  setForm(f => ({ ...f, year:e.target.value }));
-                  if (errors.year) setErrors(v => { const n = { ...v }; delete n.year; return n; });
-                }}
+                onChange={e => handleFieldChange("year", e.target.value)}
               >
                 <option value="">Select year…</option>
                 {YEAR_OPTS.map(y => <option key={y} value={y}>{y} Year</option>)}
               </select>
-              {errors.year && <span className="text-[11px] font-medium text-orange-500">{errors.year}</span>}
+              {errors.year && (
+                <span role="alert" className="text-[11px] font-medium text-orange-500">{errors.year}</span>
+              )}
             </div>
-            <FormField label="Email Address" fkey="email" type="email" placeholder="student@school.edu" />
+
+            <FormField form={form} errors={errors} onFieldChange={handleFieldChange}
+              label="Email Address" fkey="email" type="email" placeholder="student@school.edu" />
           </div>
 
           {/* Borrowing Details */}
           <SectionLabel text="Borrowing Details" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <FormField label="Date Borrowed" fkey="borrowed" type="date" />
-            <FormField label="Due Date"      fkey="due"      type="date" />
+            <FormField form={form} errors={errors} onFieldChange={handleFieldChange}
+              label="Date Borrowed" fkey="borrowed" type="date" />
+            <FormField form={form} errors={errors} onFieldChange={handleFieldChange}
+              label="Due Date"      fkey="due"      type="date" />
           </div>
         </ModalShell>
       )}
@@ -732,6 +809,7 @@ export default function Borrowed() {
         <ModalShell
           title="Extend Due Date"
           size="max-w-md"
+          onClose={closeModal}
           footer={
             <>
               <MBtn secondary onClick={closeModal}>Cancel</MBtn>
@@ -743,22 +821,23 @@ export default function Borrowed() {
             className="flex items-start gap-4 p-4 rounded-xl"
             style={{ background:"var(--bg-subtle)", border:"1px solid var(--border)" }}
           >
-            <CalendarClock size={32} style={{ color:"var(--accent-amber)", flexShrink:0 }} />
+            <CalendarClock size={32} style={{ color:"var(--accent-amber)", flexShrink:0 }} aria-hidden="true" />
             <p className="text-[13px] leading-relaxed" style={{ color:"var(--text-secondary)" }}>
               Set a new due date for this borrowing. The status will update automatically.
             </p>
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-secondary)" }}>
+            <label htmlFor="extend-date" className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-secondary)" }}>
               New Due Date
             </label>
             <input
+              id="extend-date"
               type="date"
               className={inpCls}
               style={inpStyle()}
-              onFocus={onFocus}
-              onBlur={onBlur(false)}
+              onFocus={onFocusInp}
+              onBlur={onBlurInp(false)}
               min={new Date().toISOString().split("T")[0]}
               value={extendDate}
               onChange={e => setExtendDate(e.target.value)}
@@ -767,39 +846,49 @@ export default function Borrowed() {
         </ModalShell>
       )}
 
-      {/* ════════ DELETE SNACKBAR ════════ */}
+      {/* ════════ DELETE SNACKBAR
+          FIX: role="status" + aria-live="polite" so screen readers announce the toast ════════ */}
       {snackbar && (
         <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
           className="anim-snack fixed bottom-6 left-1/2 flex items-center gap-4 px-5 py-3 rounded-xl z-[60] whitespace-nowrap"
-          style={{ background:"#132F45", color:"#fff", boxShadow:"var(--shadow-xl)" }}
+          style={{ background:"#132F45", color:"#fff", boxShadow:"var(--shadow-xl)", transform:"translateX(-50%)" }}
         >
           <span className="text-[13.5px] font-medium">Transaction deleted.</span>
           <button
+            type="button"
             onClick={handleUndo}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-bold transition-colors duration-150"
             style={{ background:"rgba(238,162,58,0.2)", border:"1px solid rgba(238,162,58,0.4)", color:"var(--accent-amber)" }}
           >
-            <RotateCcw size={13} /> Undo
+            <RotateCcw size={13} aria-hidden="true" /> Undo
           </button>
         </div>
       )}
 
-      {/* ════════ RETURNED TOAST ════════ */}
+      {/* ════════ RETURNED TOAST
+          FIX: role="status" + aria-live="polite" ════════ */}
       {returnToast && (
         <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
           className="anim-snack fixed bottom-6 left-1/2 flex items-center gap-2.5 px-5 py-3 rounded-xl z-[60] whitespace-nowrap"
-          style={{ background:"#1a4a35", color:"#fff", boxShadow:"var(--shadow-xl)" }}
+          style={{ background:"#1a4a35", color:"#fff", boxShadow:"var(--shadow-xl)", transform:"translateX(-50%)" }}
         >
-          <CheckCircle2 size={16} className="text-green-400 shrink-0" />
+          <CheckCircle2 size={16} className="text-green-400 shrink-0" aria-hidden="true" />
           <span className="text-[13.5px] font-medium">
             Book marked as <strong>Returned</strong>.
           </span>
           <button
+            type="button"
             onClick={handleUndoReturn}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-bold transition-colors duration-150"
             style={{ background:"rgba(52,211,153,0.15)", border:"1px solid rgba(52,211,153,0.35)", color:"#34d399" }}
           >
-            <RotateCcw size={13} /> Undo
+            <RotateCcw size={13} aria-hidden="true" /> Undo
           </button>
         </div>
       )}
