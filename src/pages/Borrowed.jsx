@@ -577,8 +577,9 @@ export default function Borrowed() {
               Book <span style={{ color:"var(--accent-orange)" }}>*</span>
             </label>
 
-            <div
-              className="flex items-center gap-2 px-3 py-2.5 rounded-lg border-[1.5px] cursor-pointer transition-colors duration-150"
+            <button
+              type="button"
+              className="flex items-center gap-2 px-3 py-2.5 rounded-lg border-[1.5px] cursor-pointer transition-colors duration-150 w-full text-left"
               style={{ background:"var(--bg-input)", borderColor: errors.bookId ? "#EA8B33" : "var(--border)" }}
               onClick={() => setPickerOpen(o => !o)}
             >
@@ -596,7 +597,7 @@ export default function Borrowed() {
                 className="shrink-0 transition-transform duration-200"
                 style={{ color:"var(--text-muted)", transform: pickerOpen ? "rotate(180deg)" : "rotate(0deg)" }}
               />
-            </div>
+            </button>
 
             {errors.bookId && <span className="text-[11px] font-medium text-orange-500">{errors.bookId}</span>}
 
@@ -629,6 +630,7 @@ export default function Borrowed() {
                     {ALL_GENRES.map(g => (
                       <button
                         key={g}
+                        type="button"
                         onClick={e => { e.stopPropagation(); setGenreFilter(g); }}
                         className="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors duration-100"
                         style={genreFilter === g
@@ -647,6 +649,7 @@ export default function Borrowed() {
                     ? <p className="text-center text-[13px] py-5" style={{ color:"var(--text-muted)" }}>No books match.</p>
                     : pickerBooks.map(b => (
                       <button
+                        type="button"
                         key={b.id}
                         onClick={e => { e.stopPropagation(); pickBook(b); }}
                         className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-lg text-left transition-colors duration-100"

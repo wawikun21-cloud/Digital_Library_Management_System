@@ -565,7 +565,7 @@ export default function Books() {
           No books found.
         </p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3">
           {filtered.map((b, idx) => {
             const sc = STATUS_STYLE[b.status] ?? STATUS_STYLE.Available;
             return (
@@ -599,7 +599,7 @@ export default function Books() {
                 </div>
 
                 {/* Meta row */}
-                <div className="px-2.5 pt-2 pb-1 flex items-center gap-1 flex-wrap">
+                <div className="px-2 pt-1.5 pb-1 flex items-center gap-0.5 flex-wrap">
                   <Star size={11} fill="#EEA23A" color="#EEA23A" />
                   <span className="text-[11px]" style={{ color:"var(--text-secondary)" }}>N/A</span>
                   <span className="text-[11px]" style={{ color:"var(--border)" }}>·</span>
@@ -624,7 +624,7 @@ export default function Books() {
                 </div>
 
                 {/* Title + author */}
-                <div className="px-2.5 pb-1.5 flex-1">
+                <div className="px-2 pb-1 flex-1">
                   <p className="text-[13px] font-bold leading-snug mb-0.5 clamp-2" style={{ color:"var(--text-primary)" }}>
                     {b.title}
                   </p>
@@ -637,7 +637,7 @@ export default function Books() {
                 <div className="flex">
                   <button
                     onClick={() => handleViewDetails(b)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-white transition-colors duration-150"
+                    className="flex-1 flex items-center justify-center gap-1 py-1 text-[11px] font-semibold text-white transition-colors duration-150"
                     style={{ background:"var(--bg-sidebar)" }}
                     onMouseEnter={e => e.currentTarget.style.background = "#32667F"}
                     onMouseLeave={e => e.currentTarget.style.background = "var(--bg-sidebar)"}
@@ -646,7 +646,7 @@ export default function Books() {
                   </button>
                   <button
                     onClick={() => handleEdit(b)}
-                    className="flex items-center justify-center px-2.5 py-1.5 text-[11px] font-semibold text-white transition-colors duration-150"
+                    className="flex items-center justify-center px-2 py-1 text-[11px] font-semibold text-white transition-colors duration-150"
                     style={{ background:"rgba(50,102,127,0.8)" }}
                     onMouseEnter={e => e.currentTarget.style.background = "#32667F"}
                     onMouseLeave={e => e.currentTarget.style.background = "rgba(50,102,127,0.8)"}
@@ -655,7 +655,7 @@ export default function Books() {
                   </button>
                   <button
                     onClick={() => handleDeleteClick(b)}
-                    className="flex items-center justify-center px-2.5 py-1.5 text-[11px] font-semibold text-white transition-colors duration-150"
+                    className="flex items-center justify-center px-2 py-1 text-[11px] font-semibold text-white transition-colors duration-150"
                     style={{ background:"rgba(234,139,51,0.8)" }}
                     onMouseEnter={e => e.currentTarget.style.background = "#c05a0a"}
                     onMouseLeave={e => e.currentTarget.style.background = "rgba(234,139,51,0.8)"}
