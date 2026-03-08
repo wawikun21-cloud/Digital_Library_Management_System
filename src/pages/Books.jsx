@@ -3,7 +3,7 @@ import {
   Search, ChevronDown, QrCode, PenLine, Camera,
   Star, X, BookOpen, ImagePlus, Trash2, Loader2,
   CheckCircle2, AlertCircle, Sparkles, SlidersHorizontal,
-  Edit2, PackageX,
+  Edit2, PackageX, FileSearch,
 } from "lucide-react";
 import ConfirmationModal from "../components/ConfirmationModal";
 import Toast from "../components/Toast";
@@ -119,6 +119,14 @@ export default function Books() {
   const [ocrRawText,  setOcrRawText]  = useState("");
   const [showOcrText, setShowOcrText] = useState(false);
 
+  // ── Title/Author lookup state ──
+  const [lookupTitle,   setLookupTitle]   = useState("");
+  const [lookupAuthor,  setLookupAuthor]  = useState("");
+  const [lookupResults, setLookupResults] = useState([]);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupError,   setLookupError]   = useState("");
+  const [lookupDone,    setLookupDone]    = useState(false);
+
   const ddRef     = useRef(null);
   const fileRef   = useRef(null);
   const scanRef   = useRef(null); // hidden input for scan-cover upload
@@ -143,6 +151,12 @@ export default function Books() {
       setScanMessage("");
       setOcrRawText("");
       setShowOcrText(false);
+      setLookupTitle("");
+      setLookupAuthor("");
+      setLookupResults([]);
+      setLookupLoading(false);
+      setLookupError("");
+      setLookupDone(false);
     }
   }, [modal]);
 
@@ -273,6 +287,56 @@ export default function Books() {
     setModalMode("add");
   }
 
+  /* ── Title/Author Lookup ─────────────────────────────────
+     Calls GET /api/search-books?title=...&author=...
+     Shows a pick-list; clicking a result auto-fills the form.
+  ──────────────────────────────────────────────────────── */
+  async function handleLookup() {
+    if (!lookupTitle.trim()) {
+      setLookupError("Please enter a book title.");
+      return;
+    }
+    setLookupLoading(true);
+    setLookupError("");
+    setLookupResults([]);
+    setLookupDone(false);
+    try {
+      const params = new URLSearchParams({ title: lookupTitle.trim() });
+      if (lookupAuthor.trim()) params.set("author", lookupAuthor.trim());
+      const res  = await fetch(`${API_BASE}/api/search-books?${params}`);
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setLookupError(data.error || "Search failed. Try again.");
+        return;
+      }
+      setLookupResults(data.results || []);
+      setLookupDone(true);
+      if (!data.results?.length) setLookupError("No results found. Try a different title or spelling.");
+    } catch {
+      setLookupError("Could not reach the server. Make sure the backend is running on port 3001.");
+    } finally {
+      setLookupLoading(false);
+    }
+  }
+
+  function applyLookupResult(r) {
+    setForm(f => ({
+      ...f,
+      _mode:       "manual",
+      title:       r.title       || f.title,
+      author:      r.author      || f.author,
+      publisher:   r.publisher   || f.publisher,
+      year:        r.year        || f.year,
+      description: r.description || f.description,
+      isbn:        r.isbn        || f.isbn,
+      cover:       r.thumbnail   || f.cover,
+    }));
+    setErrors({});
+    setLookupResults([]);
+    setLookupDone(false);
+    showToast(`"${r.title}" fields filled — review and save.`, "success");
+  }
+
   /* ── OCR Scan Cover ─────────────────────────────────────
      1. User picks an image file via the hidden scanRef input
      2. We POST it as multipart/form-data to /api/scan-book-cover
@@ -289,14 +353,14 @@ export default function Books() {
       setScanMessage("Please select an image file (JPEG, PNG, WEBP, etc.)");
       return;
     }
-    if (file.size > 1 * 1024 * 1024) {
+    if (file.size > 10 * 1024 * 1024) {
       setScanState(SCAN_STATE.ERROR);
-      setScanMessage("Image is too large. Maximum size is 1 MB (OCR.space free tier limit).");
+      setScanMessage("Image is too large. Maximum size is 10 MB.");
       return;
     }
 
     setScanState(SCAN_STATE.SCANNING);
-    setScanMessage("Scanning cover with OCR.space…");
+    setScanMessage("Scanning cover with PaddleOCR…");
     setOcrRawText("");
     setShowOcrText(false);
 
@@ -499,9 +563,10 @@ export default function Books() {
                 style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-lg)" }}
               >
                 {[
-                  { mode:"scan-cover", Icon: Camera,  label:"Scan Cover (OCR)" },
-                  { mode:"scan",       Icon: QrCode,   label:"Scan Barcode" },
-                  { mode:"manual",     Icon: PenLine,  label:"Add Manually" },
+                  { mode:"scan-cover", Icon: Camera,      label:"Scan Cover (OCR)" },
+                  { mode:"lookup",     Icon: FileSearch,   label:"Search by Title" },
+                  { mode:"scan",       Icon: QrCode,       label:"Scan Barcode" },
+                  { mode:"manual",     Icon: PenLine,      label:"Add Manually" },
                 ].map(({ mode, Icon, label }) => (
                   <button
                     key={mode}
@@ -689,13 +754,15 @@ export default function Books() {
                 {modalMode === "view" && <BookOpen size={18} style={{ color:"var(--accent-amber)" }} />}
                 {modalMode === "edit" && <PenLine size={18} style={{ color:"var(--accent-amber)" }} />}
                 {modalMode === "add" && form._mode === "scan-cover" && <Camera size={18} style={{ color:"var(--accent-amber)" }} />}
-                {modalMode === "add" && form._mode === "scan" && <QrCode size={18} style={{ color:"var(--accent-amber)" }} />}
-                {modalMode === "add" && form._mode === "manual" && <PenLine size={18} style={{ color:"var(--accent-amber)" }} />}
+                {modalMode === "add" && form._mode === "lookup"     && <FileSearch size={18} style={{ color:"var(--accent-amber)" }} />}
+                {modalMode === "add" && form._mode === "scan"       && <QrCode size={18} style={{ color:"var(--accent-amber)" }} />}
+                {modalMode === "add" && form._mode === "manual"     && <PenLine size={18} style={{ color:"var(--accent-amber)" }} />}
                 <h2 className="text-base font-bold" style={{ color:"var(--text-primary)" }}>
                   {modalMode === "view" ? "Book Details"
                    : modalMode === "edit" ? "Edit Book"
                    : form._mode === "scan-cover" ? "Scan Book Cover (OCR)"
-                   : form._mode === "scan" ? "Scan Barcode"
+                   : form._mode === "lookup"     ? "Search by Title / Author"
+                   : form._mode === "scan"       ? "Scan Barcode"
                    : "Add Book Manually"}
                 </h2>
               </div>
@@ -879,8 +946,8 @@ export default function Books() {
                         OCR Book Cover Scanner
                       </p>
                       <p className="text-[12px]" style={{ color:"var(--text-secondary)" }}>
-                        Upload a photo of a book cover. OCR.space will read the text, then
-                        Open Library and Google Books will auto-fill the form fields.
+                        Upload a photo of a book cover. PaddleOCR will read the text and
+                        auto-fill the form fields directly from the cover.
                       </p>
                     </div>
                   </div>
@@ -900,7 +967,7 @@ export default function Books() {
                     {scanState === SCAN_STATE.SCANNING ? (
                       <>
                         <Loader2 size={16} className="animate-spin" />
-                        Scanning with OCR.space…                      </>
+                        Scanning with PaddleOCR…</>
                     ) : (
                       <>
                         <Camera size={16} />
@@ -980,6 +1047,116 @@ export default function Books() {
                     </span>
                     <div className="flex-1 h-px" style={{ background:"var(--border-light)" }} />
                   </div>
+                </div>
+              )}
+
+              {/* ══ LOOKUP MODE — Search by Title/Author ══ */}
+              {form._mode === "lookup" && (
+                <div className="flex flex-col gap-3">
+
+                  {/* Instruction banner */}
+                  <div
+                    className="flex items-start gap-3 p-4 rounded-xl"
+                    style={{ background:"rgba(238,162,58,0.08)", border:"1.5px solid rgba(238,162,58,0.2)" }}
+                  >
+                    <FileSearch size={18} style={{ color:"var(--accent-amber)", flexShrink:0, marginTop:1 }} />
+                    <div>
+                      <p className="text-[13px] font-semibold mb-0.5" style={{ color:"var(--text-primary)" }}>
+                        Search by Title / Author
+                      </p>
+                      <p className="text-[12px]" style={{ color:"var(--text-secondary)" }}>
+                        Enter a title and optional author name. Pick a result to auto-fill all fields instantly.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Inputs + button */}
+                  <div className="flex flex-col gap-2">
+                    <input
+                      className={inputCls}
+                      style={inputStyle(!!lookupError && !lookupTitle.trim())}
+                      onFocus={focusRing}
+                      onBlur={blurRing(false)}
+                      placeholder="Book title  (e.g. Computing Essentials)"
+                      value={lookupTitle}
+                      onChange={e => { setLookupTitle(e.target.value); setLookupError(""); setLookupDone(false); }}
+                      onKeyDown={e => e.key === "Enter" && handleLookup()}
+                    />
+                    <input
+                      className={inputCls}
+                      style={inputStyle()}
+                      onFocus={focusRing}
+                      onBlur={blurRing(false)}
+                      placeholder="Author name  (optional)"
+                      value={lookupAuthor}
+                      onChange={e => { setLookupAuthor(e.target.value); setLookupError(""); setLookupDone(false); }}
+                      onKeyDown={e => e.key === "Enter" && handleLookup()}
+                    />
+                    <button
+                      onClick={handleLookup}
+                      disabled={lookupLoading}
+                      className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold transition-colors duration-150"
+                      style={{
+                        background: lookupLoading ? "var(--bg-subtle)" : "var(--accent-amber)",
+                        color:      lookupLoading ? "var(--text-muted)" : "#fff",
+                        cursor:     lookupLoading ? "not-allowed" : "pointer",
+                      }}
+                      onMouseEnter={e => { if (!lookupLoading) e.currentTarget.style.background = "var(--accent-orange)"; }}
+                      onMouseLeave={e => { if (!lookupLoading) e.currentTarget.style.background = lookupLoading ? "var(--bg-subtle)" : "var(--accent-amber)"; }}
+                    >
+                      {lookupLoading
+                        ? <><Loader2 size={15} className="animate-spin" /> Searching…</>
+                        : <><Search size={15} /> Search Books</>}
+                    </button>
+                  </div>
+
+                  {/* Error */}
+                  {lookupError && (
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[12px]"
+                      style={{ background:"rgba(234,139,51,0.08)", border:"1px solid rgba(234,139,51,0.25)", color:"#c05a0a" }}>
+                      <AlertCircle size={14} style={{ flexShrink:0 }} />
+                      {lookupError}
+                    </div>
+                  )}
+
+                  {/* Results pick-list */}
+                  {lookupDone && lookupResults.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-secondary)" }}>
+                        {lookupResults.length} result{lookupResults.length !== 1 ? "s" : ""} — click one to auto-fill
+                      </p>
+                      <div className="flex flex-col gap-1.5 max-h-[320px] overflow-y-auto pr-0.5" style={{ scrollbarWidth:"thin" }}>
+                        {lookupResults.map((r, i) => (
+                          <button
+                            key={i}
+                            onClick={() => applyLookupResult(r)}
+                            className="flex items-start gap-3 p-3 rounded-xl text-left w-full transition-all duration-150"
+                            style={{ background:"var(--bg-subtle)", border:"1.5px solid var(--border)" }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor="#EEA23A"; e.currentTarget.style.background="rgba(238,162,58,0.06)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor="var(--border)"; e.currentTarget.style.background="var(--bg-subtle)"; }}
+                          >
+                            {/* Thumbnail */}
+                            <div className="w-9 h-13 rounded shrink-0 overflow-hidden flex items-center justify-center"
+                              style={{ background:"var(--bg-input)", border:"1px solid var(--border)", minHeight:48, minWidth:36 }}>
+                              {r.thumbnail
+                                ? <img src={r.thumbnail} alt="" className="w-full h-full object-cover" />
+                                : <BookOpen size={13} style={{ color:"var(--text-muted)" }} />}
+                            </div>
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[13px] font-semibold leading-snug truncate" style={{ color:"var(--text-primary)" }}>{r.title}</p>
+                              {r.author    && <p className="text-[11.5px] truncate mt-0.5" style={{ color:"var(--text-secondary)" }}>{r.author}</p>}
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                {r.year      && <span className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded" style={{ background:"rgba(50,102,127,0.1)", color:"#32667F" }}>{r.year}</span>}
+                                {r.publisher && <span className="text-[10.5px] truncate" style={{ color:"var(--text-muted)", maxWidth:130 }}>{r.publisher}</span>}
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded ml-auto" style={{ background:"rgba(238,162,58,0.1)", color:"var(--accent-amber)" }}>{r.source}</span>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
