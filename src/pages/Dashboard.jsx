@@ -3,7 +3,10 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   PieChart, Pie, Cell, AreaChart, Area, ResponsiveContainer,
 } from "recharts";
-import { ChevronLeft, ChevronRight, Search, Filter, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { 
+  ChevronLeft, ChevronRight, Search, Filter, 
+  ChevronsLeft, ChevronsRight, ChevronDown 
+} from "lucide-react";
 import StatsCard from "../components/StatsCard";
 
 const STATS = [
@@ -166,27 +169,31 @@ function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
     <div
-      className="rounded-lg px-3 py-2 text-[11px] sm:text-[12px]"
+      className="rounded-xl px-3 py-2.5 text-[12px] backdrop-blur-md"
       style={{
-        background: "var(--bg-surface)",
+        background: "rgba(255, 255, 255, 0.95)",
         border: "1px solid var(--border)",
-        boxShadow: "var(--shadow-md)",
+        boxShadow: "var(--shadow-lg)",
         color: "var(--text-primary)",
       }}
     >
       {label && (
-        <p className="font-semibold mb-1.5 pb-1.5 border-b border-[var(--border-light)]"
-          style={{ color: "var(--text-secondary)" }}>
+        <p className="font-bold mb-2 pb-2 border-b border-[var(--border-light)]"
+          style={{ color: "var(--text-primary)" }}>
           {label}
         </p>
       )}
-      {payload.map(p => (
-        <p key={p.name} className="flex items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ background: p.fill || p.color }} />
-          <span style={{ color: "var(--text-secondary)" }}>{p.name}:</span>
-          <span className="font-bold">{p.value}</span>
-        </p>
-      ))}
+      <div className="flex flex-col gap-1.5">
+        {payload.map(p => (
+          <p key={p.name} className="flex items-center justify-between gap-4">
+            <span className="flex items-center gap-2">
+              <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: p.fill || p.color }} />
+              <span style={{ color: "var(--text-secondary)" }}>{p.name}</span>
+            </span>
+            <span className="font-bold">{p.value}</span>
+          </p>
+        ))}
+      </div>
     </div>
   );
 }
@@ -194,7 +201,7 @@ function ChartTooltip({ active, payload, label }) {
 function ChartCard({ title, children, icon, className = "" }) {
   return (
     <div
-      className={`rounded-2xl overflow-hidden flex flex-col flex-1 ${className}`}
+      className={`rounded-2xl overflow-hidden flex flex-col flex-1 transition-all duration-300 hover:shadow-md ${className}`}
       style={{
         background: "var(--bg-surface)",
         border: "1px solid var(--border)",
@@ -202,16 +209,16 @@ function ChartCard({ title, children, icon, className = "" }) {
       }}
     >
       <div
-        className="px-5 py-4 flex items-center justify-between flex-shrink-0"
+        className="px-6 py-4 flex items-center justify-between flex-shrink-0"
         style={{ borderBottom: "1px solid var(--border-light)" }}
       >
-        <h2 className="text-sm font-semibold flex items-center gap-2"
-          style={{ color: "var(--text-primary)" }}>
+        <h2 className="text-[13px] font-bold flex items-center gap-2.5 uppercase tracking-wider"
+          style={{ color: "var(--text-secondary)" }}>
           {icon && <span>{icon}</span>}
           {title}
         </h2>
       </div>
-      <div className="px-3 py-4 flex-1 flex flex-col">{children}</div>
+      <div className="px-4 py-6 flex-1 flex flex-col">{children}</div>
     </div>
   );
 }
@@ -361,15 +368,16 @@ function PaginationControls({
   }
 
   return (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3" style={{ borderTop: "1px solid var(--border-light)" }}>
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4" style={{ borderTop: "1px solid var(--border-light)" }}>
       {/* Left side: Items per page and showing text */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-[11px]" style={{ color: "var(--text-secondary)" }}>Show</span>
+          <label htmlFor="items-per-page" className="text-[11px] font-semibold" style={{ color: "var(--text-secondary)" }}>Show</label>
           <select
+            id="items-per-page"
             value={itemsPerPage}
             onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
-            className="px-2 py-1 text-[11px] rounded border outline-none cursor-pointer"
+            className="px-2.5 py-1 text-[11px] font-bold rounded-lg border outline-none cursor-pointer transition-all hover:border-[var(--accent-amber)]"
             style={{ 
               background: "var(--bg-surface)", 
               borderColor: "var(--border)",
@@ -380,20 +388,21 @@ function PaginationControls({
               <option key={num} value={num}>{num}</option>
             ))}
           </select>
-          <span className="text-[11px]" style={{ color: "var(--text-secondary)" }}>entries</span>
+          <span className="text-[11px] font-semibold" style={{ color: "var(--text-secondary)" }}>entries</span>
         </div>
-        <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-          Showing {startItem} to {endItem} of {totalItems}
+        <span className="text-[11px] font-medium" style={{ color: "var(--text-muted)" }}>
+          Showing <span className="text-[var(--text-primary)] font-bold">{startItem}</span> to <span className="text-[var(--text-primary)] font-bold">{endItem}</span> of <span className="text-[var(--text-primary)] font-bold">{totalItems}</span>
         </span>
       </div>
 
       {/* Right side: Page navigation */}
-      <div className="flex items-center gap-1">
+      <nav className="flex items-center gap-1.5" aria-label="Pagination">
         {/* First page */}
         <button
           onClick={() => onPageChange(1)}
           disabled={currentPage === 1}
-          className="p-1.5 rounded transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+          aria-label="First page"
+          className="p-1.5 rounded-lg transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed border border-transparent hover:border-[var(--border)]"
           style={{ color: "var(--text-secondary)" }}
           onMouseEnter={e => currentPage !== 1 && (e.currentTarget.style.background = "var(--bg-hover)")}
           onMouseLeave={e => e.currentTarget.style.background = "transparent"}
@@ -405,7 +414,8 @@ function PaginationControls({
         <button
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
-          className="p-1.5 rounded transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+          aria-label="Previous page"
+          className="p-1.5 rounded-lg transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed border border-transparent hover:border-[var(--border)]"
           style={{ color: "var(--text-secondary)" }}
           onMouseEnter={e => currentPage !== 1 && (e.currentTarget.style.background = "var(--bg-hover)")}
           onMouseLeave={e => e.currentTarget.style.background = "transparent"}
@@ -418,14 +428,15 @@ function PaginationControls({
           <>
             <button
               onClick={() => onPageChange(1)}
-              className="min-w-[28px] h-7 px-2 rounded text-[11px] font-medium transition-colors duration-150"
+              aria-label="Page 1"
+              className="min-w-[32px] h-8 px-2 rounded-lg text-[11px] font-bold transition-all duration-150 border border-transparent hover:border-[var(--border)]"
               style={{ color: "var(--text-secondary)" }}
               onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
               onMouseLeave={e => e.currentTarget.style.background = "transparent"}
             >
               1
             </button>
-            {startPage > 2 && <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>...</span>}
+            {startPage > 2 && <span className="text-[11px] px-1" style={{ color: "var(--text-muted)" }}>...</span>}
           </>
         )}
 
@@ -433,10 +444,13 @@ function PaginationControls({
           <button
             key={num}
             onClick={() => onPageChange(num)}
-            className="min-w-[28px] h-7 px-2 rounded text-[11px] font-medium transition-colors duration-150"
+            aria-label={`Page ${num}`}
+            aria-current={currentPage === num ? "page" : undefined}
+            className="min-w-[32px] h-8 px-2 rounded-lg text-[11px] font-bold transition-all duration-200"
             style={{
               background: currentPage === num ? "var(--accent-amber)" : "transparent",
               color: currentPage === num ? "#fff" : "var(--text-primary)",
+              boxShadow: currentPage === num ? "0 4px 12px rgba(238,162,58,0.3)" : "none",
             }}
             onMouseEnter={e => currentPage !== num && (e.currentTarget.style.background = "var(--bg-hover)")}
             onMouseLeave={e => e.currentTarget.style.background = currentPage === num ? "var(--accent-amber)" : "transparent"}
@@ -447,10 +461,11 @@ function PaginationControls({
 
         {endPage < totalPages && (
           <>
-            {endPage < totalPages - 1 && <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>...</span>}
+            {endPage < totalPages - 1 && <span className="text-[11px] px-1" style={{ color: "var(--text-muted)" }}>...</span>}
             <button
               onClick={() => onPageChange(totalPages)}
-              className="min-w-[28px] h-7 px-2 rounded text-[11px] font-medium transition-colors duration-150"
+              aria-label={`Page ${totalPages}`}
+              className="min-w-[32px] h-8 px-2 rounded-lg text-[11px] font-bold transition-all duration-150 border border-transparent hover:border-[var(--border)]"
               style={{ color: "var(--text-secondary)" }}
               onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
               onMouseLeave={e => e.currentTarget.style.background = "transparent"}
@@ -464,7 +479,8 @@ function PaginationControls({
         <button
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
-          className="p-1.5 rounded transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+          aria-label="Next page"
+          className="p-1.5 rounded-lg transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed border border-transparent hover:border-[var(--border)]"
           style={{ color: "var(--text-secondary)" }}
           onMouseEnter={e => currentPage !== totalPages && (e.currentTarget.style.background = "var(--bg-hover)")}
           onMouseLeave={e => e.currentTarget.style.background = "transparent"}
@@ -476,14 +492,15 @@ function PaginationControls({
         <button
           onClick={() => onPageChange(totalPages)}
           disabled={currentPage === totalPages}
-          className="p-1.5 rounded transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+          aria-label="Last page"
+          className="p-1.5 rounded-lg transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed border border-transparent hover:border-[var(--border)]"
           style={{ color: "var(--text-secondary)" }}
           onMouseEnter={e => currentPage !== totalPages && (e.currentTarget.style.background = "var(--bg-hover)")}
           onMouseLeave={e => e.currentTarget.style.background = "transparent"}
         >
           <ChevronsRight size={16} />
         </button>
-      </div>
+      </nav>
     </div>
   );
 }
@@ -569,27 +586,29 @@ function AdminAuditTrail() {
 
       {/* Search and Filter Bar */}
       <div
-        className="px-4 py-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-3"
+        className="px-6 py-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-4"
         style={{ borderBottom: "1px solid var(--border-light)", background: "var(--bg-subtle)" }}
       >
         {/* Search Input */}
         <div className="relative flex-1 max-w-sm">
+          <label htmlFor="search-logs" className="sr-only">Search audit logs</label>
           <Search 
             size={14} 
-            className="absolute left-3 top-1/2 -translate-y-1/2"
+            className="absolute left-3.5 top-1/2 -translate-y-1/2"
             style={{ color: "var(--text-muted)" }}
           />
           <input
+            id="search-logs"
             type="text"
-            placeholder="Search logs..."
+            placeholder="Search transactions, admins, or descriptions..."
             value={searchQuery}
             onChange={handleSearchChange}
-            className="w-full pl-9 pr-3 py-2 text-[12px] rounded-lg border outline-none transition-colors duration-150"
+            className="w-full pl-10 pr-4 py-2.5 text-[12px] rounded-xl border outline-none transition-all duration-200"
             style={{
               background: "var(--bg-surface)",
               borderColor: "var(--border)",
               color: "var(--text-primary)",
-                                                                       }}
+            }}
             onFocus={(e) => {
               e.target.style.borderColor = "#EEA23A";
               e.target.style.boxShadow = "0 0 0 3px rgba(238,162,58,0.12)";
@@ -602,17 +621,20 @@ function AdminAuditTrail() {
         </div>
 
         {/* Category Filter */}
-        <div className="relative flex items-center gap-2">
-          <Filter size={14} style={{ color: "var(--text-muted)" }} />
+        <div className="relative flex items-center gap-2.5">
+          <label htmlFor="category-filter" className="text-[12px] font-bold" style={{ color: "var(--text-secondary)" }}>
+            <Filter size={14} />
+          </label>
           <select
+            id="category-filter"
             value={categoryFilter}
             onChange={handleCategoryChange}
-            className="px-3 py-2 text-[12px] rounded-lg border outline-none appearance-none cursor-pointer transition-colors duration-150"
+            className="px-4 py-2.5 text-[12px] font-semibold rounded-xl border outline-none appearance-none cursor-pointer transition-all duration-200 hover:border-[var(--accent-amber)]"
             style={{
               background: "var(--bg-surface)",
               borderColor: "var(--border)",
               color: "var(--text-primary)",
-              paddingRight: "2rem",
+              paddingRight: "2.5rem",
             }}
             onFocus={(e) => {
               e.target.style.borderColor = "#EEA23A";
@@ -627,6 +649,9 @@ function AdminAuditTrail() {
               <option key={cat} value={cat}>{cat === "All" ? "All Categories" : cat}</option>
             ))}
           </select>
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+            <ChevronDown size={14} style={{ color: "var(--text-muted)" }} />
+          </div>
         </div>
       </div>
 
@@ -639,8 +664,8 @@ function AdminAuditTrail() {
                 <th
                   key={h}
                   scope="col"
-                  className="text-left px-4 py-3 text-[10px] font-600 uppercase tracking-wider whitespace-nowrap"
-                  style={{ color: "var(--text-secondary)", borderBottom: "1px solid var(--border-light)", background: "var(--bg-surface)" }}
+                  className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-widest whitespace-nowrap"
+                  style={{ color: "var(--text-primary)", borderBottom: "1px solid var(--border-light)", background: "var(--bg-surface)" }}
                 >
                   {h}
                 </th>
@@ -773,10 +798,11 @@ function AdminAuditTrail() {
 
 export default function Dashboard() {
   return (
-    <div className="flex flex-col gap-4">
+    <main className="flex flex-col gap-6" aria-label="Library Analytics Dashboard">
+      <h1 className="sr-only">Analytics Dashboard Overview</h1>
 
       {/* ── Row 1: 4 Stats Cards ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" aria-label="Key Performance Indicators">
         {STATS.map(stat => (
           <StatsCard
             key={stat.label}
@@ -787,21 +813,21 @@ export default function Dashboard() {
             percentage={stat.percentage}
           />
         ))}
-      </div>
+      </section>
 
       {/* ── Row 2: Monthly (wide 3fr) + Pie (2fr) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         <div className="lg:col-span-3">
           <ChartCard title="Monthly Borrowing Trends">
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={MONTHLY_DATA} barCategoryGap="30%" barGap={4}>
+              <BarChart data={MONTHLY_DATA} barCategoryGap="30%" barGap={4} role="img" aria-label="Monthly borrowing trends chart showing Borrowed vs Returned books">
                 <CartesianGrid vertical={false} stroke="var(--border-light)" />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} width={28} />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "var(--text-secondary)", fontWeight: 600 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "var(--text-secondary)", fontWeight: 600 }} axisLine={false} tickLine={false} width={28} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--bg-hover)" }} />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: "var(--text-secondary)", paddingTop: 8 }} />
-                <Bar dataKey="Borrowed" fill="#EEA23A" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Returned" fill="#32667F" radius={[4, 4, 0, 0]} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)", paddingTop: 12 }} />
+                <Bar dataKey="Borrowed" fill="#EEA23A" radius={[4, 4, 0, 0]} name="Borrowed Books" />
+                <Bar dataKey="Returned" fill="#32667F" radius={[4, 4, 0, 0]} name="Returned Books" />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -810,14 +836,14 @@ export default function Dashboard() {
         <div className="lg:col-span-2">
           <ChartCard title="Book Status Distribution">
             <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie data={STATUS_PIE} cx="50%" cy="45%" innerRadius={50} outerRadius={78} paddingAngle={3} dataKey="value">
+              <PieChart role="img" aria-label="Book status distribution chart: Available, Borrowed, and Overdue">
+                <Pie data={STATUS_PIE} cx="50%" cy="45%" innerRadius={50} outerRadius={78} paddingAngle={4} dataKey="value">
                   {STATUS_PIE.map((entry, i) => (
                     <Cell key={entry.name} fill={PIE_COLORS[i]} stroke="none" />
                   ))}
                 </Pie>
                 <Tooltip content={<ChartTooltip />} />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: "var(--text-secondary)", paddingTop: 8 }} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)", paddingTop: 12 }} />
               </PieChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -829,12 +855,12 @@ export default function Dashboard() {
         <div className="lg:col-span-2">
           <ChartCard title="Books by Genre">
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={GENRE_DATA} layout="vertical" barCategoryGap="25%">
-                <CartesianGrid horizontal={false} stroke="var(--border-light)" />
-                <XAxis type="number" tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="genre" tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} width={82} />
-                <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--bg-hover)" }} />
-                <Bar dataKey="books" fill="#132F45" radius={[0, 4, 4, 0]} />
+              <BarChart data={GENRE_DATA} layout="vertical" barCategoryGap="25%" role="img" aria-label="Books distribution by genre bar chart">
+                <CartesianGrid horizontal={false} stroke="var(--border-light)" strokeDasharray="3 3" />
+                <XAxis type="number" tick={{ fontSize: 10, fill: "var(--text-secondary)", fontWeight: 600 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="genre" tick={{ fontSize: 10, fill: "var(--text-primary)", fontWeight: 700 }} axisLine={false} tickLine={false} width={82} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--bg-hover)", opacity: 0.4 }} />
+                <Bar dataKey="books" fill="#132F45" radius={[0, 4, 4, 0]} name="Books Count" />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -843,24 +869,24 @@ export default function Dashboard() {
         <div className="lg:col-span-3">
           <ChartCard title="Weekly Activity">
             <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={WEEKLY_DATA}>
+              <AreaChart data={WEEKLY_DATA} role="img" aria-label="Weekly borrowing activity area chart">
                 <defs>
                   <linearGradient id="gradBorrowed" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#EEA23A" stopOpacity={0.25} />
+                    <stop offset="5%" stopColor="#EEA23A" stopOpacity={0.3} />
                     <stop offset="95%" stopColor="#EEA23A" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="gradReturned" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#32667F" stopOpacity={0.25} />
+                    <stop offset="5%" stopColor="#32667F" stopOpacity={0.3} />
                     <stop offset="95%" stopColor="#32667F" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} stroke="var(--border-light)" />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} width={24} />
-                <Tooltip content={<ChartTooltip />} cursor={{ stroke: "var(--border)", strokeWidth: 1 }} />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: "var(--text-secondary)", paddingTop: 8 }} />
-                <Area type="monotone" dataKey="Borrowed" stroke="#EEA23A" strokeWidth={2} fill="url(#gradBorrowed)" dot={false} activeDot={{ r: 4, fill: "#EEA23A" }} />
-                <Area type="monotone" dataKey="Returned" stroke="#32667F" strokeWidth={2} fill="url(#gradReturned)" dot={false} activeDot={{ r: 4, fill: "#32667F" }} />
+                <CartesianGrid vertical={false} stroke="var(--border-light)" strokeDasharray="3 3" />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--text-secondary)", fontWeight: 600 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "var(--text-secondary)", fontWeight: 600 }} axisLine={false} tickLine={false} width={24} />
+                <Tooltip content={<ChartTooltip />} cursor={{ stroke: "var(--border)", strokeWidth: 1.5 }} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)", paddingTop: 12 }} />
+                <Area type="monotone" dataKey="Borrowed" stroke="#EEA23A" strokeWidth={2.5} fill="url(#gradBorrowed)" dot={{ r: 3, fill: "#EEA23A" }} activeDot={{ r: 5, strokeWidth: 0 }} />
+                <Area type="monotone" dataKey="Returned" stroke="#32667F" strokeWidth={2.5} fill="url(#gradReturned)" dot={{ r: 3, fill: "#32667F" }} activeDot={{ r: 5, strokeWidth: 0 }} />
               </AreaChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -880,6 +906,6 @@ export default function Dashboard() {
       {/* ── Row 5: Admin Audit Trail full width ── */}
       <AdminAuditTrail />
 
-    </div>
+    </main>
   );
 }

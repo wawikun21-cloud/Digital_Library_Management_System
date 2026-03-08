@@ -5,6 +5,7 @@ import {
   CheckCircle2, AlertCircle, Sparkles, SlidersHorizontal,
   Edit2, PackageX, FileSearch,
 } from "lucide-react";
+import BookCard from "../components/BookCard";
 import ConfirmationModal from "../components/ConfirmationModal";
 import Toast from "../components/Toast";
 
@@ -494,12 +495,14 @@ export default function Books() {
 
             {/* Genre filter */}
             <div className="relative flex items-center">
+              <label htmlFor="genre-filter" className="sr-only">Filter by Genre</label>
               <SlidersHorizontal
                 size={13}
                 className="absolute left-2.5 pointer-events-none"
                 style={{ color:"var(--text-secondary)" }}
               />
               <select
+                id="genre-filter"
                 value={genreFilter}
                 onChange={e => setGenreFilter(e.target.value)}
                 className="pl-7 pr-3 py-2 rounded-lg text-[12.5px] font-medium border outline-none appearance-none cursor-pointer transition-colors duration-150"
@@ -519,25 +522,29 @@ export default function Books() {
             </div>
 
             {/* Sort */}
-            <select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value)}
-              className="px-3 py-2 rounded-lg text-[12.5px] font-medium border outline-none appearance-none cursor-pointer transition-colors duration-150"
-              style={{
-                background: "var(--bg-surface)",
-                border:     "1px solid var(--border)",
-                color:      sortBy ? "var(--accent-amber)" : "var(--text-secondary)",
-                boxShadow:  "var(--shadow-sm)",
-                fontFamily: "inherit",
-              }}
-              onFocus={e => { e.target.style.borderColor="#EEA23A"; e.target.style.boxShadow="0 0 0 3px rgba(238,162,58,0.12)"; }}
-              onBlur={e  => { e.target.style.borderColor="var(--border)"; e.target.style.boxShadow="var(--shadow-sm)"; }}
-            >
-              <option value="">Sort: Default</option>
-              <option value="title">Title A–Z</option>
-              <option value="author">Author A–Z</option>
-              <option value="year">Newest First</option>
-            </select>
+            <div className="relative flex items-center">
+              <label htmlFor="sort-by" className="sr-only">Sort Books</label>
+              <select
+                id="sort-by"
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+                className="px-3 py-2 rounded-lg text-[12.5px] font-medium border outline-none appearance-none cursor-pointer transition-colors duration-150"
+                style={{
+                  background: "var(--bg-surface)",
+                  border:     "1px solid var(--border)",
+                  color:      sortBy ? "var(--accent-amber)" : "var(--text-secondary)",
+                  boxShadow:  "var(--shadow-sm)",
+                  fontFamily: "inherit",
+                }}
+                onFocus={e => { e.target.style.borderColor="#EEA23A"; e.target.style.boxShadow="0 0 0 3px rgba(238,162,58,0.12)"; }}
+                onBlur={e  => { e.target.style.borderColor="var(--border)"; e.target.style.boxShadow="var(--shadow-sm)"; }}
+              >
+                <option value="">Sort: Default</option>
+                <option value="title">Title A–Z</option>
+                <option value="author">Author A–Z</option>
+                <option value="year">Newest First</option>
+              </select>
+            </div>
           </div>
 
           {/* Add Book dropdown */}
@@ -630,107 +637,18 @@ export default function Books() {
           No books found.
         </p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3">
-          {filtered.map((b, idx) => {
-            const sc = STATUS_STYLE[b.status] ?? STATUS_STYLE.Available;
-            return (
-              <div
-                key={b.id}
-                className="flex flex-col rounded-xl overflow-hidden cursor-pointer transition-all duration-200 hover:-translate-y-1"
-                style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-sm)" }}
-              >
-                {/* Cover */}
-                <div className="relative w-full shrink-0" style={{ aspectRatio:"2/3", overflow:"hidden" }}>
-                  {b.cover
-                    ? <img src={b.cover} alt={b.title} className="w-full h-full object-cover" />
-                    : <CoverPlaceholder title={b.title} idx={idx} />
-                  }
-                  {(b.status === "Available" || b.status === "OutOfStock") && (
-                    <span
-                      className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-full"
-                      style={sc}
-                    >
-                      {b.status}
-                    </span>
-                  )}
-                  {isOutOfStock(b) && (
-                    <div
-                      className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-1"
-                    >
-                      <PackageX size={24} color="#dc2626" />
-                      <span className="text-[10px] font-bold text-red-500">OUT OF STOCK</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Meta row */}
-                <div className="px-2 pt-1.5 pb-1 flex items-center gap-0.5 flex-wrap">
-                  <Star size={11} fill="#EEA23A" color="#EEA23A" />
-                  <span className="text-[11px]" style={{ color:"var(--text-secondary)" }}>N/A</span>
-                  <span className="text-[11px]" style={{ color:"var(--border)" }}>·</span>
-                  <span
-                    className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded"
-                    style={{ background:"rgba(238,162,58,0.1)", color:"var(--accent-amber)" }}
-                  >
-                    {b.genre}
-                  </span>
-                  <span className="text-[11px]" style={{ color:"var(--border)" }}>·</span>
-                  <span className="text-[11px]" style={{ color:"var(--text-secondary)" }}>{b.year}</span>
-                  <span className="text-[11px]" style={{ color:"var(--border)" }}>·</span>
-                  <span 
-                    className="text-[10.5px] font-semibold px-1.5 py-0.5 rounded"
-                    style={{ 
-                      background: isOutOfStock(b) ? "rgba(220,38,38,0.15)" : "rgba(50,127,79,0.15)", 
-                      color: isOutOfStock(b) ? "#dc2626" : "#2d7a47" 
-                    }}
-                  >
-                    {b.quantity}/{b.quantity + ((b.status === "Borrowed" || b.status === "Overdue") ? 1 : 0) || 1}
-                  </span>
-                </div>
-
-                {/* Title + author */}
-                <div className="px-2 pb-1 flex-1">
-                  <p className="text-[13px] font-bold leading-snug mb-0.5 clamp-2" style={{ color:"var(--text-primary)" }}>
-                    {b.title}
-                  </p>
-                  <p className="text-[11.5px] truncate" style={{ color:"var(--text-secondary)" }}>
-                    {b.author}
-                  </p>
-                </div>
-
-                {/* Action */}
-                <div className="flex">
-                  <button
-                    onClick={() => handleViewDetails(b)}
-                    className="flex-1 flex items-center justify-center gap-1 py-1 text-[11px] font-semibold text-white transition-colors duration-150"
-                    style={{ background:"var(--bg-sidebar)" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#32667F"}
-                    onMouseLeave={e => e.currentTarget.style.background = "var(--bg-sidebar)"}
-                  >
-                    <BookOpen size={12} /> View
-                  </button>
-                  <button
-                    onClick={() => handleEdit(b)}
-                    className="flex items-center justify-center px-2 py-1 text-[11px] font-semibold text-white transition-colors duration-150"
-                    style={{ background:"rgba(50,102,127,0.8)" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#32667F"}
-                    onMouseLeave={e => e.currentTarget.style.background = "rgba(50,102,127,0.8)"}
-                  >
-                    <Edit2 size={12} />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteClick(b)}
-                    className="flex items-center justify-center px-2 py-1 text-[11px] font-semibold text-white transition-colors duration-150"
-                    style={{ background:"rgba(234,139,51,0.8)" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#c05a0a"}
-                    onMouseLeave={e => e.currentTarget.style.background = "rgba(234,139,51,0.8)"}
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+        <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-4">
+          {filtered.map((b, idx) => (
+            <BookCard
+              key={b.id}
+              book={b}
+              idx={idx}
+              onViewDetails={handleViewDetails}
+              onEdit={handleEdit}
+              onDelete={handleDeleteClick}
+              gradients={GRADIENTS}
+            />
+          ))}
         </div>
       )}
 

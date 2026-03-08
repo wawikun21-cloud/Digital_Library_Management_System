@@ -24,7 +24,7 @@
 
   --text-primary:   #132F45;
   --text-secondary: #32667F;
-  --text-muted:     #7aafc4;
+  --text-muted:     #4b7185;
   --text-on-sidebar:#7aafc4;
 
   --accent-danger:   #ec2727;
@@ -36,6 +36,9 @@
   --shadow-md:  0 4px 12px rgba(19,47,69,0.10);
   --shadow-lg:  0 8px 24px rgba(19,47,69,0.13);
   --shadow-xl:  0 24px 60px rgba(0,0,0,0.25);
+  --shadow-hover: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.3);
 }
 
 [data-theme="dark"] {
@@ -127,6 +130,18 @@ body {
 [data-theme="light"] .t-moon { opacity: 0.4; }
 
 /* ── Animations ─────────────────────────────── */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.tilt-on-hover {
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.tilt-on-hover:hover {
+  transform: rotateY(12deg) rotateX(4deg) scale(1.02);
+}
+
 @keyframes overlayIn {
   from { opacity: 0; }
   to   { opacity: 1; }

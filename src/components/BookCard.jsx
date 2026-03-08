@@ -1,131 +1,120 @@
-import { Trash2, Edit2 } from "lucide-react";
+import { Trash2, Edit2, BookOpen, Star } from "lucide-react";
 
-export default function BookCard({ book, idx, onViewDetails, onEdit, onDelete, gradients, statusStyle }) {
+export default function BookCard({ book, idx, onViewDetails, onEdit, onDelete, gradients }) {
   const [a, b] = gradients[idx % gradients.length];
   const initials = book.title.split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase();
 
   return (
     <div 
-      className="group flex flex-col rounded-lg overflow-hidden transition-all duration-200"
+      className="group flex flex-col rounded-xl overflow-hidden transition-all duration-300"
       style={{ 
         background: "var(--bg-surface)", 
         border: "1px solid var(--border)",
         boxShadow: "var(--shadow-sm)",
       }}
     >
-      {/* Cover Image - 2:3 Aspect Ratio */}
-      <div className="relative w-full overflow-hidden" style={{ aspectRatio: "2/3" }}>
-        {book.cover ? (
-          <img 
-            src={book.cover} 
-            alt={book.title} 
-            className="w-full h-full object-cover transition-transform duration-300"
-            style={{ transform: "scale(1)" }}
-            onMouseEnter={e => e.currentTarget.style.transform = "scale(1.15)"}
-            onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-          />
-        ) : (
+      {/* Cover Section - The book is "smaller" and "tilts" */}
+      <div className="perspective-1000 relative w-full p-4 pb-2 flex justify-center items-center" style={{ aspectRatio: "1/1.2" }}>
+        <div className="relative w-full h-full tilt-on-hover cursor-pointer" onClick={() => onViewDetails(book)}>
+          {book.cover ? (
+            <img 
+              src={book.cover} 
+              alt={book.title} 
+              className="w-full h-full object-cover rounded-lg shadow-md group-hover:shadow-hover"
+            />
+          ) : (
+            <div
+              className="w-full h-full flex flex-col items-center justify-center gap-2 rounded-lg shadow-md group-hover:shadow-hover"
+              style={{ background: `linear-gradient(145deg, ${a}, ${b})` }}
+            >
+              <BookOpen size={28} color="rgba(255,255,255,0.35)" />
+              <span className="text-xl font-black tracking-wider" style={{ color: "rgba(255,255,255,0.75)", fontFamily: "Georgia,serif" }}>
+                {initials}
+              </span>
+            </div>
+          )}
+
+          {/* Status Badge - Floating on cover */}
           <div
-            className="w-full h-full flex flex-col items-center justify-center gap-2 transition-transform duration-300"
-            style={{ background: `linear-gradient(145deg, ${a}, ${b})` }}
-            onMouseEnter={e => e.currentTarget.style.transform = "scale(1.15)"}
-            onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+            className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[9px] font-bold"
+            style={{ 
+              background: book.status === "Available" ? "rgba(50,102,127,0.85)" : "rgba(220,38,38,0.85)", 
+              color: "#fff",
+              backdropFilter: "blur(4px)"
+            }}
           >
-            <span className="text-3xl font-black tracking-wider" style={{ color: "rgba(255,255,255,0.75)", fontFamily: "Georgia,serif" }}>
-              {initials}
-            </span>
+            {book.status}
           </div>
-        )}
-
-        {/* Status Badge - Top Right */}
-        <div
-          className="absolute top-2 right-2 px-2 py-1 rounded-md text-[10px] font-bold"
-          style={statusStyle[book.status]}
-        >
-          {book.status}
-        </div>
-
-        {/* Hover Actions - Mobile: Hidden, Desktop: Visible */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-          <button
-            onClick={() => onEdit(book)}
-            className="p-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors duration-150"
-            title="Edit"
-          >
-            <Edit2 size={16} />
-          </button>
-          <button
-            onClick={() => onDelete(book.id)}
-            className="p-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors duration-150"
-            title="Delete"
-          >
-            <Trash2 size={16} />
-          </button>
         </div>
       </div>
 
-      {/* Book Info */}
-      <div className="flex flex-col gap-1.5 p-2.5 flex-1">
-        <div>
-          <h4 className="text-[12px] font-bold line-clamp-2 leading-tight" style={{ color: "var(--text-primary)" }}>
-            {book.title}
-          </h4>
-          <p className="text-[10px] mt-0.5 line-clamp-1" style={{ color: "var(--text-secondary)" }}>
-            {book.author}
-          </p>
+      {/* Meta Row */}
+      <div className="px-3 pt-1 pb-1 flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-0.5">
+          <Star size={10} fill="#EEA23A" color="#EEA23A" />
+          <span className="text-[10px]" style={{ color: "var(--text-secondary)" }}>N/A</span>
         </div>
-
-        {/* Year */}
-        <div className="flex items-center gap-1 text-[10px]" style={{ color: "var(--text-secondary)" }}>
-          <span>📅</span> {book.year}
-        </div>
-
-        {/* View Details Button */}
-        <button
-          onClick={() => onViewDetails(book)}
-          className="mt-auto text-[11px] font-semibold px-2.5 py-1.5 rounded-md border-[1.5px] transition-colors duration-150 w-full"
+        <span className="text-[10px]" style={{ color: "var(--border)" }}>·</span>
+        <span
+          className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+          style={{ background: "rgba(238,162,58,0.1)", color: "var(--accent-amber)" }}
+        >
+          {book.genre}
+        </span>
+        <span className="text-[10px]" style={{ color: "var(--border)" }}>·</span>
+        <span 
+          className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
           style={{ 
-            background: "rgba(238,162,58,0.1)", 
-            borderColor: "rgba(238,162,58,0.3)", 
-            color: "#b87a1a" 
-          }}
-          onMouseEnter={e => { 
-            e.currentTarget.style.background = "rgba(238,162,58,0.25)"; 
-            e.currentTarget.style.borderColor = "rgba(238,162,58,0.5)"; 
-          }}
-          onMouseLeave={e => { 
-            e.currentTarget.style.background = "rgba(238,162,58,0.1)"; 
-            e.currentTarget.style.borderColor = "rgba(238,162,58,0.3)"; 
+            background: book.quantity === 0 ? "rgba(220,38,38,0.1)" : "rgba(50,127,79,0.1)", 
+            color: book.quantity === 0 ? "#dc2626" : "#2d7a47" 
           }}
         >
-          View Details
-        </button>
+          {book.quantity} in stock
+        </span>
+      </div>
 
-        {/* Mobile Action Buttons */}
-        <div className="flex gap-2 lg:hidden mt-2">
-          <button
-            onClick={() => onEdit(book)}
-            className="flex-1 text-[10px] font-semibold px-2 py-1.5 rounded-md border-[1.5px] transition-colors duration-150"
-            style={{ 
-              background: "rgba(50,102,127,0.1)", 
-              borderColor: "rgba(50,102,127,0.3)", 
-              color: "#32667F" 
-            }}
-          >
-            Edit
-          </button>
-          <button
-            onClick={() => onDelete(book.id)}
-            className="flex-1 text-[10px] font-semibold px-2 py-1.5 rounded-md border-[1.5px] transition-colors duration-150"
-            style={{ 
-              background: "rgba(234,139,51,0.1)", 
-              borderColor: "rgba(234,139,51,0.3)", 
-              color: "#c05a0a" 
-            }}
-          >
-            Delete
-          </button>
-        </div>
+      {/* Title + Author */}
+      <div className="px-3 pb-2 flex-1">
+        <h4 className="text-[13px] font-bold leading-tight line-clamp-2" style={{ color: "var(--text-primary)" }}>
+          {book.title}
+        </h4>
+        <p className="text-[11px] mt-0.5 line-clamp-1" style={{ color: "var(--text-secondary)" }}>
+          {book.author}
+        </p>
+      </div>
+
+      {/* Actions */}
+      <div className="flex border-t" style={{ borderColor: "var(--border-light)" }}>
+        <button
+          onClick={() => onViewDetails(book)}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 text-[11px] font-semibold transition-colors duration-200"
+          style={{ color: "var(--text-secondary)" }}
+          onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--accent-amber)"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+          aria-label={`View details for ${book.title}`}
+        >
+          <BookOpen size={12} /> View
+        </button>
+        <button
+          onClick={() => onEdit(book)}
+          className="px-3 py-2 text-[11px] font-semibold border-l transition-colors duration-200"
+          style={{ color: "var(--text-secondary)", borderColor: "var(--border-light)" }}
+          onMouseEnter={e => { e.currentTarget.style.background = "rgba(50,102,127,0.08)"; e.currentTarget.style.color = "#32667F"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+          aria-label={`Edit ${book.title}`}
+        >
+          <Edit2 size={12} />
+        </button>
+        <button
+          onClick={() => onDelete(book)}
+          className="px-3 py-2 text-[11px] font-semibold border-l transition-colors duration-200"
+          style={{ color: "var(--text-secondary)", borderColor: "var(--border-light)" }}
+          onMouseEnter={e => { e.currentTarget.style.background = "rgba(234,139,51,0.08)"; e.currentTarget.style.color = "#c05a0a"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+          aria-label={`Delete ${book.title}`}
+        >
+          <Trash2 size={12} />
+        </button>
       </div>
     </div>
   );
