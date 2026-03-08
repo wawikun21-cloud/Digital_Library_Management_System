@@ -637,7 +637,7 @@ export default function Books() {
           No books found.
         </p>
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-4">
           {filtered.map((b, idx) => (
             <BookCard
               key={b.id}
@@ -655,17 +655,17 @@ export default function Books() {
       {/* ════════ ADD BOOK MODAL ════════ */}
       {modal && (
         <div
-          className="anim-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="anim-overlay fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
           style={{ background:"rgba(10,22,34,0.6)", backdropFilter:"blur(3px)" }}
           onClick={e => e.target === e.currentTarget && setModal(false)}
         >
           <div
-            className="anim-modal w-full max-w-[640px] max-h-[90vh] flex flex-col rounded-2xl overflow-hidden"
+            className="anim-modal w-full max-w-[95vw] sm:max-w-[640px] max-h-[90vh] flex flex-col rounded-2xl overflow-hidden"
             style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-xl)" }}
           >
             {/* Header */}
             <div
-              className="flex items-center justify-between px-6 py-5 shrink-0"
+              className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5 shrink-0"
               style={{ borderBottom:"1px solid var(--border-light)" }}
             >
               <div className="flex items-center gap-2.5">
@@ -1306,4 +1306,4 @@ function DetailItem({ label, value }) {
       </span>
     </div>
   );
-}
+}to 

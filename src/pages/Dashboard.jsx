@@ -209,16 +209,16 @@ function ChartCard({ title, children, icon, className = "" }) {
       }}
     >
       <div
-        className="px-6 py-4 flex items-center justify-between flex-shrink-0"
+        className="px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between flex-shrink-0"
         style={{ borderBottom: "1px solid var(--border-light)" }}
       >
-        <h2 className="text-[13px] font-bold flex items-center gap-2.5 uppercase tracking-wider"
+        <h2 className="text-[12px] sm:text-[13px] font-bold flex items-center gap-2 uppercase tracking-wider"
           style={{ color: "var(--text-secondary)" }}>
           {icon && <span>{icon}</span>}
           {title}
         </h2>
       </div>
-      <div className="px-4 py-6 flex-1 flex flex-col">{children}</div>
+      <div className="px-3 sm:px-4 py-4 sm:py-6 flex-1 flex flex-col">{children}</div>
     </div>
   );
 }
@@ -798,11 +798,11 @@ function AdminAuditTrail() {
 
 export default function Dashboard() {
   return (
-    <main className="flex flex-col gap-6" aria-label="Library Analytics Dashboard">
+    <main className="flex flex-col gap-4 lg:gap-6" aria-label="Library Analytics Dashboard">
       <h1 className="sr-only">Analytics Dashboard Overview</h1>
 
       {/* ── Row 1: 4 Stats Cards ── */}
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" aria-label="Key Performance Indicators">
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4" aria-label="Key Performance Indicators">
         {STATS.map(stat => (
           <StatsCard
             key={stat.label}
@@ -819,13 +819,13 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         <div className="lg:col-span-3">
           <ChartCard title="Monthly Borrowing Trends">
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={180} minHeight={160}>
               <BarChart data={MONTHLY_DATA} barCategoryGap="30%" barGap={4} role="img" aria-label="Monthly borrowing trends chart showing Borrowed vs Returned books">
                 <CartesianGrid vertical={false} stroke="var(--border-light)" />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "var(--text-secondary)", fontWeight: 600 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "var(--text-secondary)", fontWeight: 600 }} axisLine={false} tickLine={false} width={28} />
+                <XAxis dataKey="month" tick={{ fontSize: 10, fill: "var(--text-secondary)", fontWeight: 600 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: "var(--text-secondary)", fontWeight: 600 }} axisLine={false} tickLine={false} width={24} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--bg-hover)" }} />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)", paddingTop: 12 }} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 10, fontWeight: 700, color: "var(--text-primary)", paddingTop: 8 }} />
                 <Bar dataKey="Borrowed" fill="#EEA23A" radius={[4, 4, 0, 0]} name="Borrowed Books" />
                 <Bar dataKey="Returned" fill="#32667F" radius={[4, 4, 0, 0]} name="Returned Books" />
               </BarChart>
@@ -835,15 +835,15 @@ export default function Dashboard() {
 
         <div className="lg:col-span-2">
           <ChartCard title="Book Status Distribution">
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={180} minHeight={160}>
               <PieChart role="img" aria-label="Book status distribution chart: Available, Borrowed, and Overdue">
-                <Pie data={STATUS_PIE} cx="50%" cy="45%" innerRadius={50} outerRadius={78} paddingAngle={4} dataKey="value">
+                <Pie data={STATUS_PIE} cx="50%" cy="45%" innerRadius={40} outerRadius={65} paddingAngle={4} dataKey="value">
                   {STATUS_PIE.map((entry, i) => (
                     <Cell key={entry.name} fill={PIE_COLORS[i]} stroke="none" />
                   ))}
                 </Pie>
                 <Tooltip content={<ChartTooltip />} />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)", paddingTop: 12 }} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 10, fontWeight: 700, color: "var(--text-primary)", paddingTop: 8 }} />
               </PieChart>
             </ResponsiveContainer>
           </ChartCard>
