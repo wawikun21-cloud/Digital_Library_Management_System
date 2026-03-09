@@ -8,6 +8,7 @@ const express    = require("express");
 const cors       = require("cors");
 const searchRouter = require("./routes/searchBooks");
 const booksRouter = require("./routes/books");
+const transactionsRouter = require("./routes/transactions");
 const { initDatabase, testConnection } = require("./config/db");
 
 const app  = express();
@@ -23,6 +24,7 @@ app.use(express.json());
 // ── Routes ───────────────────────────────────────────────
 app.use("/api", searchRouter);
 app.use("/api/books", booksRouter);
+app.use("/api/transactions", transactionsRouter);
 
 // ── Health check ─────────────────────────────────────────
 app.get("/api/health", async (_req, res) => {
