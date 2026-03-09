@@ -7,6 +7,7 @@ require("dotenv").config();
 const express    = require("express");
 const cors       = require("cors");
 const scanRouter = require("./routes/scanBookCover");
+const searchRouter = require("./routes/searchBooks");
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -20,6 +21,7 @@ app.use(express.json());
 
 // ── Routes ───────────────────────────────────────────────
 app.use("/api", scanRouter);
+app.use("/api", searchRouter);
 
 // ── Health check ─────────────────────────────────────────
 app.get("/api/health", (_req, res) => {

@@ -1,28 +1,46 @@
-# Dashboard Implementation - COMPLETE ✓
+# TODO List
 
-## Implementation Summary
+## Task: Implement Book Search Feature for Lexora
 
-### Files Modified:
-1. **client/src/pages/Dashboard.jsx** - Complete rewrite with exact grid layout
-2. **client/src/components/StatsCard.jsx** - Added icon and trend props
+### Steps:
+- [x] 1. Analyze the issue and understand the codebase
+- [x] 2. Create new route file `server/routes/searchBooks.js` with GET /search-books endpoint
+- [x] 3. Update `server/index.js` to register the new route under /api
+- [x] 4. Test the endpoint
 
-### Grid Structure Implemented:
-- **Row 1**: 4 Stats Cards (Total Books, Borrowed, Active Members, Overdue)
-- **Row 2**: Books Added Per Month (Bar) + Borrow vs Returned (Line)
-- **Row 3**: Most Borrowed Genre (Donut) + Top 5 Books (List)
-- **Row 4**: User Registration (Area) + OCR Analytics (Stacked Bar)
-- **Row 5**: Recent Activity Table with Search
+### Features Implemented:
+- ✅ Philippine library search (eLib, National Library of the Philippines)
+- ✅ Open Library integration (primary international source)
+- ✅ Google Books fallback
+- ✅ In-memory caching (5 min TTL)
+- ✅ Thumbnail fallback from Open Library for Philippine results
+- ✅ Output fields: title, author, publisher, year, library_location, thumbnail, source, link
 
-### Features:
-- ✓ Responsive grid layout (grid-cols-4)
-- ✓ Soft shadows, rounded-xl cards
-- ✓ Professional color palette (indigo, emerald, slate)
-- ✓ Recharts for all charts
-- ✓ Dark mode compatible
-- ✓ Loading skeleton state
-- ✓ Search functionality on activity table
-- ✓ Hover effects on cards
-- ✓ Icons for stats (Book, Users, Alert, Trending)
+### API Usage:
+```
+GET /api/search-books?title=Book+Title&author=Author+Name
+```
 
-### Build Status: SUCCESS ✓
+### Response Format:
+```json
+{
+  "success": true,
+  "results": [
+    {
+      "title": "...",
+      "author": "...",
+      "publisher": "...",
+      "year": "...",
+      "library_location": "...",
+      "thumbnail": "https://...",
+      "source": "Philippine Library" | "Open Library" | "Google Books",
+      "link": "https://..."
+    }
+  ],
+  "search_source": "...",
+  "cached": false
+}
+```
+
+## Status: COMPLETED ✓
 
