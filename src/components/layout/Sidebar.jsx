@@ -1,10 +1,11 @@
 import { NavLink } from "react-router-dom";
-import { BarChart3, BookOpen, ClipboardList, Sun, Moon, X } from "lucide-react";
+import { BarChart3, BookOpen, ClipboardList, Trash2, Sun, Moon, X } from "lucide-react";
 
 const NAV = [
   { to: "/",         label: "Dashboard", Icon: BarChart3     },
   { to: "/books",    label: "Books",     Icon: BookOpen      },
   { to: "/borrowed", label: "Borrowed",  Icon: ClipboardList },
+  { to: "/deleted",  label: "Recently Deleted", Icon: Trash2  },
 ];
 
 /* ─────────────────────────────────────────────────── */

@@ -11,9 +11,9 @@ import StatsCard from "../components/StatsCard";
 
 const STATS = [
   { label: "Total Books", value: "1,284", change: "+12 this month", accent: "#132F45", percentage: 85 },
-  { label: "Borrowed",    value: "340",   change: "+5 today",        accent: "#EEA23A", percentage: 26 },
+  { label: "Available",    value: "920",   change: "+5 today",        accent: "#32667F", percentage: 72 },
+  { label: "Out of Stock", value: "364",   change: "+8 this week",    accent: "#dc2626", percentage: 28 },
   { label: "Returned",    value: "920",   change: "+8 this week",    accent: "#32667F", percentage: 72 },
-  { label: "Overdue",     value: "24",    change: "-3 from last week", accent: "#EA8B33", percentage: 2 },
 ];
 
 const AUDIT_LOGS = [
@@ -130,10 +130,9 @@ const MONTHLY_DATA = [
 
 const STATUS_PIE = [
   { name: "Available", value: 920 },
-  { name: "Borrowed",  value: 340 },
-  { name: "Overdue",   value: 24  },
+  { name: "Out of Stock", value: 364 },
 ];
-const PIE_COLORS = ["#32667F", "#EEA23A", "#EA8B33"];
+const PIE_COLORS = ["#32667F", "#dc2626"];
 
 const WEEKLY_DATA = [
   { day: "Mon", Borrowed: 12, Returned: 9  },
@@ -225,11 +224,10 @@ function ChartCard({ title, children, icon, className = "" }) {
 
 function Badge({ children, type }) {
   const styles = {
-    Borrowed: { bg: "rgba(238,162,58,0.15)", color: "#b87a1a" },
     Returned: { bg: "rgba(50,102,127,0.15)", color: "#32667F" },
-    Overdue:  { bg: "rgba(234,139,51,0.15)", color: "#c05a0a" },
+    OutOfStock: { bg: "rgba(220,38,38,0.15)", color: "#dc2626" },
   };
-  const style = styles[type] || styles.Borrowed;
+  const style = styles[type] || styles.Returned;
   return (
     <span
       className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold px-2.5 py-1 rounded-lg"
@@ -368,9 +366,9 @@ function PaginationControls({
   }
 
   return (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4" style={{ borderTop: "1px solid var(--border-light)" }}>
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-6 py-4" style={{ borderTop: "1px solid var(--border-light)" }}>
       {/* Left side: Items per page and showing text */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
         <div className="flex items-center gap-2">
           <label htmlFor="items-per-page" className="text-[11px] font-semibold" style={{ color: "var(--text-secondary)" }}>Show</label>
           <select
@@ -396,7 +394,7 @@ function PaginationControls({
       </div>
 
       {/* Right side: Page navigation */}
-      <nav className="flex items-center gap-1.5" aria-label="Pagination">
+      <nav className="flex items-center gap-1" aria-label="Pagination">
         {/* First page */}
         <button
           onClick={() => onPageChange(1)}
@@ -446,7 +444,7 @@ function PaginationControls({
             onClick={() => onPageChange(num)}
             aria-label={`Page ${num}`}
             aria-current={currentPage === num ? "page" : undefined}
-            className="min-w-[32px] h-8 px-2 rounded-lg text-[11px] font-bold transition-all duration-200"
+            className="hidden sm:inline-flex min-w-[32px] h-8 px-2 rounded-lg text-[11px] font-bold transition-all duration-200 items-center justify-center"
             style={{
               background: currentPage === num ? "var(--accent-amber)" : "transparent",
               color: currentPage === num ? "#fff" : "var(--text-primary)",
@@ -474,6 +472,11 @@ function PaginationControls({
             </button>
           </>
         )}
+
+        {/* Mobile: show current/total instead of page buttons */}
+        <span className="sm:hidden text-[11px] font-bold px-2" style={{ color: "var(--text-primary)" }}>
+          {currentPage} / {totalPages}
+        </span>
 
         {/* Next page */}
         <button
@@ -586,11 +589,11 @@ function AdminAuditTrail() {
 
       {/* Search and Filter Bar */}
       <div
-        className="px-6 py-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-4"
+        className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3"
         style={{ borderBottom: "1px solid var(--border-light)", background: "var(--bg-subtle)" }}
       >
         {/* Search Input */}
-        <div className="relative flex-1 max-w-sm">
+        <div className="relative flex-1 max-w-full sm:max-w-sm">
           <label htmlFor="search-logs" className="sr-only">Search audit logs</label>
           <Search 
             size={14} 
@@ -621,7 +624,7 @@ function AdminAuditTrail() {
         </div>
 
         {/* Category Filter */}
-        <div className="relative flex items-center gap-2.5">
+        <div className="relative flex items-center gap-2.5 w-full sm:w-auto">
           <label htmlFor="category-filter" className="text-[12px] font-bold" style={{ color: "var(--text-secondary)" }}>
             <Filter size={14} />
           </label>
@@ -629,7 +632,7 @@ function AdminAuditTrail() {
             id="category-filter"
             value={categoryFilter}
             onChange={handleCategoryChange}
-            className="px-4 py-2.5 text-[12px] font-semibold rounded-xl border outline-none appearance-none cursor-pointer transition-all duration-200 hover:border-[var(--accent-amber)]"
+            className="w-full sm:w-auto px-4 py-2.5 text-[12px] font-semibold rounded-xl border outline-none appearance-none cursor-pointer transition-all duration-200 hover:border-[var(--accent-amber)]"
             style={{
               background: "var(--bg-surface)",
               borderColor: "var(--border)",
@@ -657,14 +660,14 @@ function AdminAuditTrail() {
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm border-collapse" aria-label="Admin Audit Trail">
+        <table className="w-full text-sm border-collapse min-w-[700px]" aria-label="Admin Audit Trail">
           <thead>
             <tr>
-              {["Txn ID", "Timestamp", "Admin", "Category", "Description", "Target", "IP Address", "Status"].map(h => (
+{["Txn ID", "Timestamp", "Admin", "Category", "Description", "Target", "IP Address", "Status"].map(h => (
                 <th
                   key={h}
                   scope="col"
-                  className="text-left px-6 py-4 text-[11px] font-bold uppercase tracking-widest whitespace-nowrap"
+                  className="text-left px-3 sm:px-6 py-3 sm:py-4 text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider whitespace-nowrap"
                   style={{ color: "var(--text-primary)", borderBottom: "1px solid var(--border-light)", background: "var(--bg-surface)" }}
                 >
                   {h}
@@ -816,8 +819,8 @@ export default function Dashboard() {
       </section>
 
       {/* ── Row 2: Monthly (wide 3fr) + Pie (2fr) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        <div className="lg:col-span-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="sm:col-span-1 lg:col-span-3">
           <ChartCard title="Monthly Borrowing Trends">
             <ResponsiveContainer width="100%" height={180} minHeight={160}>
               <BarChart data={MONTHLY_DATA} barCategoryGap="30%" barGap={4} role="img" aria-label="Monthly borrowing trends chart showing Borrowed vs Returned books">
@@ -833,7 +836,7 @@ export default function Dashboard() {
           </ChartCard>
         </div>
 
-        <div className="lg:col-span-2">
+        <div className="sm:col-span-1 lg:col-span-2">
           <ChartCard title="Book Status Distribution">
             <ResponsiveContainer width="100%" height={180} minHeight={160}>
               <PieChart role="img" aria-label="Book status distribution chart: Available, Borrowed, and Overdue">
@@ -851,8 +854,8 @@ export default function Dashboard() {
       </div>
 
       {/* ── Row 3: Genre (2fr) + Weekly Area (3fr) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        <div className="lg:col-span-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="sm:col-span-1 lg:col-span-2">
           <ChartCard title="Books by Genre">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={GENRE_DATA} layout="vertical" barCategoryGap="25%" role="img" aria-label="Books distribution by genre bar chart">
@@ -866,7 +869,7 @@ export default function Dashboard() {
           </ChartCard>
         </div>
 
-        <div className="lg:col-span-3">
+        <div className="sm:col-span-1 lg:col-span-3">
           <ChartCard title="Weekly Activity">
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={WEEKLY_DATA} role="img" aria-label="Weekly borrowing activity area chart">
@@ -894,11 +897,11 @@ export default function Dashboard() {
       </div>
 
       {/* ── Row 4: Top Borrowed Books (3fr) + Return Rate Gauge (2fr) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-stretch">
-        <div className="lg:col-span-3 flex flex-col">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-stretch">
+        <div className="sm:col-span-1 lg:col-span-3 flex flex-col">
           <TopBorrowedBooks />
         </div>
-        <div className="lg:col-span-2 flex flex-col">
+        <div className="sm:col-span-1 lg:col-span-2 flex flex-col">
           <ReturnRateGauge />
         </div>
       </div>

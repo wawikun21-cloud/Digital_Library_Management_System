@@ -190,7 +190,15 @@ function ModalShell({ title, size="max-w-3xl", children, footer, onClose }) {
 
 /* ══════════════════════════════════════════════ */
 export default function Borrowed() {
-  const [txns,        setTxns]        = useState(INIT);
+  const [txns, setTxns] = useState(() => {
+    const saved = localStorage.getItem("LEXORA_BORROWED");
+    return saved ? JSON.parse(saved) : INIT;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("LEXORA_BORROWED", JSON.stringify(txns));
+  }, [txns]);
+
   const [search,      setSearch]      = useState("");
   const [filter,      setFilter]      = useState("All");
   const [modal,       setModal]       = useState(null);
@@ -303,8 +311,22 @@ export default function Borrowed() {
   }
 
   function handleDelete(id) {
+    const txnToDelete = txns.find(t => t.id === id);
     setTxns(p => p.map(t => t.id === id ? { ...t, deleted:true } : t));
-    const timer = setTimeout(() => { setTxns(p => p.filter(t => t.id !== id)); setSnackbar(null); }, 5000);
+    const timer = setTimeout(() => {
+      if (txnToDelete) {
+        // Save to Recently Deleted
+        const deletedItems = JSON.parse(localStorage.getItem("LEXORA_DELETED") || "[]");
+        const newItem = {
+          ...txnToDelete,
+          type: "transaction",
+          deletedAt: new Date().toISOString()
+        };
+        localStorage.setItem("LEXORA_DELETED", JSON.stringify([newItem, ...deletedItems]));
+      }
+      setTxns(p => p.filter(t => t.id !== id));
+      setSnackbar(null);
+    }, 5000);
     setSnackbar({ id, timer });
   }
 
@@ -336,7 +358,7 @@ export default function Borrowed() {
     <div className="flex flex-col gap-6">
 
       {/* ── Stats Grid ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-4">
         {[
           { label:"Currently Borrowed", value:statActive,  accent:"#EEA23A" },
           { label:"Overdue",            value:statOverdue, accent:"#EA8B33" },
@@ -432,7 +454,7 @@ export default function Borrowed() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse" style={{ minWidth:760 }} aria-label="Transaction Records">
+          <table className="w-full border-collapse min-w-[600px] sm:min-w-0" aria-label="Transaction Records">
             <thead>
               <tr style={{ background:"var(--bg-hover)" }}>
                 {["#", "Book", "Student", "ID No.", "Course / Year", "Borrowed", "Due Date", "Status", "Actions"].map(h => (

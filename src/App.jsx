@@ -3,6 +3,7 @@ import Layout    from "./components/layout/Layout";
 import Dashboard from "./pages/Dashboard";
 import Books     from "./pages/Books";
 import Borrowed  from "./pages/Borrowed";
+import RecentlyDeleted from "./pages/RecentlyDeleted";
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
           <Route index           element={<Dashboard />} />
           <Route path="books"    element={<Books />}     />
           <Route path="borrowed" element={<Borrowed />}  />
+          <Route path="deleted"  element={<RecentlyDeleted />} />
         </Route>
       </Routes>
     </BrowserRouter>

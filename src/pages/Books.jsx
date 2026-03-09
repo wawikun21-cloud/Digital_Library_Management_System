@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { BrowserMultiFormatReader } from "@zxing/browser";
 import {
-  Search, ChevronDown, QrCode, PenLine, Camera,
+  Search, ChevronDown, QrCode, PenLine,
   Star, X, BookOpen, ImagePlus, Trash2, Loader2,
-  CheckCircle2, AlertCircle, Sparkles, SlidersHorizontal,
-  Edit2, PackageX, FileSearch,
+  CheckCircle2, AlertCircle, SlidersHorizontal,
+  Edit2, PackageX,
 } from "lucide-react";
 import BookCard from "../components/BookCard";
 import ConfirmationModal from "../components/ConfirmationModal";
@@ -24,11 +25,11 @@ const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 /* ─── Data ─────────────────────────────────────── */
 const INITIAL_BOOKS = [
   { id:1, title:"Clean Code",               author:"Robert C. Martin", genre:"Programming",  isbn:"978-0132350884", year:2008, publisher:"Prentice Hall",  description:"A handbook of agile software craftsmanship.",           status:"Available", cover:null, quantity:5 },
-  { id:2, title:"The Pragmatic Programmer", author:"Hunt & Thomas",    genre:"Programming",  isbn:"978-0135957059", year:2019, publisher:"Addison-Wesley", description:"Your journey to mastery in software development.",     status:"Borrowed",  cover:null, quantity:3 },
+  { id:2, title:"The Pragmatic Programmer", author:"Hunt & Thomas",    genre:"Programming",  isbn:"978-0135957059", year:2019, publisher:"Addison-Wesley", description:"Your journey to mastery in software development.",     status:"Available", cover:null, quantity:3 },
   { id:3, title:"Design Patterns",          author:"Gang of Four",     genre:"Architecture", isbn:"978-0201633610", year:1994, publisher:"Addison-Wesley", description:"Elements of reusable object-oriented software.",      status:"Available", cover:null, quantity:8 },
-  { id:4, title:"Refactoring",              author:"Martin Fowler",    genre:"Programming",  isbn:"978-0134757599", year:2018, publisher:"Addison-Wesley", description:"Improving the design of existing code.",              status:"Overdue",   cover:null, quantity:0 },
+  { id:4, title:"Refactoring",              author:"Martin Fowler",    genre:"Programming",  isbn:"978-0134757599", year:2018, publisher:"Addison-Wesley", description:"Improving the design of existing code.",              status:"OutOfStock", cover:null, quantity:0 },
   { id:5, title:"You Don't Know JS",        author:"Kyle Simpson",     genre:"JavaScript",   isbn:"978-1491924464", year:2015, publisher:"O'Reilly Media", description:"A deep dive into the core mechanisms of JavaScript.", status:"Available", cover:null, quantity:4 },
-  { id:6, title:"The Mythical Man-Month",   author:"Frederick Brooks", genre:"Management",   isbn:"978-0201835953", year:1995, publisher:"Addison-Wesley", description:"Essays on software engineering and project management.", status:"Borrowed", cover:null, quantity:2 },
+  { id:6, title:"The Mythical Man-Month",   author:"Frederick Brooks", genre:"Management",   isbn:"978-0201835953", year:1995, publisher:"Addison-Wesley", description:"Essays on software engineering and project management.", status:"Available", cover:null, quantity:2 },
 ];
 
 const EMPTY_FORM = {
@@ -39,8 +40,6 @@ const EMPTY_FORM = {
 
 const STATUS_STYLE = {
   Available: { bg:"rgba(50,102,127,0.12)",  color:"#32667F" },
-  Borrowed:  { bg:"rgba(238,162,58,0.18)",  color:"#b87a1a" },
-  Overdue:   { bg:"rgba(234,139,51,0.18)",  color:"#c05a0a" },
   OutOfStock: { bg:"rgba(220,38,38,0.18)",  color:"#dc2626" },
 };
 
@@ -48,14 +47,6 @@ const GRADIENTS = [
   ["#132F45","#32667F"], ["#EEA23A","#EA8B33"], ["#32667F","#1a4a63"],
   ["#EA8B33","#F3B940"], ["#1d3f57","#32667F"], ["#b87a1a","#EEA23A"],
 ];
-
-/* ─── Scan states ─────────────────────────────── */
-const SCAN_STATE = {
-  IDLE:     "idle",      // waiting for user to pick image
-  SCANNING: "scanning",  // OCR request in-flight
-  SUCCESS:  "success",   // metadata returned and applied
-  ERROR:    "error",     // something went wrong
-};
 
 /* ─── Cover placeholder ──────────────────────── */
 function CoverPlaceholder({ title, idx }) {
@@ -93,7 +84,15 @@ const blurRing = (err) => e => {
 
 /* ══════════════════════════════════════════════ */
 export default function Books() {
-  const [books,        setBooks]        = useState(INITIAL_BOOKS);
+  const [books, setBooks] = useState(() => {
+    const saved = localStorage.getItem("LEXORA_BOOKS");
+    return saved ? JSON.parse(saved) : INITIAL_BOOKS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("LEXORA_BOOKS", JSON.stringify(books));
+  }, [books]);
+
   const [query,        setQuery]        = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [genreFilter,  setGenreFilter]  = useState("");
@@ -114,12 +113,6 @@ export default function Books() {
   // ── Toast state ──
   const [toast, setToast] = useState({ visible: false, message: "", type: "info" });
 
-  // ── OCR scan state ──
-  const [scanState,   setScanState]   = useState(SCAN_STATE.IDLE);
-  const [scanMessage, setScanMessage] = useState("");
-  const [ocrRawText,  setOcrRawText]  = useState("");
-  const [showOcrText, setShowOcrText] = useState(false);
-
   // ── Title/Author lookup state ──
   const [lookupTitle,   setLookupTitle]   = useState("");
   const [lookupAuthor,  setLookupAuthor]  = useState("");
@@ -128,9 +121,18 @@ export default function Books() {
   const [lookupError,   setLookupError]   = useState("");
   const [lookupDone,    setLookupDone]    = useState(false);
 
+  // ── Barcode scanner state ──
+  const [scanActive,    setScanActive]    = useState(false);  // camera is live
+  const [scanStatus,    setScanStatus]    = useState("idle"); // idle | scanning | found | error | fetching
+  const [scanFeedback,  setScanFeedback]  = useState("");
+  const [manualIsbn,    setManualIsbn]    = useState("");
+  const [cameras,       setCameras]       = useState([]);     // available video devices
+  const [activeCamIdx,  setActiveCamIdx]  = useState(0);
+  const videoRef  = useRef(null);
+  const readerRef = useRef(null);   // BrowserMultiFormatReader instance
+
   const ddRef     = useRef(null);
   const fileRef   = useRef(null);
-  const scanRef   = useRef(null); // hidden input for scan-cover upload
 
   /* Close dropdown on outside click */
   useEffect(() => {
@@ -145,19 +147,20 @@ export default function Books() {
     return () => { document.body.style.overflow = ""; };
   }, [modal]);
 
-  /* Reset scan state when modal is closed */
+  /* Reset lookup + barcode state when modal is closed */
   useEffect(() => {
     if (!modal) {
-      setScanState(SCAN_STATE.IDLE);
-      setScanMessage("");
-      setOcrRawText("");
-      setShowOcrText(false);
       setLookupTitle("");
       setLookupAuthor("");
       setLookupResults([]);
       setLookupLoading(false);
       setLookupError("");
       setLookupDone(false);
+      stopScanner();
+      setScanActive(false);
+      setScanStatus("idle");
+      setScanFeedback("");
+      setManualIsbn("");
     }
   }, [modal]);
 
@@ -251,6 +254,18 @@ export default function Books() {
 
   function confirmDelete() {
     if (deleteModal.bookId) {
+      const bookToDelete = books.find(b => b.id === deleteModal.bookId);
+      if (bookToDelete) {
+        // Save to Recently Deleted
+        const deletedItems = JSON.parse(localStorage.getItem("LEXORA_DELETED") || "[]");
+        const newItem = {
+          ...bookToDelete,
+          type: "book",
+          deletedAt: new Date().toISOString()
+        };
+        localStorage.setItem("LEXORA_DELETED", JSON.stringify([newItem, ...deletedItems]));
+      }
+
       setBooks(books.filter(b => b.id !== deleteModal.bookId));
       showToast("Book deleted successfully!", "success");
     }
@@ -286,6 +301,149 @@ export default function Books() {
     setForm(EMPTY_FORM);
     setSelectedBook(null);
     setModalMode("add");
+  }
+
+  /* ── Barcode / ISBN Scanner ──────────────────────────────
+     Uses @zxing/browser to decode barcodes from the webcam.
+     On a successful scan, looks up the ISBN via Open Library + Google Books.
+  ─────────────────────────────────────────────────────── */
+  function stopScanner() {
+    if (readerRef.current) {
+      try { readerRef.current.reset(); } catch (_) {}
+      readerRef.current = null;
+    }
+  }
+
+  async function startScanner() {
+    setScanActive(true);
+    setScanStatus("scanning");
+    setScanFeedback("Point the camera at a book's barcode…");
+
+    try {
+      // Enumerate cameras on first open
+      const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+      setCameras(devices);
+
+      const reader = new BrowserMultiFormatReader();
+      readerRef.current = reader;
+
+      const deviceId = devices[activeCamIdx]?.deviceId || undefined;
+
+      await reader.decodeFromVideoDevice(deviceId, videoRef.current, (result, err) => {
+        if (result) {
+          const code = result.getText();
+          // Only act on ISBN-like codes (EAN-13 starting with 978/979, or EAN-10)
+          const clean = code.replace(/[^0-9X]/gi, "");
+          if (/^97[89]\d{10}$/.test(clean) || /^\d{9}[\dX]$/i.test(clean)) {
+            stopScanner();
+            handleIsbnFound(clean);
+          }
+          // Non-ISBN barcode — keep scanning silently
+        }
+        // NotFoundException fires every frame with no barcode — ignore it
+      });
+    } catch (err) {
+      setScanStatus("error");
+      setScanActive(false);
+      if (err.name === "NotAllowedError") {
+        setScanFeedback("Camera access denied. Please allow camera permission and try again.");
+      } else if (err.name === "NotFoundError") {
+        setScanFeedback("No camera found. Enter the ISBN manually below.");
+      } else {
+        setScanFeedback(`Camera error: ${err.message}`);
+      }
+    }
+  }
+
+  async function handleIsbnFound(isbn) {
+    setScanStatus("fetching");
+    setScanFeedback(`ISBN ${isbn} detected — looking up book…`);
+    setScanActive(false);
+    await fetchByIsbn(isbn);
+  }
+
+  async function fetchByIsbn(isbn) {
+    if (!isbn.trim()) { setScanFeedback("Please enter an ISBN."); return; }
+    const clean = isbn.replace(/[^0-9X]/gi, "");
+    setScanStatus("fetching");
+    setScanFeedback(`Looking up ISBN ${clean}…`);
+    try {
+      // Try Open Library first
+      const olRes  = await fetch(`https://openlibrary.org/isbn/${clean}.json`);
+      if (olRes.ok) {
+        const olData = await olRes.json();
+        // Fetch works for description + author
+        const workUrl  = (olData.works?.[0]?.key) ? `https://openlibrary.org${olData.works[0].key}.json` : null;
+        const workData = workUrl ? await (await fetch(workUrl)).json() : {};
+        const authorKeys = workData.authors?.map(a => a.author?.key).filter(Boolean) || [];
+        let authorNames = [];
+        for (const key of authorKeys.slice(0, 3)) {
+          const aRes = await fetch(`https://openlibrary.org${key}.json`);
+          if (aRes.ok) { const a = await aRes.json(); authorNames.push(a.name || ""); }
+        }
+        const description = typeof workData.description === "string"
+          ? workData.description
+          : workData.description?.value || "";
+        const coverId = olData.covers?.[0];
+        const thumbnail = coverId ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg` : "";
+
+        applyScannedBook({
+          title:       olData.title || "",
+          author:      authorNames.join(", "),
+          isbn:        clean,
+          publisher:   (olData.publishers || [])[0] || "",
+          year:        olData.publish_date ? olData.publish_date.slice(-4) : "",
+          description,
+          thumbnail,
+        });
+        return;
+      }
+
+      // Fallback to Google Books
+      const gbRes  = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${clean}&maxResults=1`);
+      const gbData = await gbRes.json();
+      const info   = gbData.items?.[0]?.volumeInfo;
+      if (info) {
+        const ids  = info.industryIdentifiers || [];
+        const gbIsbn = ids.find(i => i.type === "ISBN_13")?.identifier
+                     || ids.find(i => i.type === "ISBN_10")?.identifier || clean;
+        applyScannedBook({
+          title:       info.title || "",
+          author:      (info.authors || []).join(", "),
+          isbn:        gbIsbn,
+          publisher:   info.publisher || "",
+          year:        (info.publishedDate || "").slice(0, 4),
+          description: info.description || "",
+          thumbnail:   (info.imageLinks?.thumbnail || "").replace("http://", "https://"),
+        });
+        return;
+      }
+
+      // Nothing found
+      setScanStatus("error");
+      setScanFeedback(`ISBN ${clean} not found in any database. Fill in fields manually.`);
+      setForm(f => ({ ...f, isbn: clean }));
+    } catch {
+      setScanStatus("error");
+      setScanFeedback("Network error during lookup. Check your connection.");
+    }
+  }
+
+  function applyScannedBook(b) {
+    setForm(f => ({
+      ...f,
+      title:       b.title       || f.title,
+      author:      b.author      || f.author,
+      publisher:   b.publisher   || f.publisher,
+      year:        b.year        || f.year,
+      description: b.description || f.description,
+      isbn:        b.isbn        || f.isbn,
+      cover:       b.thumbnail   || f.cover,
+    }));
+    setErrors({});
+    setScanStatus("found");
+    setScanFeedback(`"${b.title || b.isbn}" found — fields filled. Review and save.`);
+    showToast(`"${b.title || b.isbn}" fields filled from ISBN lookup.`, "success");
   }
 
   /* ── Title/Author Lookup ─────────────────────────────────
@@ -336,122 +494,6 @@ export default function Books() {
     setLookupResults([]);
     setLookupDone(false);
     showToast(`"${r.title}" fields filled — review and save.`, "success");
-  }
-
-  /* ── OCR Scan Cover ─────────────────────────────────────
-     1. User picks an image file via the hidden scanRef input
-     2. We POST it as multipart/form-data to /api/scan-book-cover
-     3. Backend runs Vision OCR → Google Books lookup
-     4. We auto-fill form fields with returned metadata
-     5. User can edit any field before saving
-  ──────────────────────────────────────────────────────── */
-  async function handleScanFile(file) {
-    if (!file) return;
-
-    // Client-side validation (mirrors server-side)
-    if (!file.type.startsWith("image/")) {
-      setScanState(SCAN_STATE.ERROR);
-      setScanMessage("Please select an image file (JPEG, PNG, WEBP, etc.)");
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setScanState(SCAN_STATE.ERROR);
-      setScanMessage("Image is too large. Maximum size is 10 MB.");
-      return;
-    }
-
-    setScanState(SCAN_STATE.SCANNING);
-    setScanMessage("Scanning cover with PaddleOCR…");
-    setOcrRawText("");
-    setShowOcrText(false);
-
-    // Also set the image as the cover preview
-    const r = new FileReader();
-    r.onload = e => setForm(f => ({ ...f, cover: e.target.result }));
-    r.readAsDataURL(file);
-
-    try {
-      const formData = new FormData();
-      formData.append("cover", file);   // must match upload.single("cover") in backend
-
-      const res = await fetch(`${API_BASE}/api/scan-book-cover`, {
-        method: "POST",
-        body:   formData,
-        // Do NOT set Content-Type header — browser sets it with boundary automatically
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        setScanState(SCAN_STATE.ERROR);
-        setScanMessage(data.error || "Scan failed. Please try again.");
-        return;
-      }
-
-      // Store raw OCR text for optional display
-      if (data.ocrText) setOcrRawText(data.ocrText);
-
-      // No text detected at all
-      if (!data.ocrText) {
-        setScanState(SCAN_STATE.ERROR);
-        setScanMessage(data.message || "No text detected in image. Try a clearer photo.");
-        return;
-      }
-
-      // Auto-fill form fields with book metadata (allow manual override)
-      if (data.book) {
-        const b = data.book;
-        setForm(f => ({
-          ...f,
-          title:       b.title                    || f.title,
-          author:      b.author                   || f.author,
-          publisher:   b.publisher                || f.publisher,
-          year:        b.publishedDate ? b.publishedDate.slice(0, 4) : f.year,
-          description: b.description              || f.description,
-          isbn:        b.isbn || data.isbn        || f.isbn,
-          cover:       b.thumbnail               || f.cover,
-        }));
-        setErrors({});
-
-        const isbnNote = (b.isbn || data.isbn) ? ` (ISBN: ${b.isbn || data.isbn})` : "";
-        const src      = data.strategy === "open-library" ? "Open Library"
-                       : data.strategy === "google-books" ? "Google Books"
-                       : data.strategy?.includes("isbn") ? "ISBN lookup"
-                       : "metadata lookup";
-        setScanState(SCAN_STATE.SUCCESS);
-        setScanMessage(`Book identified via ${src}${isbnNote}. Fields filled — review and edit as needed.`);
-
-      } else if (data.parsed) {
-        // Open Library had no match — use Claude AI extracted metadata directly
-        const p = data.parsed;
-        setForm(f => ({
-          ...f,
-          title:     p.title                                       || f.title,
-          author:    Array.isArray(p.authors)
-                       ? p.authors.join(", ")
-                       : p.authors                                 || f.author,
-          publisher: p.publisher                                   || f.publisher,
-          year:      p.published_date ? String(p.published_date).slice(0, 4) : f.year,
-          isbn:      data.isbn || p.isbn                           || f.isbn,
-        }));
-        setErrors({});
-        setScanState(SCAN_STATE.SUCCESS);
-        setScanMessage("Cover scanned — fields filled from AI extraction. Review and edit as needed.");
-
-      } else {
-        // OCR ran but nothing useful found — at least fill ISBN if detected
-        setForm(f => ({
-          ...f,
-          isbn: data.isbn || f.isbn,
-        }));
-        setScanState(SCAN_STATE.ERROR);
-        setScanMessage(data.message || "OCR complete but no book metadata found. Fill in fields manually.");
-      }
-    } catch (networkErr) {
-      console.error("[Scan error]", networkErr);
-      setScanState(SCAN_STATE.ERROR);
-      setScanMessage("Could not reach the server. Make sure the backend is running on port 3001.");
-    }
   }
 
   /* ════════════════ RENDER ════════════════ */
@@ -570,9 +612,8 @@ export default function Books() {
                 style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-lg)" }}
               >
                 {[
-                  { mode:"scan-cover", Icon: Camera,      label:"Scan Cover (OCR)" },
-                  { mode:"lookup",     Icon: FileSearch,   label:"Search by Title" },
-                  { mode:"scan",       Icon: QrCode,       label:"Scan Barcode" },
+                  { mode:"lookup",  Icon: Search,  label:"Search by Title" },
+                  { mode:"scan",    Icon: QrCode,      label:"Scan Barcode" },
                   { mode:"manual",     Icon: PenLine,      label:"Add Manually" },
                 ].map(({ mode, Icon, label }) => (
                   <button
@@ -597,7 +638,7 @@ export default function Books() {
           <div className="flex items-center gap-1.5 flex-wrap">
             {["All","Available","OutOfStock"].map(s => {
               const active = statusFilter === s;
-              const chipColor = s === "Available" ? "#32667F" : s === "Borrowed" ? "#b87a1a" : s === "Overdue" ? "#c05a0a" : s === "OutOfStock" ? "#dc2626" : null;
+              const chipColor = s === "Available" ? "#32667F" : s === "OutOfStock" ? "#dc2626" : null;
               return (
                 <button
                   key={s}
@@ -671,16 +712,14 @@ export default function Books() {
               <div className="flex items-center gap-2.5">
                 {modalMode === "view" && <BookOpen size={18} style={{ color:"var(--accent-amber)" }} />}
                 {modalMode === "edit" && <PenLine size={18} style={{ color:"var(--accent-amber)" }} />}
-                {modalMode === "add" && form._mode === "scan-cover" && <Camera size={18} style={{ color:"var(--accent-amber)" }} />}
-                {modalMode === "add" && form._mode === "lookup"     && <FileSearch size={18} style={{ color:"var(--accent-amber)" }} />}
-                {modalMode === "add" && form._mode === "scan"       && <QrCode size={18} style={{ color:"var(--accent-amber)" }} />}
+                {modalMode === "add" && form._mode === "lookup" && <Search size={18} style={{ color:"var(--accent-amber)" }} />}
+                {modalMode === "add" && form._mode === "scan"   && <QrCode size={18} style={{ color:"var(--accent-amber)" }} />}
                 {modalMode === "add" && form._mode === "manual"     && <PenLine size={18} style={{ color:"var(--accent-amber)" }} />}
                 <h2 className="text-base font-bold" style={{ color:"var(--text-primary)" }}>
                   {modalMode === "view" ? "Book Details"
                    : modalMode === "edit" ? "Edit Book"
-                   : form._mode === "scan-cover" ? "Scan Book Cover (OCR)"
-                   : form._mode === "lookup"     ? "Search by Title / Author"
-                   : form._mode === "scan"       ? "Scan Barcode"
+                   : form._mode === "lookup" ? "Search by Title / Author"
+                   : form._mode === "scan"   ? "Scan Barcode"
                    : "Add Book Manually"}
                 </h2>
               </div>
@@ -840,134 +879,6 @@ export default function Books() {
               {/* ══ ADD MODE — Form fields ══ */}
               {(modalMode === "add") && (
                 <>
-              {/* ══ SCAN COVER MODE — OCR section ══ */}
-              {form._mode === "scan-cover" && (
-                <div className="flex flex-col gap-3">
-
-                  {/* Hidden file input for scan */}
-                  <input
-                    ref={scanRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={e => handleScanFile(e.target.files[0])}
-                  />
-
-                  {/* Instruction banner */}
-                  <div
-                    className="flex items-start gap-3 p-4 rounded-xl"
-                    style={{ background:"rgba(238,162,58,0.08)", border:"1.5px solid rgba(238,162,58,0.2)" }}
-                  >
-                    <Sparkles size={18} style={{ color:"var(--accent-amber)", flexShrink:0, marginTop:1 }} />
-                    <div>
-                      <p className="text-[13px] font-semibold mb-0.5" style={{ color:"var(--text-primary)" }}>
-                        OCR Book Cover Scanner
-                      </p>
-                      <p className="text-[12px]" style={{ color:"var(--text-secondary)" }}>
-                        Upload a photo of a book cover. PaddleOCR will read the text and
-                        auto-fill the form fields directly from the cover.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Upload trigger */}
-                  <button
-                    onClick={() => scanRef.current?.click()}
-                    disabled={scanState === SCAN_STATE.SCANNING}
-                    className="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-xl text-[13px] font-semibold border-2 border-dashed transition-colors duration-150"
-                    style={{
-                      background:   scanState === SCAN_STATE.SCANNING ? "var(--bg-subtle)" : "rgba(238,162,58,0.05)",
-                      borderColor:  scanState === SCAN_STATE.SCANNING ? "var(--border)"    : "rgba(238,162,58,0.35)",
-                      color:        scanState === SCAN_STATE.SCANNING ? "var(--text-muted)" : "var(--accent-amber)",
-                      cursor:       scanState === SCAN_STATE.SCANNING ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {scanState === SCAN_STATE.SCANNING ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        Scanning with PaddleOCR…</>
-                    ) : (
-                      <>
-                        <Camera size={16} />
-                        {form.cover ? "Scan a Different Cover" : "Upload Cover Image to Scan"}
-                      </>
-                    )}
-                  </button>
-
-                  {/* Status feedback banner */}
-                  {scanState !== SCAN_STATE.IDLE && (
-                    <div
-                      className="flex items-start gap-2.5 p-3.5 rounded-xl text-[12.5px]"
-                      style={{
-                        background: scanState === SCAN_STATE.SUCCESS
-                          ? "rgba(50,127,79,0.08)"
-                          : scanState === SCAN_STATE.ERROR
-                          ? "rgba(234,139,51,0.08)"
-                          : "rgba(50,102,127,0.08)",
-                        border: `1px solid ${
-                          scanState === SCAN_STATE.SUCCESS
-                            ? "rgba(50,127,79,0.2)"
-                            : scanState === SCAN_STATE.ERROR
-                            ? "rgba(234,139,51,0.25)"
-                            : "rgba(50,102,127,0.2)"
-                        }`,
-                        color: scanState === SCAN_STATE.SUCCESS
-                          ? "#2d7a47"
-                          : scanState === SCAN_STATE.ERROR
-                          ? "#c05a0a"
-                          : "#32667F",
-                      }}
-                    >
-                      {scanState === SCAN_STATE.SUCCESS  && <CheckCircle2 size={15} style={{ flexShrink:0, marginTop:1 }} />}
-                      {scanState === SCAN_STATE.ERROR    && <AlertCircle  size={15} style={{ flexShrink:0, marginTop:1 }} />}
-                      {scanState === SCAN_STATE.SCANNING && <Loader2      size={15} className="animate-spin" style={{ flexShrink:0, marginTop:1 }} />}
-                      <span>{scanMessage}</span>
-                    </div>
-                  )}
-
-                  {/* OCR raw text collapsible */}
-                  {ocrRawText && (
-                    <div>
-                      <button
-                        onClick={() => setShowOcrText(v => !v)}
-                        className="text-[11px] font-semibold flex items-center gap-1 mb-1"
-                        style={{ color:"var(--text-muted)" }}
-                      >
-                        <ChevronDown
-                          size={12}
-                          style={{ transform: showOcrText ? "rotate(180deg)" : "rotate(0deg)", transition:"transform 0.15s" }}
-                        />
-                        {showOcrText ? "Hide" : "Show"} raw OCR text
-                      </button>
-                      {showOcrText && (
-                        <pre
-                          className="text-[11px] p-3 rounded-lg overflow-x-auto whitespace-pre-wrap"
-                          style={{
-                            background:  "var(--bg-subtle)",
-                            border:      "1px solid var(--border-light)",
-                            color:       "var(--text-secondary)",
-                            maxHeight:   120,
-                            overflowY:   "auto",
-                            fontFamily:  "monospace",
-                          }}
-                        >
-                          {ocrRawText}
-                        </pre>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Divider */}
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 h-px" style={{ background:"var(--border-light)" }} />
-                    <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-muted)" }}>
-                      Review &amp; Edit Fields
-                    </span>
-                    <div className="flex-1 h-px" style={{ background:"var(--border-light)" }} />
-                  </div>
-                </div>
-              )}
-
               {/* ══ LOOKUP MODE — Search by Title/Author ══ */}
               {form._mode === "lookup" && (
                 <div className="flex flex-col gap-3">
@@ -977,7 +888,7 @@ export default function Books() {
                     className="flex items-start gap-3 p-4 rounded-xl"
                     style={{ background:"rgba(238,162,58,0.08)", border:"1.5px solid rgba(238,162,58,0.2)" }}
                   >
-                    <FileSearch size={18} style={{ color:"var(--accent-amber)", flexShrink:0, marginTop:1 }} />
+                    <BookOpen size={18} style={{ color:"var(--accent-amber)", flexShrink:0, marginTop:1 }} />
                     <div>
                       <p className="text-[13px] font-semibold mb-0.5" style={{ color:"var(--text-primary)" }}>
                         Search by Title / Author
@@ -1080,12 +991,183 @@ export default function Books() {
 
               {/* ══ BARCODE MODE ══ */}
               {form._mode === "scan" && (
-                <div
-                  className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 border-dashed text-[13px] text-center"
-                  style={{ background:"var(--bg-subtle)", borderColor:"var(--border)", color:"var(--text-secondary)" }}
-                >
-                  <QrCode size={40} style={{ color:"var(--text-secondary)" }} />
-                  <p>Point camera at barcode or enter ISBN manually below</p>
+                <div className="flex flex-col gap-3">
+
+                  {/* Info banner */}
+                  <div className="flex items-start gap-3 p-4 rounded-xl"
+                    style={{ background:"rgba(238,162,58,0.08)", border:"1.5px solid rgba(238,162,58,0.2)" }}>
+                    <QrCode size={18} style={{ color:"var(--accent-amber)", flexShrink:0, marginTop:1 }} />
+                    <div>
+                      <p className="text-[13px] font-semibold mb-0.5" style={{ color:"var(--text-primary)" }}>
+                        Barcode / ISBN Scanner
+                      </p>
+                      <p className="text-[12px]" style={{ color:"var(--text-secondary)" }}>
+                        Point your camera at the book's barcode (back cover). Fields fill automatically on detection.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Camera viewfinder */}
+                  <div className="relative w-full rounded-xl overflow-hidden"
+                    style={{ aspectRatio:"4/3", background:"#0a1622", border:"1.5px solid var(--border)" }}>
+
+                    <video
+                      ref={videoRef}
+                      className="w-full h-full object-cover"
+                      style={{ display: scanActive ? "block" : "none" }}
+                      muted
+                      playsInline
+                    />
+
+                    {/* Overlay when not scanning */}
+                    {!scanActive && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                        <QrCode size={48} style={{ color:"rgba(238,162,58,0.4)" }} />
+                        <p className="text-[13px]" style={{ color:"rgba(255,255,255,0.4)" }}>
+                          {scanStatus === "found" ? "Scan complete" : "Camera inactive"}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Scan-line animation while active */}
+                    {scanActive && (
+                      <div className="absolute inset-0 pointer-events-none">
+                        {/* Corner brackets */}
+                        {[["top-4 left-4","border-t-2 border-l-2"],
+                          ["top-4 right-4","border-t-2 border-r-2"],
+                          ["bottom-4 left-4","border-b-2 border-l-2"],
+                          ["bottom-4 right-4","border-b-2 border-r-2"]
+                        ].map(([pos, bdr], i) => (
+                          <div key={i} className={`absolute ${pos} ${bdr} w-6 h-6 rounded-sm`}
+                            style={{ borderColor:"#EEA23A" }} />
+                        ))}
+                        {/* Animated scan line */}
+                        <div className="absolute left-6 right-6"
+                          style={{
+                            height: 2,
+                            background: "linear-gradient(90deg, transparent, #EEA23A, transparent)",
+                            animation: "scanline 2s ease-in-out infinite",
+                            top: "50%",
+                          }} />
+                      </div>
+                    )}
+
+                    {/* Camera switch button (if multiple cameras) */}
+                    {scanActive && cameras.length > 1 && (
+                      <button
+                        onClick={() => {
+                          const next = (activeCamIdx + 1) % cameras.length;
+                          setActiveCamIdx(next);
+                          stopScanner();
+                          setTimeout(() => startScanner(), 100);
+                        }}
+                        className="absolute bottom-3 right-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold"
+                        style={{ background:"rgba(0,0,0,0.6)", color:"#fff", backdropFilter:"blur(4px)" }}
+                      >
+                        <QrCode size={12} /> Flip
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Scan line CSS */}
+                  <style>{`
+                    @keyframes scanline {
+                      0%   { top: 20%; opacity: 0; }
+                      10%  { opacity: 1; }
+                      90%  { opacity: 1; }
+                      100% { top: 80%; opacity: 0; }
+                    }
+                  `}</style>
+
+                  {/* Status feedback */}
+                  {scanStatus !== "idle" && (
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[12.5px]"
+                      style={{
+                        background: scanStatus === "found"    ? "rgba(50,127,79,0.08)"
+                                  : scanStatus === "error"    ? "rgba(234,139,51,0.08)"
+                                  : "rgba(50,102,127,0.08)",
+                        border: `1px solid ${
+                                  scanStatus === "found"    ? "rgba(50,127,79,0.2)"
+                                  : scanStatus === "error"  ? "rgba(234,139,51,0.25)"
+                                  : "rgba(50,102,127,0.2)"}`,
+                        color:    scanStatus === "found"    ? "#2d7a47"
+                                : scanStatus === "error"    ? "#c05a0a"
+                                : "#32667F",
+                      }}>
+                      {scanStatus === "found"    && <CheckCircle2 size={14} style={{ flexShrink:0 }} />}
+                      {scanStatus === "error"    && <AlertCircle  size={14} style={{ flexShrink:0 }} />}
+                      {scanStatus === "fetching" && <Loader2      size={14} className="animate-spin" style={{ flexShrink:0 }} />}
+                      {scanStatus === "scanning" && <Loader2      size={14} className="animate-spin" style={{ flexShrink:0 }} />}
+                      <span>{scanFeedback}</span>
+                    </div>
+                  )}
+
+                  {/* Start / Stop button */}
+                  <div className="flex gap-2">
+                    {!scanActive ? (
+                      <button
+                        onClick={startScanner}
+                        disabled={scanStatus === "fetching"}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold transition-colors duration-150"
+                        style={{
+                          background: scanStatus === "fetching" ? "var(--bg-subtle)" : "var(--accent-amber)",
+                          color:      scanStatus === "fetching" ? "var(--text-muted)" : "#fff",
+                          cursor:     scanStatus === "fetching" ? "not-allowed" : "pointer",
+                        }}
+                        onMouseEnter={e => { if (scanStatus !== "fetching") e.currentTarget.style.background = "var(--accent-orange)"; }}
+                        onMouseLeave={e => { if (scanStatus !== "fetching") e.currentTarget.style.background = "var(--accent-amber)"; }}
+                      >
+                        {scanStatus === "fetching"
+                          ? <><Loader2 size={15} className="animate-spin" /> Looking up…</>
+                          : <><QrCode  size={15} /> {scanStatus === "found" ? "Scan Another" : "Start Camera"}</>}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => { stopScanner(); setScanActive(false); setScanStatus("idle"); setScanFeedback(""); }}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold border transition-colors duration-150"
+                        style={{ background:"var(--bg-subtle)", color:"var(--text-secondary)", borderColor:"var(--border)" }}
+                      >
+                        <X size={15} /> Stop Camera
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Divider */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-px" style={{ background:"var(--border-light)" }} />
+                    <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color:"var(--text-muted)" }}>
+                      or enter ISBN manually
+                    </span>
+                    <div className="flex-1 h-px" style={{ background:"var(--border-light)" }} />
+                  </div>
+
+                  {/* Manual ISBN input */}
+                  <div className="flex gap-2">
+                    <input
+                      className={`${inputCls} flex-1`}
+                      style={inputStyle()}
+                      onFocus={focusRing}
+                      onBlur={blurRing(false)}
+                      placeholder="e.g. 978-0132350884"
+                      value={manualIsbn}
+                      onChange={e => setManualIsbn(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && fetchByIsbn(manualIsbn)}
+                    />
+                    <button
+                      onClick={() => fetchByIsbn(manualIsbn)}
+                      disabled={scanStatus === "fetching" || !manualIsbn.trim()}
+                      className="px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-colors duration-150"
+                      style={{
+                        background: (!manualIsbn.trim() || scanStatus === "fetching") ? "var(--bg-subtle)" : "var(--accent-amber)",
+                        color:      (!manualIsbn.trim() || scanStatus === "fetching") ? "var(--text-muted)" : "#fff",
+                        cursor:     (!manualIsbn.trim() || scanStatus === "fetching") ? "not-allowed" : "pointer",
+                      }}
+                      onMouseEnter={e => { if (manualIsbn.trim() && scanStatus !== "fetching") e.currentTarget.style.background = "var(--accent-orange)"; }}
+                      onMouseLeave={e => { if (manualIsbn.trim() && scanStatus !== "fetching") e.currentTarget.style.background = "var(--accent-amber)"; }}
+                    >
+                      {scanStatus === "fetching" ? <Loader2 size={15} className="animate-spin" /> : "Look up"}
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1306,4 +1388,4 @@ function DetailItem({ label, value }) {
       </span>
     </div>
   );
-}to 
+}
