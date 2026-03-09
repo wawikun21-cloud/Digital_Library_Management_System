@@ -1,12 +1,11 @@
 // ─────────────────────────────────────────────────────────
 //  Lexora Backend  —  index.js
-//  Express + OCR.space + Open Library + Google Books
+//  Express + Open Library + Google Books
 // ─────────────────────────────────────────────────────────
 require("dotenv").config();
 
 const express    = require("express");
 const cors       = require("cors");
-const scanRouter = require("./routes/scanBookCover");
 const searchRouter = require("./routes/searchBooks");
 
 const app  = express();
@@ -20,7 +19,6 @@ app.use(cors({
 app.use(express.json());
 
 // ── Routes ───────────────────────────────────────────────
-app.use("/api", scanRouter);
 app.use("/api", searchRouter);
 
 // ── Health check ─────────────────────────────────────────

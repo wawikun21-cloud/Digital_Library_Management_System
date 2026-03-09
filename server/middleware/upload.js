@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────
 //  middleware/upload.js
-//  Multer config — image only, max 1 MB (OCR.space free tier)
+//  Multer config — image only, max 1 MB
 // ─────────────────────────────────────────────────────────
 const multer = require("multer");
 
@@ -14,7 +14,7 @@ const ALLOWED_MIME = new Set([
   "image/tiff",
 ]);
 
-const MAX_SIZE_BYTES = 1 * 1024 * 1024; // 1 MB — OCR.space free tier limit
+const MAX_SIZE_BYTES = 1 * 1024 * 1024; // 1 MB
 
 const storage = multer.memoryStorage();
 
@@ -43,7 +43,7 @@ function handleUploadError(err, _req, res, next) {
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
         success: false,
-        error:   "Image is too large. Maximum allowed size is 1 MB (OCR.space free tier limit).",
+        error:   "Image is too large. Maximum allowed size is 1 MB.",
       });
     }
     return res.status(400).json({ success: false, error: err.message });

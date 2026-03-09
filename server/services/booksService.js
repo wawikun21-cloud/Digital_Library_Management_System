@@ -1,25 +1,10 @@
 // ─────────────────────────────────────────────────────────
 //  services/booksService.js
-//  ISBN regex extraction + Google Books API lookup
-//  Includes: retry on 429, smart title cleaning
+//  Google Books API lookup
 // ─────────────────────────────────────────────────────────
 const axios = require("axios");
 
 const GOOGLE_BOOKS_API = "https://www.googleapis.com/books/v1/volumes";
-
-// ── ISBN regex ───────────────────────────────────────────
-const ISBN_REGEX =
-  /(?:ISBN(?:-1[03])?:?\s*)?(?=[-\d\sX]{10,17})(?:97[89][-\s]?)?(?:\d[-\s]?){9}[\dXx]/gi;
-
-/**
- * Extract all ISBNs found in a text string.
- */
-function extractISBNs(text) {
-  const raw = text.match(ISBN_REGEX) || [];
-  return raw
-    .map((s) => s.replace(/[^0-9Xx]/g, "").toUpperCase())
-    .filter((s) => s.length === 10 || s.length === 13);
-}
 
 /**
  * Sleep helper for retry delays.
@@ -93,23 +78,4 @@ async function lookupByISBN(isbn) {
   return queryGoogleBooks(`isbn:${isbn}`);
 }
 
-/**
- * Search by title extracted from OCR.
- * Cleans up noise words and punctuation before querying.
- */
-async function searchByTitle(titleGuess) {
-  // Remove lone punctuation, numbers-only tokens, and very short words
-  const cleaned = titleGuess
-    .split(/\s+/)
-    .filter((w) => w.length > 2 && /[a-zA-Z]/.test(w))  // must have letters
-    .filter((w) => !/^[\d\W]+$/.test(w))                  // skip pure numbers/symbols
-    .slice(0, 6)                                           // max 6 words
-    .join(" ");
-
-  if (!cleaned) return null;
-
-  console.log(`[Google Books] Searching intitle: "${cleaned}"`);
-  return queryGoogleBooks(`intitle:${cleaned}`);
-}
-
-module.exports = { extractISBNs, lookupByISBN, searchByTitle };
+module.exports = { lookupByISBN };
