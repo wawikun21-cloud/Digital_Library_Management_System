@@ -1,0 +1,19 @@
+# Node
+client/node_modules/
+
+# React build
+client/build/
+
+# Python
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
