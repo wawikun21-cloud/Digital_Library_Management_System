@@ -26,8 +26,6 @@ app.get("/api/health", (_req, res) => {
   res.json({
     status:          "ok",
     timestamp:       new Date().toISOString(),
-    ocrProvider:     "OCR.space",
-    ocrKeySet:       !!process.env.OCR_SPACE_API_KEY,
     googleBooksKey:  process.env.GOOGLE_BOOKS_API_KEY
       ? "✅ set"
       : "⚠️  not set (unauthenticated quota applies)",
@@ -48,7 +46,6 @@ app.use((err, _req, res, _next) => {
 // ── Start ────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n🚀  Lexora server     →  http://localhost:${PORT}`);
-  console.log(`🔍  OCR provider      →  OCR.space API`);
   console.log(`📚  Open Library      →  primary metadata source`);
   console.log(`📖  Google Books      →  fallback metadata source`);
   console.log(

@@ -1,7 +1,7 @@
 {
   "name": "lexora-server",
   "version": "1.0.0",
-  "description": "Lexora E-Library backend with Google Cloud Vision OCR",
+  "description": "Lexora E-Library backend",
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
