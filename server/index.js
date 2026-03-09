@@ -1,12 +1,14 @@
 // ─────────────────────────────────────────────────────────
 //  Lexora Backend  —  index.js
-//  Express + Open Library + Google Books
+//  Express + MySQL Database + Open Library + Google Books
 // ─────────────────────────────────────────────────────────
 require("dotenv").config();
 
 const express    = require("express");
 const cors       = require("cors");
 const searchRouter = require("./routes/searchBooks");
+const booksRouter = require("./routes/books");
+const { initDatabase, testConnection } = require("./config/db");
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -14,18 +16,21 @@ const PORT = process.env.PORT || 3001;
 // ── Middleware ───────────────────────────────────────────
 app.use(cors({
   origin:  process.env.CLIENT_ORIGIN || "http://localhost:5173",
-  methods: ["GET", "POST"],
+  methods: ["GET", "POST", "PUT", "DELETE"],
 }));
 app.use(express.json());
 
 // ── Routes ───────────────────────────────────────────────
 app.use("/api", searchRouter);
+app.use("/api/books", booksRouter);
 
 // ── Health check ─────────────────────────────────────────
-app.get("/api/health", (_req, res) => {
+app.get("/api/health", async (_req, res) => {
+  const dbStatus = await testConnection();
   res.json({
-    status:          "ok",
+    status:          dbStatus ? "ok" : "db_error",
     timestamp:       new Date().toISOString(),
+    database:        dbStatus ? "✅ connected" : "❌ disconnected",
     googleBooksKey:  process.env.GOOGLE_BOOKS_API_KEY
       ? "✅ set"
       : "⚠️  not set (unauthenticated quota applies)",
@@ -44,13 +49,33 @@ app.use((err, _req, res, _next) => {
 });
 
 // ── Start ────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n🚀  Lexora server     →  http://localhost:${PORT}`);
-  console.log(`📚  Open Library      →  primary metadata source`);
-  console.log(`📖  Google Books      →  fallback metadata source`);
-  console.log(
-    `🔑  Google Books key  →  ${
-      process.env.GOOGLE_BOOKS_API_KEY ? "✅ set" : "⚠️  not set"
-    }\n`
-  );
-});
+async function startServer() {
+  try {
+    // Initialize database (create tables if not exist)
+    await initDatabase();
+    
+    // Test database connection
+    const dbConnected = await testConnection();
+    if (!dbConnected) {
+      console.error("⚠️  Warning: Could not connect to MySQL database");
+    }
+
+    app.listen(PORT, () => {
+      console.log(`\n🚀  Lexora server     →  http://localhost:${PORT}`);
+      console.log(`🗄️  Database          →  MySQL (lexora)`);
+      console.log(`📚  Open Library      →  primary metadata source`);
+      console.log(`📖  Google Books      →  fallback metadata source`);
+      console.log(
+        `🔑  Google Books key  →  ${
+          process.env.GOOGLE_BOOKS_API_KEY ? "✅ set" : "⚠️  not set"
+        }\n`
+      );
+    });
+  } catch (error) {
+    console.error("❌ Failed to start server:", error.message);
+    process.exit(1);
+  }
+}
+
+startServer();
+
