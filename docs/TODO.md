@@ -1,32 +1,58 @@
-# TODO: Add Student Fields to Borrow Transaction Modal
+# Project Reorganization TODO
 
-## Plan
-1. [x] Update Database - Add new columns to `borrowed_books` table
-2. [x] Update Frontend - Add new form fields in Borrowed.jsx
-3. [x] Update Backend Route - Accept new fields in transactions.js
-4. [x] Update Model - Handle new fields in Transaction.js
+## ✅ COMPLETED - Professional Project Reorganization
 
-## Database SQL (run in MySQL)
-```sql
-ALTER TABLE borrowed_books 
-ADD COLUMN borrower_id_number VARCHAR(50) DEFAULT NULL,
-ADD COLUMN borrower_email VARCHAR(100) DEFAULT NULL,
-ADD COLUMN borrower_course VARCHAR(100) DEFAULT NULL,
-ADD COLUMN borrower_yr_level VARCHAR(20) DEFAULT NULL,
-ADD COLUMN borrow_date DATE DEFAULT NULL;
+### Client Side (React + Vite)
 
--- Set existing records borrow_date to current date
-UPDATE borrowed_books SET borrow_date = CURDATE() WHERE borrow_date IS NULL;
-```
+#### API Service Layer
+- `client/src/services/api/booksApi.js` - Book CRUD operations
+- `client/src/services/api/transactionsApi.js` - Transaction/borrowed operations
+- `client/src/services/api/searchApi.js` - Search and ISBN lookup
+- `client/src/services/api/index.js` - Centralized exports
 
-## Implementation Summary
-The following fields have been added to the Borrow Transaction modal:
-- Student Name (already existed as borrower_name)
-- ID Number (new field: borrower_id_number)
-- Contact No. (already existed as borrower_contact)
-- Email (new field: borrower_email)
-- Course (new field: borrower_course)
-- Yr Level (new field: borrower_yr_level)
-- Date Borrowed (new field: borrow_date - auto-filled with current date)
-- Due Date (already existed - manually set)
+#### Constants
+- `client/src/constants/index.js` - API endpoints, status values, validation rules
+- `client/src/constants/theme.js` - Theme colors, gradients, spacing, animations
 
+#### Utilities
+- `client/src/utils/validation.js` - Form validation helpers
+- `client/src/utils/helpers.js` - Date formatting, debounce, utilities
+- `client/src/utils/storage.js` - LocalStorage helpers
+- `client/src/utils/index.js` - Centralized exports
+
+#### Custom Hooks
+- `client/src/hooks/useBooks.js` - Book management with filters, sorting
+- `client/src/hooks/useToast.js` - Toast notification management
+- `client/src/hooks/useLocalStorage.js` - React state with localStorage
+
+#### Environment Configuration
+- `client/.env.example` - Environment variable template
+
+### Server Side (Express + MySQL)
+
+#### Controllers
+- `server/controllers/booksController.js` - Book CRUD with validation
+
+#### Utils
+- `server/utils/asyncHandler.js` - Async error handler wrapper
+- `server/utils/ApiError.js` - Custom error class
+- `server/utils/validation.js` - Server-side validation
+- `server/utils/responseFormatter.js` - Consistent API responses
+- `server/utils/index.js` - Centralized exports
+
+#### Environment Configuration
+- `server/.env.example` - Environment variable template
+
+---
+
+## Remaining Tasks (Optional Enhancements)
+
+### Client Side
+- [ ] Combine CSS files into logical groups
+- [ ] Create `useBorrowed.js` hook
+- [ ] Update `vite.config.js` with env configuration
+
+### Server Side
+- [ ] Create transactionsController.js
+- [ ] Create searchController.js
+- [ ] Enhance services/booksService.js
