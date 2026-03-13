@@ -19,11 +19,11 @@ function isOutOfStock(book) {
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 const EMPTY_FORM = {
-  title:"", subtitle:"", authors:"", edition:"", 
+  title:"", subtitle:"", authors:"", author:"", edition:"", 
   lccn:"", isbn:"", issn:"",
   materialType:"Book", subtype:"Hardcover",
   authorName:"", authorDates:"",
-  place:"", publisher:"", date:"",
+  place:"", publisher:"", date:"", year:"",
   extent:"", otherDetails:"", size:"",
   genre:"", description:"", status:"Available",
   cover:null, quantity:1, 
@@ -121,7 +121,7 @@ export default function Books() {
     [books]
   );
 
-const openModal = useCallback((mode = "manual") => {
+  const openModal = useCallback((mode = "manual") => {
     setDdOpen(false);
     setForm({ ...EMPTY_FORM, _mode: mode });
     setErrors({});
@@ -131,12 +131,12 @@ const openModal = useCallback((mode = "manual") => {
 
   function validate() {
     const e = {};
-    if (!form.title.trim()) e.title = "Title is required";
-    if (!form.author.trim()) e.author = "Author is required";
-    if (!form.genre.trim()) e.genre = "Genre is required";
-    if (!form.isbn.trim()) e.isbn = "ISBN is required";
-    if (!form.year) e.year = "Year is required";
-    if (!form.publisher.trim()) e.publisher = "Publisher is required";
+    if (!form.title?.trim()) e.title = "Title is required";
+    if (!(form.authors || form.author)?.trim()) e.author = "Author is required";
+    if (!form.genre?.trim()) e.genre = "Genre is required";
+    if (!form.isbn?.trim()) e.isbn = "ISBN is required";
+    if (!form.date && !form.year) e.year = "Year is required";
+    if (!form.publisher?.trim()) e.publisher = "Publisher is required";
     return e;
   }
 
@@ -145,10 +145,13 @@ const handleSubmit = useCallback(async () => {
     if (Object.keys(e).length) { setErrors(e); return; }
     try {
       const quantity = Number(form.quantity) || 0;
+      const year = Number(form.date || form.year) || 0;
+      const author = form.authors || form.author || "";
+      
       const response = await fetch(`${API_BASE}/api/books`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, year: Number(form.year), quantity }),
+        body: JSON.stringify({ ...form, author, year, quantity }),
       });
       const result = await response.json();
       if (result.success) {
@@ -166,14 +169,14 @@ const handleSubmit = useCallback(async () => {
   function handleViewDetails(book) {
     setSelectedBook(book);
     setModalMode("view");
-    setForm({ ...book, _mode: "manual" });
+    setForm({ ...EMPTY_FORM, ...book, _mode: "manual" });
     setModal(true);
   }
 
   function handleEdit(book) {
     setSelectedBook(book);
     setModalMode("edit");
-    setForm({ ...book, _mode: "manual" });
+    setForm({ ...EMPTY_FORM, ...book, _mode: "manual" });
     setErrors({});
     setModal(true);
   }
@@ -219,10 +222,13 @@ const handleUpdate = useCallback(async () => {
     if (Object.keys(e).length) { setErrors(e); return; }
     try {
       const quantity = Number(form.quantity) || 0;
+      const year = Number(form.date || form.year) || 0;
+      const author = form.authors || form.author || "";
+
       const response = await fetch(`${API_BASE}/api/books/${selectedBook.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, year: Number(form.year), quantity }),
+        body: JSON.stringify({ ...form, author, year, quantity }),
       });
       const result = await response.json();
       if (result.success) {

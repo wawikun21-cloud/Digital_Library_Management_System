@@ -86,7 +86,7 @@ export default function BookForm({ form, setForm, errors, setErrors }) {
           className={`${inputCls} resize-y min-h-[120px]`}
           style={inputStyle()}
           placeholder="Enter a brief summary or description of the book..."
-          value={form.description}
+          value={form.description ?? ""}
           onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
         />
       </div>
@@ -112,7 +112,7 @@ function Field({ label, fkey, type = "text", placeholder = "", form, setForm, er
         style={inputStyle(!!err)}
         type={type}
         placeholder={placeholder || label}
-        value={form[fkey]}
+        value={form[fkey] ?? ""}
         onChange={e => {
           setForm(f => ({ ...f, [fkey]: e.target.value }));
           if (err) setErrors(v => { const n = { ...v }; delete n[fkey]; return n; });
