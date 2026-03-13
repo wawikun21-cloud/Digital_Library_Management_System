@@ -19,10 +19,15 @@ function isOutOfStock(book) {
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 const EMPTY_FORM = {
-  title:"", subtitle:"", author:"", genre:"", isbn:"", year:"",
-  publisher:"", description:"", status:"Available",
+  title:"", subtitle:"", authors:"", edition:"", 
+  lccn:"", isbn:"", issn:"",
+  materialType:"Book", subtype:"Hardcover",
+  authorName:"", authorDates:"",
+  place:"", publisher:"", date:"",
+  extent:"", otherDetails:"", size:"",
+  genre:"", description:"", status:"Available",
   cover:null, quantity:1, 
-  accessionNumber:"", callNumber:"", edition:"", volume:"", size:"",
+  accessionNumber:"", callNumber:"", volume:"",
   _mode:"manual",
 };
 

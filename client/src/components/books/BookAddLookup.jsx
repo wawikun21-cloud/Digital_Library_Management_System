@@ -95,9 +95,7 @@ export default function BookAddLookup({
                       style={{ background:"var(--bg-subtle)", border:"1.5px solid var(--border)" }}
                     >
                       <div className="w-10 h-14 rounded shrink-0 overflow-hidden flex items-center justify-center bg-input border border-border">
-                        {r.thumbnail
-                          ? <img src={r.thumbnail} alt="" className="w-full h-full object-cover" />
-                          : <BookOpen size={16} style={{ color:"var(--text-muted)" }} />}
+                          <BookOpen size={16} style={{ color:"var(--text-muted)" }} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-semibold leading-snug truncate" style={{ color:"var(--text-primary)" }}>{r.title}</p>

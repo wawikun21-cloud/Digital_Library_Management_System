@@ -22,14 +22,6 @@ export default function BookCard({ book, idx, onViewDetails, onEdit, onDelete, g
           onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.25)'}
           onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
         >
-          {book.cover ? (
-            <img 
-              src={book.cover} 
-              alt={book.title} 
-              className="w-full h-full object-cover rounded-lg"
-              style={{ boxShadow: 'var(--shadow-md)' }}
-            />
-          ) : (
             <div
               className="w-full h-full flex flex-col items-center justify-center gap-2 rounded-lg shadow-md group-hover:shadow-hover"
               style={{ background: `linear-gradient(145deg, ${a}, ${b})` }}
@@ -39,7 +31,6 @@ export default function BookCard({ book, idx, onViewDetails, onEdit, onDelete, g
                 {initials}
               </span>
             </div>
-          )}
 
           {/* Status Badge - Floating on cover */}
           <div

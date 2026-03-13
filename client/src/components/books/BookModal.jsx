@@ -37,9 +37,10 @@ export default function BookModal({
       onClick={e => e.target === e.currentTarget && onClose()}
       role="dialog"
       aria-modal="true"
+      aria-labelledby="modal-title"
     >
       <div
-        className="w-full max-w-[640px] max-h-[90vh] flex flex-col rounded-2xl overflow-hidden anim-modal shadow-2xl"
+        className="w-full max-w-[720px] max-h-[90vh] flex flex-col rounded-2xl overflow-hidden anim-modal shadow-2xl"
         style={{ background:"var(--bg-surface)", border:"1.5px solid var(--border)" }}
       >
         {/* Header */}
@@ -51,7 +52,7 @@ export default function BookModal({
               {isAdd && addMode === "manual" && <PenLine size={20} />}
               {isAdd && addMode === "import" && <FileSpreadsheet size={20} />}
             </div>
-            <h2 className="text-lg font-bold tracking-tight text-primary">
+            <h2 id="modal-title" className="text-lg font-bold tracking-tight text-primary">
               {isView ? "Book Details" : isEdit ? "Edit Book" :
                addMode === "import" ? "Import from Excel" : "Add Book"}
             </h2>
@@ -66,7 +67,12 @@ export default function BookModal({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar">
+        <div 
+          className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/20"
+          tabIndex="0"
+          role="region"
+          aria-labelledby="modal-title"
+        >
           {isView && <BookView book={book} />}
           {isEdit && <BookForm form={form} setForm={setForm} errors={errors} setErrors={setErrors} />}
           {isAdd && (

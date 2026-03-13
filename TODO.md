@@ -1,8 +1,13 @@
-# Cover/Icon Removal Progress
+# Cover/Icon Removal ✅
 
-- [x] BookCard.jsx: Cover → Book icon (gradient)
-- [x] BookView.jsx: Cover → Book icon (subtle bg)
-- [ ] BookForm.jsx: Remove cover upload/preview
-- [ ] BookAddLookup.jsx: Remove thumbnail preview
-- [ ] Backend model (if cover field)
-- [ ] Test UI
+# Horizontal Book Details Modal (No Scroll)
+
+## Plan:
+- BookView.jsx: Horizontal layout (icon left, details right/tabs)
+- Responsive: Horizontal desktop, vertical mobile
+- UX: Hover cards, full info visible
+
+## Steps:
+- [ ] Step 1: Update BookView.jsx to horizontal full-details
+- [ ] Step 2: Test modal view (no scroll)
+- [ ] Complete
