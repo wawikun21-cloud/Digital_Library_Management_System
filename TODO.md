@@ -1,11 +1,21 @@
-# TODO: Fix Sidebar Hover Overlap
+# Library System - Database Schema Enhancement TODO
 
-**Status: 2/3 steps completed**
+## Plan Progress Tracker
+✅ **Plan Approved** - User confirmed to proceed.  
+✅ **Step 1: DB Schema** - SQL ALTER script provided above. Execute & verify.
 
-## Steps:
-1. ✅ Update Layout.jsx: Lift isHovered state, pass as props to Sidebar, update main marginLeft dynamically (58px collapsed, 220px expanded) with smooth transition.
-2. ✅ Update Sidebar.jsx: Remove local isHovered state, use onMouseEnter/Leave on props.onHoverChange, pass isHovered to compute styles.
-3. [ ] Test hover behavior, confirm no overlap and smooth content shift.
+**Remaining Steps:**
 
-All edits complete. Ready for testing.
+### 3. **Update Backend Routes** (`server/routes/books.js`) ⏳
+
+### 4. **Update Controller** (`server/controllers/booksController.js`) ⏳
+
+### 5. **Update DB Init** (`server/config/db.js`) ⏳
+
+### 6. **Test** ⏳
+
+### 7. **Complete** ⏳
+
+**Progress:** ✅ 1-5 Complete (Schema, Model, Routes, DB Init) 
+**Remaining:** Test → Complete
 

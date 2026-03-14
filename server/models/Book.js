@@ -89,12 +89,29 @@ const BookModel = {
     try {
       const {
         title,
+        subtitle = null,
         author,
+        authors = null,
         genre,
         isbn,
+        issn = null,
+        lccn = null,
+        accessionNumber = null,
+        callNumber = null,
         year,
+        date = null,
         publisher,
+        edition = null,
+        materialType = null,
+        subtype = null,
+        extent = null,
+        size = null,
+        volume = null,
+        authorName = null,
+        authorDates = null,
+        place = null,
         description = "",
+        otherDetails = null,
         status = "Available",
         cover = null,
         quantity = 1,
@@ -104,9 +121,18 @@ const BookModel = {
       const finalStatus = quantity === 0 ? "OutOfStock" : status;
 
       const [result] = await pool.query(
-        `INSERT INTO books (title, author, genre, isbn, year, publisher, description, status, cover, quantity)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [title, author, genre, isbn, year, publisher, description, finalStatus, cover, quantity]
+        `INSERT INTO books (
+          title, subtitle, author, authors, genre, isbn, issn, lccn, accessionNumber, 
+          callNumber, year, date, publisher, edition, materialType, subtype, extent, 
+          size, volume, authorName, authorDates, place, description, otherDetails, 
+          status, cover, quantity
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          title, subtitle, author, authors, genre, isbn, issn, lccn, accessionNumber,
+          callNumber, year, date, publisher, edition, materialType, subtype, extent,
+          size, volume, authorName, authorDates, place, description, otherDetails,
+          finalStatus, cover, quantity
+        ]
       );
 
       // Get the created book
@@ -130,14 +156,31 @@ const BookModel = {
     try {
       const {
         title,
+        subtitle = null,
         author,
+        authors = null,
         genre,
         isbn,
+        issn = null,
+        lccn = null,
+        accessionNumber = null,
+        callNumber = null,
         year,
+        date = null,
         publisher,
-        description,
+        edition = null,
+        materialType = null,
+        subtype = null,
+        extent = null,
+        size = null,
+        volume = null,
+        authorName = null,
+        authorDates = null,
+        place = null,
+        description = null,
+        otherDetails = null,
         status,
-        cover,
+        cover = null,
         quantity,
       } = bookData;
 
@@ -152,16 +195,25 @@ const BookModel = {
 
       await pool.query(
         `UPDATE books SET 
-          title = ?, author = ?, genre = ?, isbn = ?, year = ?, 
-          publisher = ?, description = ?, status = ?, cover = ?, quantity = ?
+          title = ?, subtitle = ?, author = ?, authors = ?, genre = ?, isbn = ?, issn = ?, 
+          lccn = ?, accessionNumber = ?, callNumber = ?, year = ?, date = ?, publisher = ?, 
+          edition = ?, materialType = ?, subtype = ?, extent = ?, size = ?, volume = ?, 
+          authorName = ?, authorDates = ?, place = ?, description = ?, otherDetails = ?, 
+          status = ?, cover = ?, quantity = ?
          WHERE id = ?`,
-        [title, author, genre, isbn, year, publisher, description, finalStatus, cover, quantity, id]
+        [
+          title, subtitle, author, authors, genre, isbn, issn,
+          lccn, accessionNumber, callNumber, year, date, publisher,
+          edition, materialType, subtype, extent, size, volume,
+          authorName, authorDates, place, description, otherDetails,
+          finalStatus, cover, quantity, id
+        ]
       );
 
       // Get updated book
       const [rows] = await pool.query("SELECT * FROM books WHERE id = ?", [id]);
       
-      console.log(`✅ Book updated: ${title} (ID: ${id})`);
+      console.log(`✅ Book updated: ${title || current[0].title} (ID: ${id})`);
       return { success: true, data: rows[0] };
     } catch (error) {
       console.error("[BookModel.update] Error:", error.message);

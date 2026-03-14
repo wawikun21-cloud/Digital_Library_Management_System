@@ -42,25 +42,45 @@ async function initDatabase() {
     // Use the database
     await tempConnection.query(`USE \`${dbConfig.database}\``);
 
-    // Create books table
+    // Create books table (full schema)
     await tempConnection.query(`
       CREATE TABLE IF NOT EXISTS books (
         id INT AUTO_INCREMENT PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
+        subtitle VARCHAR(255) NULL,
         author VARCHAR(255) NOT NULL,
+        authors TEXT NULL,
         genre VARCHAR(100) NOT NULL,
         isbn VARCHAR(20) NOT NULL UNIQUE,
-        year INT NOT NULL,
+        issn VARCHAR(20) NULL,
+        lccn VARCHAR(20) NULL,
+        accessionNumber VARCHAR(50) NULL,
+        callNumber VARCHAR(100) NULL,
+        year INT NULL,
+        date INT NULL,
         publisher VARCHAR(255) NOT NULL,
-        description TEXT,
+        edition VARCHAR(50) NULL,
+        materialType VARCHAR(50) NULL,
+        subtype VARCHAR(50) NULL,
+        extent VARCHAR(100) NULL,
+        size VARCHAR(50) NULL,
+        volume VARCHAR(20) NULL,
+        authorName VARCHAR(255) NULL,
+        authorDates VARCHAR(50) NULL,
+        place VARCHAR(255) NULL,
+        description TEXT NULL,
+        otherDetails TEXT NULL,
         status VARCHAR(50) DEFAULT 'Available',
-        cover TEXT,
+        cover TEXT NULL,
         quantity INT DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_accession (accessionNumber),
+        INDEX idx_authors (authors),
+        INDEX idx_callNumber (callNumber)
       )
     `);
-    console.log("✅ Books table ready");
+    console.log("✅ Books table ready (full schema)");
 
     // Create borrowed_books table (for tracking borrowed books)
     await tempConnection.query(`
