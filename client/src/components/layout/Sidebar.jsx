@@ -1,5 +1,10 @@
+import { useState } from 'react';
 import { NavLink } from "react-router-dom";
 import { BarChart3, BookOpen, ClipboardList, Trash2, Sun, Moon, X } from "lucide-react";
+import Logo from './Logo.jsx';
+
+const SIDEBAR_WIDTHS = { COLLAPSED: 58, EXPANDED: 220 };
+const BRAND_HEIGHT = 66;
 
 const NAV = [
   { to: "/",         label: "Dashboard", Icon: BarChart3     },
@@ -12,18 +17,28 @@ const NAV = [
 export default function Sidebar({
   collapsed, darkMode, onToggleTheme, mobileOpen, onMobileClose,
 }) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const effectiveCollapsed = collapsed && !isHovered;
+  const desktopWidth = effectiveCollapsed ? SIDEBAR_WIDTHS.COLLAPSED : SIDEBAR_WIDTHS.EXPANDED;
+
   return (
     <>
       {/* ── Desktop sidebar (always visible ≥ lg) ── */}
       <aside
-        className="sidebar-w-transition fixed top-0 left-0 h-screen z-50 hidden lg:flex flex-col overflow-hidden"
+        className="sidebar-hover-expand fixed top-0 left-0 h-screen z-50 hidden lg:flex flex-col overflow-hidden transition-all duration-300"
         style={{
-          width:        collapsed ? 58 : 220,
-          background:   "var(--bg-sidebar)",
-          borderRight:  "1px solid var(--border-sidebar)",
+          width: desktopWidth,
+          background: "var(--bg-sidebar)",
+          borderRight: "1px solid var(--border-sidebar)",
         }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        aria-label="Main navigation"
+        role="navigation"
+        aria-expanded={!effectiveCollapsed}
       >
-        <Inner collapsed={collapsed} darkMode={darkMode} onToggleTheme={onToggleTheme} />
+        <Inner collapsed={effectiveCollapsed} darkMode={darkMode} onToggleTheme={onToggleTheme} />
       </aside>
 
       {/* ── Mobile drawer (slides in < lg) ── */}
@@ -34,15 +49,15 @@ export default function Sidebar({
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         ].join(" ")}
         style={{
-          width:       240,
-          background:  "var(--bg-sidebar)",
+          width: 240,
+          background: "var(--bg-sidebar)",
           borderRight: "1px solid var(--border-sidebar)",
         }}
       >
         {/* Close button */}
         <button
           onClick={onMobileClose}
-          className="absolute top-4 right-3 p-1.5 rounded-lg"
+          className="absolute top-4 right-3 p-1.5 rounded-lg hover:bg-white/10 transition-colors"
           style={{ color: "var(--text-on-sidebar)" }}
           aria-label="Close menu"
         >
@@ -58,24 +73,21 @@ export default function Sidebar({
 
 /* ── Shared sidebar content ─────────────────────── */
 function Inner({ collapsed, darkMode, onToggleTheme }) {
+  const variant = collapsed ? 'collapsed' : 'expanded';
+
   return (
     <div className="flex flex-col h-full">
 
       {/* Brand */}
       <div
-        className="flex items-center shrink-0 overflow-hidden"
+        className="flex items-center shrink-0 overflow-hidden border-b border-[var(--border-sidebar)] transition-padding"
         style={{
-          minHeight:    66,
-          padding:      collapsed ? "10px 0" : "10px 16px",
+          minHeight: BRAND_HEIGHT,
+          padding: collapsed ? "10px 0" : "10px 16px",
           justifyContent: collapsed ? "center" : "flex-start",
-          borderBottom: "1px solid var(--border-sidebar)",
-          transition:   "padding 0.25s",
         }}
       >
-        {collapsed
-          ? <img src="/icon.png"         alt="Lexora"      className="w-9 h-9 object-contain rounded-md shrink-0" />
-          : <img src="/sidebar-logo.png" alt="Lexora logo" className="h-11 max-w-[176px] w-full object-contain object-left" />
-        }
+        <Logo variant={variant} />
       </div>
 
       {/* Nav */}

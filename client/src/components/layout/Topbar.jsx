@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { Menu, X, ChevronDown, User, LogOut, Camera, Lock, Eye, EyeOff, Save } from "lucide-react";
+import { ChevronDown, User, LogOut, Camera, Lock, Eye, EyeOff, Save, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -14,9 +14,10 @@ const PAGE_TITLES = {
   "/":         "Analytics Dashboard",
   "/books":    "Books",
   "/borrowed": "Borrowed",
+  "/deleted":  "Recently Deleted",
 };
 
-export default function Topbar({ collapsed, onToggle, onMobileToggle }) {
+export default function Topbar() {
   const location = useLocation();
   const title    = PAGE_TITLES[location.pathname] ?? "Dashboard";
 
@@ -51,7 +52,6 @@ export default function Topbar({ collapsed, onToggle, onMobileToggle }) {
   };
 
   const handleSaveProfile = () => {
-    // Add your save logic here
     console.log("Saving profile:", profile);
     setProfileModalOpen(false);
     setSuccessModalOpen(true);
@@ -76,33 +76,8 @@ export default function Topbar({ collapsed, onToggle, onMobileToggle }) {
           transition:   "background 0.3s, border-color 0.3s",
         }}
       >
-        {/* Left: hamburger + page title */}
+        {/* Left: page title */}
         <div className="flex items-center gap-3 min-w-0">
-
-          {/* Desktop hamburger */}
-          <button
-            onClick={onToggle}
-            aria-label="Toggle sidebar"
-            className="hidden lg:flex items-center justify-center w-9 h-9 rounded-lg shrink-0 transition-colors duration-150"
-            style={{ color: "var(--text-secondary)" }}
-            onMouseEnter={e => { e.currentTarget.style.background = "rgba(238,162,58,0.12)"; e.currentTarget.style.color = "#EEA23A"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-secondary)"; }}
-          >
-            {collapsed ? <Menu size={20} /> : <X size={20} />}
-          </button>
-
-          {/* Mobile hamburger */}
-          <button
-            onClick={onMobileToggle}
-            aria-label="Open menu"
-            className="flex lg:hidden items-center justify-center w-9 h-9 rounded-lg shrink-0 transition-colors duration-150"
-            style={{ color: "var(--text-secondary)" }}
-            onMouseEnter={e => { e.currentTarget.style.background = "rgba(238,162,58,0.12)"; e.currentTarget.style.color = "#EEA23A"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-secondary)"; }}
-          >
-            <Menu size={20} />
-          </button>
-
           <h1
             className="text-[15px] font-semibold truncate"
             style={{ color: "var(--text-primary)" }}
@@ -379,4 +354,3 @@ export default function Topbar({ collapsed, onToggle, onMobileToggle }) {
     </>
   );
 }
-
