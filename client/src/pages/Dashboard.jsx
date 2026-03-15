@@ -19,6 +19,13 @@ const STATS = [
 ];
 
 const SEMESTERS = ["1st Sem", "2nd Sem"];
+
+// Derived dynamically — add new entries here as years accumulate in real data
+const SCHOOL_YEARS = [...new Set([
+  "2023–2024",
+  "2024–2025",
+  "2025–2026",
+])].sort().reverse();          // most-recent first
 const SEM_MONTHS = {
   "1st Sem": ["Aug", "Sep", "Oct", "Nov", "Dec", "Jan"],
   "2nd Sem": ["Feb", "Mar", "Apr", "May", "Jun", "Jul"],
@@ -349,7 +356,7 @@ function StatPills({ items }) {
 // FILTER BAR
 // ══════════════════════════════════════════════════════════════════════════════
 
-function FilterBar({ semester, month, onSemester, onMonth }) {
+function FilterBar({ schoolYear, onSchoolYear, semester, month, onSemester, onMonth }) {
   const months = ["All", ...SEM_MONTHS[semester]];
   return (
     <div className="rounded-2xl px-4 py-2.5 flex flex-wrap items-center gap-2.5"
@@ -360,6 +367,25 @@ function FilterBar({ semester, month, onSemester, onMonth }) {
           Filter
         </span>
       </div>
+
+      {/* ── School Year dropdown (dynamic) ── */}
+      <select
+        value={schoolYear}
+        onChange={e => onSchoolYear(e.target.value)}
+        className="px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all duration-150 outline-none cursor-pointer"
+        style={{
+          background: "var(--bg-subtle)",
+          border: "1px solid var(--border-light)",
+          color: "var(--text-secondary)",
+        }}
+      >
+        {SCHOOL_YEARS.map(sy => (
+          <option key={sy} value={sy}>{sy}</option>
+        ))}
+      </select>
+
+      <div className="w-px h-4 flex-shrink-0" style={{ background: "var(--border-light)" }} />
+
       <div className="flex gap-0.5 p-0.5 rounded-lg"
         style={{ background: "var(--bg-subtle)", border: "1px solid var(--border-light)" }}>
         {SEMESTERS.map(s => (
@@ -390,7 +416,7 @@ function FilterBar({ semester, month, onSemester, onMonth }) {
       </div>
       <span className="ml-auto text-[10px] font-semibold px-2.5 py-1 rounded-full flex-shrink-0"
         style={{ background: "rgba(19,47,69,0.08)", color: "#132F45" }}>
-        {semester}{month !== "All" ? ` · ${month}` : " · All Months"}
+        {schoolYear} · {semester}{month !== "All" ? ` · ${month}` : " · All Months"}
       </span>
     </div>
   );
@@ -785,8 +811,9 @@ function OverdueBooks({ semester, month }) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 export default function Dashboard() {
-  const [semester, setSemester] = useState("2nd Sem");
-  const [month,    setMonth]    = useState("All");
+  const [schoolYear, setSchoolYear] = useState(SCHOOL_YEARS[0]);   // default: most recent
+  const [semester,   setSemester]   = useState("2nd Sem");
+  const [month,      setMonth]      = useState("All");
 
   return (
     <main className="flex flex-col gap-4 lg:gap-5" aria-label="Library Analytics Dashboard">
@@ -807,7 +834,10 @@ export default function Dashboard() {
       </section>
 
       {/* Filter Bar */}
-      <FilterBar semester={semester} month={month} onSemester={setSemester} onMonth={setMonth} />
+      <FilterBar
+        schoolYear={schoolYear} onSchoolYear={sy => { setSchoolYear(sy); setMonth("All"); }}
+        semester={semester} month={month} onSemester={setSemester} onMonth={setMonth}
+      />
 
       {/*
         Bento Grid — 5 columns, 3 rows, zero dead space

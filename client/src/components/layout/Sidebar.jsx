@@ -38,7 +38,12 @@ export default function Sidebar({
         role="navigation"
         aria-expanded={!effectiveCollapsed}
       >
-        <Inner collapsed={effectiveCollapsed} darkMode={darkMode} onToggleTheme={onToggleTheme} />
+        <Inner
+          collapsed={effectiveCollapsed}
+          sidebarWidth={desktopWidth}
+          darkMode={darkMode}
+          onToggleTheme={onToggleTheme}
+        />
       </aside>
 
       {/* ── Mobile drawer (slides in < lg) ── */}
@@ -65,26 +70,34 @@ export default function Sidebar({
         </button>
 
         {/* Always expanded in mobile drawer */}
-        <Inner collapsed={false} darkMode={darkMode} onToggleTheme={onToggleTheme} />
+        <Inner
+          collapsed={false}
+          sidebarWidth={240}
+          darkMode={darkMode}
+          onToggleTheme={onToggleTheme}
+        />
       </aside>
     </>
   );
 }
 
 /* ── Shared sidebar content ─────────────────────── */
-function Inner({ collapsed, darkMode, onToggleTheme }) {
+function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme }) {
   const variant = collapsed ? 'collapsed' : 'expanded';
 
   return (
     <div className="flex flex-col h-full">
 
-      {/* Brand */}
+      {/* Brand — width is locked to the current sidebar width so the logo
+          never overflows into the nav area during the expand transition */}
       <div
-        className="flex items-center shrink-0 overflow-hidden border-b border-[var(--border-sidebar)] transition-padding"
+        className="flex items-center shrink-0 overflow-hidden border-b border-[var(--border-sidebar)]"
         style={{
           minHeight: BRAND_HEIGHT,
+          width: sidebarWidth,           // ← key fix: explicit width matches sidebar
           padding: collapsed ? "10px 0" : "10px 16px",
           justifyContent: collapsed ? "center" : "flex-start",
+          transition: "width 300ms, padding 300ms",
         }}
       >
         <Logo variant={variant} />
@@ -92,14 +105,6 @@ function Inner({ collapsed, darkMode, onToggleTheme }) {
 
       {/* Nav */}
       <nav className="flex-1 flex flex-col gap-0.5 p-2 pt-4 overflow-y-auto overflow-x-hidden">
-        {!collapsed && (
-          <p
-            className="text-[10px] font-semibold uppercase tracking-[0.12em] px-2 mb-3 whitespace-nowrap select-none"
-            style={{ color: "var(--text-muted)" }}
-          >
-            Main Menu
-          </p>
-        )}
 
         {NAV.map(({ to, label, Icon }) => (
           <NavLink
@@ -168,15 +173,6 @@ function Inner({ collapsed, darkMode, onToggleTheme }) {
             </span>
           )}
         </button>
-
-        {!collapsed && (
-          <span
-            className="text-[11px] px-1 whitespace-nowrap select-none"
-            style={{ color: "var(--text-muted)" }}
-          >
-            v1.0.0
-          </span>
-        )}
       </div>
     </div>
   );
