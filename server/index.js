@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────
 //  Lexora Backend  —  index.js
-//  Express + MySQL Database + Open Library + Google Books
+//  Express + MySQL Database
 // ─────────────────────────────────────────────────────────
 require("dotenv").config();
 
@@ -35,7 +35,6 @@ app.use(cors({
 app.use(express.json());
 
 // ── Routes ───────────────────────────────────────────────
-
 app.use("/api/books", booksRouter);
 app.use("/api/transactions", transactionsRouter);
 
@@ -46,9 +45,6 @@ app.get("/api/health", async (_req, res) => {
     status:          dbStatus ? "ok" : "db_error",
     timestamp:       new Date().toISOString(),
     database:        dbStatus ? "✅ connected" : "❌ disconnected",
-    googleBooksKey:  process.env.GOOGLE_BOOKS_API_KEY
-      ? "✅ set"
-      : "⚠️  not set (unauthenticated quota applies)",
   });
 });
 
@@ -78,13 +74,6 @@ async function startServer() {
     app.listen(PORT, () => {
       console.log(`\n🚀  Lexora server     →  http://localhost:${PORT}`);
       console.log(`🗄️  Database          →  MySQL (lexora)`);
-      console.log(`📚  Open Library      →  primary metadata source`);
-      console.log(`📖  Google Books      →  fallback metadata source`);
-      console.log(
-        `🔑  Google Books key  →  ${
-          process.env.GOOGLE_BOOKS_API_KEY ? "✅ set" : "⚠️  not set"
-        }\n`
-      );
     });
   } catch (error) {
     console.error("❌ Failed to start server:", error.message);
@@ -93,4 +82,3 @@ async function startServer() {
 }
 
 startServer();
-
