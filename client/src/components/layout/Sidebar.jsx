@@ -88,16 +88,14 @@ function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme }) {
   return (
     <div className="flex flex-col h-full">
 
-      {/* Brand — width is locked to the current sidebar width so the logo
-          never overflows into the nav area during the expand transition */}
+      {/* Brand — constant padding so the logo never jumps on expand */}
       <div
         className="flex items-center shrink-0 overflow-hidden border-b border-[var(--border-sidebar)]"
         style={{
           minHeight: BRAND_HEIGHT,
-          width: sidebarWidth,           // ← key fix: explicit width matches sidebar
-          padding: collapsed ? "10px 0" : "10px 16px",
-          justifyContent: collapsed ? "center" : "flex-start",
-          transition: "width 300ms, padding 300ms",
+          width: sidebarWidth,
+          padding: "10px 12px",
+          transition: "width 300ms ease",
         }}
       >
         <Logo variant={variant} />
@@ -113,10 +111,10 @@ function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme }) {
             end={to === "/"}
             title={collapsed ? label : undefined}
             className={({ isActive }) => [
-              "flex items-center gap-3 rounded-lg text-sm font-medium",
+              "flex items-center rounded-lg text-sm font-medium",
               "overflow-hidden whitespace-nowrap select-none",
               "transition-colors duration-150",
-              collapsed ? "justify-center py-2.5 px-0" : "px-3 py-2.5",
+              "px-3 py-2.5",
               isActive
                 ? "text-white"
                 : "hover:text-amber-400",
@@ -128,12 +126,19 @@ function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme }) {
           >
             {({ isActive }) => (
               <>
-                <Icon
-                  size={18}
-                  className="shrink-0"
-                  style={{ color: isActive ? "#F3B940" : undefined }}
-                />
-                {!collapsed && <span>{label}</span>}
+                {/* Fixed-width wrapper keeps the icon pinned — never shifts on expand */}
+                <span
+                  className="shrink-0 flex items-center justify-center"
+                  style={{ width: 18, minWidth: 18 }}
+                >
+                  <Icon
+                    size={18}
+                    style={{ color: isActive ? "#F3B940" : undefined }}
+                  />
+                </span>
+                {!collapsed && (
+                  <span className="ml-3 truncate">{label}</span>
+                )}
               </>
             )}
           </NavLink>
