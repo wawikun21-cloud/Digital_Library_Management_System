@@ -258,8 +258,14 @@ const fmtPeso = v => v >= 1000 ? `₱${(v / 1000).toFixed(1)}k` : `₱${v}`;
 function ChartTooltip({ active, payload, label, prefix = "", suffix = "" }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-xl px-3 py-2.5 text-[12px] z-50"
-      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-lg)" }}>
+    <div className="rounded-xl px-3 py-2.5 text-[12px]"
+      style={{
+        background: "var(--bg-surface)",
+        border: "1px solid var(--border)",
+        boxShadow: "var(--shadow-lg)",
+        position: "relative",
+        zIndex: 9999,
+      }}>
       {label && (
         <p className="font-bold mb-1.5 pb-1.5 text-[11px] uppercase tracking-wide"
           style={{ color: "var(--text-secondary)", borderBottom: "1px solid var(--border-light)" }}>
@@ -536,7 +542,7 @@ function AttendanceCount({ semester, month }) {
               axisLine={false} tickLine={false}
               width={30}
             />
-            <Tooltip content={<ChartTooltip suffix=" visits" />} />
+            <Tooltip content={<ChartTooltip suffix=" visits" />} wrapperStyle={{ zIndex: 9999 }} />
             <Area
               type="monotone" dataKey="visits" name="Visits"
               stroke="#32667F" strokeWidth={2}
@@ -577,7 +583,13 @@ function TotalFinesCollected({ semester, month }) {
     const d = payload[0];
     return (
       <div className="rounded-xl px-3 py-2.5 text-[11px]"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-lg)" }}>
+        style={{
+          background: "var(--bg-surface)",
+          border: "1px solid var(--border)",
+          boxShadow: "var(--shadow-lg)",
+          position: "relative",
+          zIndex: 9999,
+        }}>
         <p className="flex items-center gap-2 mb-1">
           <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: d.payload.color }} />
           <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{d.name}</span>
@@ -629,7 +641,7 @@ function TotalFinesCollected({ semester, month }) {
                   <Cell key={i} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip content={<DonutTooltip />} />
+              <Tooltip content={<DonutTooltip />} wrapperStyle={{ zIndex: 9999 }} />
             </PieChart>
           </ResponsiveContainer>
 
@@ -739,7 +751,7 @@ function OverdueBooks({ semester, month }) {
               width={22}
               allowDecimals={false}
             />
-            <Tooltip content={<ChartTooltip suffix=" books" />} cursor={{ fill: "var(--bg-hover)" }} />
+            <Tooltip content={<ChartTooltip suffix=" books" />} cursor={{ fill: "var(--bg-hover)" }} wrapperStyle={{ zIndex: 9999 }} />
             <Legend
               iconType="circle" iconSize={7}
               wrapperStyle={{ fontSize: 10, fontWeight: 700, color: "var(--text-primary)", paddingTop: 6 }}
