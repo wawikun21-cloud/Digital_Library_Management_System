@@ -89,7 +89,7 @@ export default function BookModal({
             <>
               <button
                 onClick={() => onDelete(book)}
-                className="px-5 py-2.5 rounded-xl text-[13px] font-bold text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-all duration-150"
+                className="px-5 py-2.5 rounded-xl text-[13px] font-bold text-red-600 hover:bg-red-250 border border-transparent hover:border-red-400 transition-all duration-150"
               >
                 Delete Book
               </button>

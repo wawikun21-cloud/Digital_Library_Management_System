@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import useDebounce from "../hooks/useDebounce";
 import { Library, Search, FileDown, ChevronUp, ChevronDown as ChevronDownIcon, X, BookOpen, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -57,16 +58,17 @@ function exportCSV(rows) {
 // ══════════════════════════════════════════════════════════════════════════════
 export default function Records() {
   const [search,   setSearch]   = useState("");
+  const debouncedSearch = useDebounce(search, 300);
   const [category, setCategory] = useState("All");
   const [status,   setStatus]   = useState("All");
-  const [sortKey,  setSortKey]  = useState("id");
+  const [sortKey,  setSortKey]  = useState("accessionNumber");
   const [sortDir,  setSortDir]  = useState("asc");
   const [isExporting, setIsExporting] = useState(false);
 
   const filtered = useMemo(() => {
     let rows = SAMPLE_BOOKS.filter(b => {
-      const q = search.toLowerCase();
-      const matchSearch   = !q || b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q) || b.id.toLowerCase().includes(q);
+      const q = debouncedSearch.toLowerCase();
+      const matchSearch   = !q || b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q) || b.accessionNumber.toLowerCase().includes(q);
       const matchCategory = category === "All" || b.category === category;
       const matchStatus   = status   === "All" || b.status   === status;
       return matchSearch && matchCategory && matchStatus;
@@ -182,7 +184,7 @@ export default function Records() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search title, author, ID…"
+            placeholder="Search title, author, accession no…"
             className="w-full pl-8 pr-8 py-1.5 rounded-lg text-[12px] outline-none transition-all"
             style={{
               background: "var(--bg-subtle)",
@@ -199,41 +201,49 @@ export default function Records() {
 
         <div className="w-px h-5 shrink-0" style={{ background: "var(--border-light)" }} />
 
-        {/* Category */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] font-bold uppercase tracking-wider shrink-0" style={{ color: "var(--text-muted)" }}>Category</span>
-          <div className="flex gap-1 flex-wrap">
-            {CATEGORIES.map(c => (
-              <button key={c} onClick={() => setCategory(c)}
-                className="px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all duration-150"
-                style={{
-                  background: category === c ? "#132F45" : "transparent",
-                  color:      category === c ? "#fff" : "var(--text-secondary)",
-                  border:     category === c ? "1px solid transparent" : "1px solid var(--border-light)",
-                }}>
-                {c}
-              </button>
-            ))}
+        {/* Category dropdown */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider shrink-0" style={{ color: "var(--text-muted)" }}>
+            Category
+          </span>
+          <div className="relative">
+            <select
+              value={category}
+              onChange={e => setCategory(e.target.value)}
+              className="appearance-none pl-3 pr-7 py-1.5 rounded-lg text-[11px] font-semibold outline-none cursor-pointer transition-all"
+              style={{
+                background: "var(--bg-subtle)",
+                border: category !== "All" ? "1px solid #132F45" : "1px solid var(--border-light)",
+                color: category !== "All" ? "#132F45" : "var(--text-secondary)",
+              }}
+            >
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <ChevronDownIcon size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--text-muted)" }} />
           </div>
         </div>
 
         <div className="w-px h-5 shrink-0" style={{ background: "var(--border-light)" }} />
 
-        {/* Status */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] font-bold uppercase tracking-wider shrink-0" style={{ color: "var(--text-muted)" }}>Status</span>
-          <div className="flex gap-1 flex-wrap">
-            {STATUSES.map(s => (
-              <button key={s} onClick={() => setStatus(s)}
-                className="px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all duration-150"
-                style={{
-                  background: status === s ? "rgba(238,162,58,0.18)" : "transparent",
-                  color:      status === s ? "#EEA23A" : "var(--text-secondary)",
-                  border:     status === s ? "1px solid rgba(238,162,58,0.35)" : "1px solid var(--border-light)",
-                }}>
-                {s}
-              </button>
-            ))}
+        {/* Status dropdown */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider shrink-0" style={{ color: "var(--text-muted)" }}>
+            Status
+          </span>
+          <div className="relative">
+            <select
+              value={status}
+              onChange={e => setStatus(e.target.value)}
+              className="appearance-none pl-3 pr-7 py-1.5 rounded-lg text-[11px] font-semibold outline-none cursor-pointer transition-all"
+              style={{
+                background: "var(--bg-subtle)",
+                border: status !== "All" ? "1px solid rgba(238,162,58,0.5)" : "1px solid var(--border-light)",
+                color: status !== "All" ? "#c07a0a" : "var(--text-secondary)",
+              }}
+            >
+              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <ChevronDownIcon size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--text-muted)" }} />
           </div>
         </div>
 

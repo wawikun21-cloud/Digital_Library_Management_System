@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import useDebounce from "../hooks/useDebounce";
 import { PackageX } from "lucide-react";
 import BookTable from "../components/BookTable";
 import ConfirmationModal from "../components/ConfirmationModal";
@@ -35,6 +36,7 @@ export default function Books() {
   const [loading, setLoading] = useState(true);
   const [books, setBooks] = useState([]);
   const [query, setQuery] = useState("");
+  const debouncedQuery = useDebounce(query, 300);
   const [statusFilter, setStatusFilter] = useState("All");
   const [genreFilter, setGenreFilter] = useState("");
   const [sortBy, setSortBy] = useState("");
@@ -47,8 +49,6 @@ export default function Books() {
   const [modalMode, setModalMode] = useState("add"); // "add", "view", "edit"
   const [deleteModal, setDeleteModal] = useState({ open: false, bookId: null, bookTitle: "" });
   const [toast, setToast] = useState({ visible: false, message: "", type: "info" });
-
-
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -75,7 +75,7 @@ export default function Books() {
   };
 
   const filtered = useMemo(() => {
-    const q = query.toLowerCase().trim();
+    const q = debouncedQuery.toLowerCase().trim();
     const result = books.filter(b => {
       if (q && !["title", "author", "genre", "isbn", "publisher"]
           .some(k => b[k]?.toLowerCase().includes(q))) return false;
@@ -88,7 +88,7 @@ export default function Books() {
     if (sortBy === "author") result.sort((a, b) => a.author.localeCompare(b.author));
     if (sortBy === "year") result.sort((a, b) => b.year - a.year);
     return result;
-  }, [books, query, statusFilter, genreFilter, sortBy]);
+  }, [books, debouncedQuery, statusFilter, genreFilter, sortBy]);
 
   const paginatedBooks = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -99,16 +99,12 @@ export default function Books() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [query, statusFilter, genreFilter, sortBy]);
-
-
+  }, [debouncedQuery, statusFilter, genreFilter, sortBy]);
 
   useEffect(() => {
     document.body.style.overflow = modal ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [modal]);
-
-
 
   useEffect(() => {
     if (form.quantity === 0 && form.status === "Available") {
@@ -140,7 +136,7 @@ export default function Books() {
     return e;
   }
 
-const handleSubmit = useCallback(async () => {
+  const handleSubmit = useCallback(async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     try {
@@ -217,7 +213,7 @@ const handleSubmit = useCallback(async () => {
     setToast((prev) => ({ ...prev, visible: false }));
   }
 
-const handleUpdate = useCallback(async () => {
+  const handleUpdate = useCallback(async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     try {
@@ -343,3 +339,4 @@ const handleUpdate = useCallback(async () => {
     </div>
   );
 }
+
