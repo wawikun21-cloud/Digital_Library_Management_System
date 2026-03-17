@@ -86,7 +86,7 @@ export default function Books() {
     });
     if (sortBy === "title") result.sort((a, b) => a.title.localeCompare(b.title));
     if (sortBy === "author") result.sort((a, b) => a.author.localeCompare(b.author));
-    if (sortBy === "year") result.sort((a, b) => b.year - a.year);
+    if (sortBy === "year") result.sort((a, b) => b.id - a.id);
     return result;
   }, [books, debouncedQuery, statusFilter, genreFilter, sortBy]);
 
@@ -190,6 +190,8 @@ export default function Books() {
         const result = await response.json();
         if (result.success) {
           setBooks(books.filter(b => b.id !== deleteModal.bookId));
+          setModal(false);
+          setDeleteModal({ open: false, bookId: null, bookTitle: "" });
           showToast("Book deleted successfully!", "success");
         } else {
           showToast(result.error || "Failed to delete book", "error");
@@ -198,7 +200,6 @@ export default function Books() {
         showToast("Failed to connect to server", "error");
       }
     }
-    setDeleteModal({ open: false, bookId: null, bookTitle: "" });
   }
 
   function cancelDelete() {
