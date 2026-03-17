@@ -8,14 +8,8 @@ const BRAND_HEIGHT = 66;
 
 const NAV = [
   { to: "/",         label: "Dashboard", Icon: BarChart3     },
-  {
-    label: "Books",
-    Icon: BookOpen,
-    to: "/books",
-    children: [
-      { to: "/books/records", label: "Records", Icon: Library },
-    ],
-  },
+  { to: "/books", label: "Books", Icon: BookOpen },
+
   { to: "/borrowed", label: "Borrowed",  Icon: ClipboardList },
   { to: "/deleted",  label: "Recently Deleted", Icon: Trash2 },
 ];
@@ -71,10 +65,7 @@ function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme }) {
   const variant  = collapsed ? 'collapsed' : 'expanded';
   const location = useLocation();
 
-  const booksDefault =
-    location.pathname === "/books" ||
-    (NAV.find(n => n.children)?.children.some(c => location.pathname.startsWith(c.to)) ?? false);
-  const [booksOpen, setBooksOpen] = useState(booksDefault);
+
 
   return (
     <div className="flex flex-col h-full">
@@ -89,24 +80,14 @@ function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme }) {
 
       {/* Nav */}
       <nav className="flex-1 flex flex-col gap-0.5 p-2 pt-4 overflow-y-auto overflow-x-hidden">
-        {NAV.map((item) =>
-          item.children ? (
-            <BooksMenu
-              key={item.label}
-              item={item}
-              collapsed={collapsed}
-              open={booksOpen}
-              onToggle={() => { if (!collapsed) setBooksOpen(o => !o); }}
-            />
-          ) : (
+        {NAV.map((item) => (
             <NavItem
               key={item.to}
               item={item}
               collapsed={collapsed}
-              onCloseMenus={() => setBooksOpen(false)}
             />
-          )
-        )}
+          ))}
+
       </nav>
 
       {/* Footer */}
@@ -137,14 +118,14 @@ function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme }) {
 }
 
 /* ── Plain nav link ──────────────────────────────── */
-function NavItem({ item, collapsed, onCloseMenus }) {
+function NavItem({ item, collapsed }) {
   const { to, label, Icon } = item;
   return (
     <NavLink
       to={to}
       end={to === "/"}
       title={collapsed ? label : undefined}
-      onClick={onCloseMenus}
+
       className={({ isActive }) => [
         "flex items-center rounded-lg text-sm font-medium",
         "overflow-hidden whitespace-nowrap select-none transition-colors duration-150 px-3 py-2.5",
@@ -160,7 +141,7 @@ function NavItem({ item, collapsed, onCloseMenus }) {
           <span className="shrink-0 flex items-center justify-center" style={{ width: 18, minWidth: 18 }}>
             <Icon size={18} style={{ color: isActive ? "#F3B940" : undefined }} />
           </span>
-          {!collapsed && <span className="ml-3 truncate">{label}</span>}
+           {!collapsed && <span className="ml-3 truncate">{label}</span>}
         </>
       )}
     </NavLink>
