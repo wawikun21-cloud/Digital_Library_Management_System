@@ -1,20 +1,13 @@
 /* ── Sidebar ──────────────────────────────────── */
-.sidebar {
-  width: 220px;
-  height: 100vh;
-  background: var(--bg-sidebar);
-  display: flex;
-  flex-direction: column;
-  position: fixed;
-  left: 0; top: 0;
-  z-index: 100;
-  border-right: 1px solid var(--border-sidebar);
-  overflow: hidden;
+.sidebar-hover-expand {
   transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-              background 0.3s, border-color 0.3s;
+              background 0.3s, 
+              border-color 0.3s;
 }
 
-.sidebar--collapsed { width: 58px; }
+.sidebar--collapsed { 
+  width: 58px !important; 
+}
 
 /* Brand */
 .sidebar-brand {

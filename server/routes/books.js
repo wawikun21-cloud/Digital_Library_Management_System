@@ -66,44 +66,9 @@ router.get("/:id", async (req, res) => {
  */
 router.post("/", async (req, res) => {
   try {
-    const {
-      title,
-      author,
-      genre,
-      isbn,
-      year,
-      publisher,
-      description,
-      status,
-      cover,
-      quantity,
-    } = req.body;
+    const bookData = req.body; // Pass full data - model handles all fields
 
-    // Validate required fields
-    const errors = [];
-    if (!title?.trim()) errors.push("Title is required");
-    if (!author?.trim()) errors.push("Author is required");
-    if (!genre?.trim()) errors.push("Genre is required");
-    if (!isbn?.trim()) errors.push("ISBN is required");
-    if (!year) errors.push("Year is required");
-    if (!publisher?.trim()) errors.push("Publisher is required");
-
-    if (errors.length > 0) {
-      return res.status(400).json({ success: false, error: errors.join(", ") });
-    }
-
-    const result = await BookModel.create({
-      title,
-      author,
-      genre,
-      isbn,
-      year,
-      publisher,
-      description,
-      status,
-      cover,
-      quantity: quantity || 1,
-    });
+    const result = await BookModel.create(bookData);
 
     if (!result.success) {
       return res.status(400).json({ success: false, error: result.error });
@@ -123,44 +88,9 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const {
-      title,
-      author,
-      genre,
-      isbn,
-      year,
-      publisher,
-      description,
-      status,
-      cover,
-      quantity,
-    } = req.body;
+    const bookData = req.body; // Pass full data - model handles all fields
 
-    // Validate required fields
-    const errors = [];
-    if (!title?.trim()) errors.push("Title is required");
-    if (!author?.trim()) errors.push("Author is required");
-    if (!genre?.trim()) errors.push("Genre is required");
-    if (!isbn?.trim()) errors.push("ISBN is required");
-    if (!year) errors.push("Year is required");
-    if (!publisher?.trim()) errors.push("Publisher is required");
-
-    if (errors.length > 0) {
-      return res.status(400).json({ success: false, error: errors.join(", ") });
-    }
-
-    const result = await BookModel.update(id, {
-      title,
-      author,
-      genre,
-      isbn,
-      year,
-      publisher,
-      description,
-      status,
-      cover,
-      quantity,
-    });
+    const result = await BookModel.update(id, bookData);
 
     if (!result.success) {
       return res.status(400).json({ success: false, error: result.error });
