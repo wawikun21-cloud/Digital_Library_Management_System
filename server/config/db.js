@@ -48,17 +48,17 @@ async function initDatabase() {
         id INT AUTO_INCREMENT PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
         subtitle VARCHAR(255) NULL,
-        author VARCHAR(255) NOT NULL,
+        author VARCHAR(255) NULL,
         authors TEXT NULL,
-        genre VARCHAR(100) NOT NULL,
-        isbn VARCHAR(20) NOT NULL UNIQUE,
+        genre VARCHAR(100) NULL,
+        isbn VARCHAR(50) NULL,
         issn VARCHAR(20) NULL,
         lccn VARCHAR(20) NULL,
         accessionNumber VARCHAR(50) NULL,
         callNumber VARCHAR(100) NULL,
         year INT NULL,
         date INT NULL,
-        publisher VARCHAR(255) NOT NULL,
+        publisher VARCHAR(255) NULL,
         edition VARCHAR(50) NULL,
         materialType VARCHAR(50) NULL,
         subtype VARCHAR(50) NULL,
@@ -70,6 +70,8 @@ async function initDatabase() {
         place VARCHAR(255) NULL,
         description TEXT NULL,
         otherDetails TEXT NULL,
+        shelf VARCHAR(100) NULL,
+        pages VARCHAR(20) NULL,
         status VARCHAR(50) DEFAULT 'Available',
         cover TEXT NULL,
         quantity INT DEFAULT 1,
@@ -81,6 +83,9 @@ async function initDatabase() {
       )
     `);
     console.log("✅ Books table ready (full schema)");
+
+    // Migrate existing table — add new columns & relax constraints if needed
+    await migrateSchema(tempConnection);
 
     // Create borrowed_books table (for tracking borrowed books)
     await tempConnection.query(`
@@ -107,6 +112,41 @@ async function initDatabase() {
 }
 
 /**
+ * Migrate existing schema — runs ALTER TABLE statements safely (IF EXISTS / IF NOT EXISTS).
+ * Safe to run on every startup; each statement is independent so one failure won't block others.
+ */
+async function migrateSchema(conn) {
+  const migrations = [
+    // Relax NOT NULL + change isbn from UNIQUE NOT NULL to nullable
+    `ALTER TABLE books MODIFY COLUMN author VARCHAR(255) NULL`,
+    `ALTER TABLE books MODIFY COLUMN genre VARCHAR(100) NULL`,
+    `ALTER TABLE books MODIFY COLUMN isbn VARCHAR(50) NULL`,
+    `ALTER TABLE books MODIFY COLUMN publisher VARCHAR(255) NULL`,
+    // Add new columns introduced in the updated form (shelf, pages)
+    `ALTER TABLE books ADD COLUMN shelf VARCHAR(100) NULL`,
+    `ALTER TABLE books ADD COLUMN pages VARCHAR(20) NULL`,
+    // Drop the UNIQUE index on isbn if it still exists
+    `ALTER TABLE books DROP INDEX isbn`,
+  ];
+
+  for (const sql of migrations) {
+    try {
+      await conn.query(sql);
+      console.log(`  ✅ Migration OK: ${sql.slice(0, 60)}…`);
+    } catch (err) {
+      // 1091 = Can't DROP, key doesn't exist
+      // 1060 = Duplicate column name (column already added)
+      // 1054 = Unknown column (already removed)
+      if ([1091, 1060, 1054, 1061].includes(err.errno)) {
+        console.log(`  ⏭️  Skipped (already applied): ${sql.slice(0, 60)}…`);
+      } else {
+        console.warn(`  ⚠️  Migration warning: ${err.message}`);
+      }
+    }
+  }
+}
+
+/**
  * Test database connection
  */
 async function testConnection() {
@@ -127,4 +167,3 @@ module.exports = {
   initDatabase,
   testConnection,
 };
-

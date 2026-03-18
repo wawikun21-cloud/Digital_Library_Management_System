@@ -246,15 +246,14 @@ export default function Books() {
     setModalMode("add");
   }
 
+  const handleImportComplete = useCallback((importedBooks) => {
+    setBooks(prev => [...prev, ...importedBooks]);
+    setModal(false);
+    showToast(`Successfully imported ${importedBooks.length} book${importedBooks.length !== 1 ? "s" : ""}!`, "success");
+  }, []);
+
   const importProps = {
-    // Placeholder for import functionality (UI only)
-    sampleData: [
-      { title: "Sample Book 1", author: "Author A", isbn: "978-1234567890", genre: "Fiction", quantity: 5 },
-      { title: "Sample Book 2", author: "Author B", isbn: "978-0987654321", genre: "Non-Fiction", quantity: 3 },
-    ],
-    onFileSelect: () => {},
-    onStartImport: () => {},
-    importStatus: "idle",
+    onImportComplete: handleImportComplete,
   };
 
   return (
@@ -340,4 +339,3 @@ export default function Books() {
     </div>
   );
 }
-

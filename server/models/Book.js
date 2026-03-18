@@ -142,9 +142,6 @@ const BookModel = {
       return { success: true, data: rows[0] };
     } catch (error) {
       console.error("[BookModel.create] Error:", error.message);
-      if (error.code === "ER_DUP_ENTRY") {
-        return { success: false, error: "A book with this ISBN already exists" };
-      }
       return { success: false, error: error.message };
     }
   },
@@ -217,9 +214,6 @@ const BookModel = {
       return { success: true, data: rows[0] };
     } catch (error) {
       console.error("[BookModel.update] Error:", error.message);
-      if (error.code === "ER_DUP_ENTRY") {
-        return { success: false, error: "A book with this ISBN already exists" };
-      }
       return { success: false, error: error.message };
     }
   },
@@ -277,4 +271,3 @@ const BookModel = {
 };
 
 module.exports = BookModel;
-

@@ -142,5 +142,46 @@ router.get("/count/all", async (req, res) => {
   }
 });
 
-module.exports = router;
 
+/**
+ * POST /api/books/bulk-import
+ * Bulk import books from parsed Excel data
+ * Expects: { books: [...] }
+ */
+router.post("/bulk-import", async (req, res) => {
+  try {
+    const { books } = req.body;
+
+    if (!Array.isArray(books) || books.length === 0) {
+      return res.status(400).json({ success: false, error: "No books provided" });
+    }
+
+    const results = { success: [], failed: [] };
+
+    for (const bookData of books) {
+      try {
+        const result = await BookModel.create(bookData);
+        if (result.success) {
+          results.success.push(result.data);
+        } else {
+          results.failed.push({ title: bookData.title, error: result.error });
+        }
+      } catch (err) {
+        results.failed.push({ title: bookData.title, error: err.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      imported: results.success.length,
+      failed: results.failed.length,
+      data: results.success,
+      errors: results.failed,
+    });
+  } catch (error) {
+    console.error("[POST /api/books/bulk-import] Error:", error.message);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
+
+module.exports = router;
