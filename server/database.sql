@@ -282,5 +282,56 @@ SET SQL_MODE = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVIS
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ============================================================
+-- Table: students
+-- Description: Stores student information for the library
+-- ============================================================
+CREATE TABLE IF NOT EXISTS students (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id_number VARCHAR(100) NOT NULL UNIQUE,
+    student_name VARCHAR(255) NOT NULL,
+    student_course VARCHAR(100),
+    student_yr_level VARCHAR(50),
+    student_email VARCHAR(100),
+    student_contact VARCHAR(100),
+    display_name VARCHAR(255),
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- ============================================================
+-- Table: attendance
+-- Description: Tracks student check-in/check-out times and duration
+-- ============================================================
+CREATE TABLE IF NOT EXISTS attendance (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_name VARCHAR(255) NOT NULL,
+    student_id_number VARCHAR(100) NOT NULL,
+    student_course VARCHAR(100),
+    student_yr_level VARCHAR(50),
+    check_in_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    check_out_time TIMESTAMP,
+    duration INT,
+    status ENUM('checked_in', 'checked_out') DEFAULT 'checked_in',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- ============================================================
+-- Create indexes for students table
+-- ============================================================
+CREATE INDEX idx_students_student_id ON students(student_id_number);
+CREATE INDEX idx_students_name ON students(student_name);
+
+-- ============================================================
+-- Create indexes for attendance table
+-- ============================================================
+CREATE INDEX idx_attendance_student_id ON attendance(student_id_number);
+CREATE INDEX idx_attendance_check_in ON attendance(check_in_time);
+CREATE INDEX idx_attendance_status ON attendance(status);
+
+-- ============================================================
 -- END OF DATABASE SCHEMA
 -- ============================================================

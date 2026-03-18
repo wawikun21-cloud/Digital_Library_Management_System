@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useLocation } from "react-router-dom";
-import { BarChart3, BookOpen, ClipboardList, Trash2, Sun, Moon, X, ChevronDown, Library } from "lucide-react";
+import { BarChart3, BookOpen, ClipboardList, Trash2, Sun, Moon, X, ChevronDown, Library, Users, User } from "lucide-react";
 import Logo from './Logo.jsx';
 
 const SIDEBAR_WIDTHS = { COLLAPSED: 58, EXPANDED: 220 };
@@ -9,8 +9,9 @@ const BRAND_HEIGHT = 66;
 const NAV = [
   { to: "/",         label: "Dashboard", Icon: BarChart3     },
   { to: "/books", label: "Books", Icon: BookOpen },
-
   { to: "/borrowed", label: "Borrowed",  Icon: ClipboardList },
+  { to: "/attendance", label: "Attendance",  Icon: Users },
+  { to: "/students", label: "Students",  Icon: User },
   { to: "/deleted",  label: "Recently Deleted", Icon: Trash2 },
 ];
 

@@ -9,6 +9,8 @@ const cors       = require("cors");
 
 const booksRouter = require("./routes/books");
 const transactionsRouter = require("./routes/transactions");
+const attendanceRouter = require("./routes/attendance");
+const studentsRouter = require("./routes/students");
 const { initDatabase, testConnection } = require("./config/db");
 
 const app  = express();
@@ -37,6 +39,8 @@ app.use(express.json());
 // ── Routes ───────────────────────────────────────────────
 app.use("/api/books", booksRouter);
 app.use("/api/transactions", transactionsRouter);
+app.use("/api/attendance", attendanceRouter);
+app.use("/api/students", studentsRouter);
 
 // ── Health check ─────────────────────────────────────────
 app.get("/api/health", async (_req, res) => {

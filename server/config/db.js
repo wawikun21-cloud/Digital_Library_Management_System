@@ -184,23 +184,61 @@ async function initDatabase() {
     `);
     console.log("✅ Book authors table ready");
 
-    // Create logs table (system activity logs)
-    await tempConnection.query(`
-      CREATE TABLE IF NOT EXISTS logs (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT,
-        action VARCHAR(255) NOT NULL,
-        description TEXT,
-        ip_address VARCHAR(45),
-        user_agent TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-      )
-    `);
-    console.log("✅ Logs table ready");
+     // Create logs table (system activity logs)
+     await tempConnection.query(`
+       CREATE TABLE IF NOT EXISTS logs (
+         id INT AUTO_INCREMENT PRIMARY KEY,
+         user_id INT,
+         action VARCHAR(255) NOT NULL,
+         description TEXT,
+         ip_address VARCHAR(45),
+         user_agent TEXT,
+         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+       )
+     `);
+     console.log("✅ Logs table ready");
 
-    await tempConnection.end();
-    console.log("✅ Database initialization complete\n");
+     // Create students table (stores student information)
+     await tempConnection.query(`
+       CREATE TABLE IF NOT EXISTS students (
+         id INT AUTO_INCREMENT PRIMARY KEY,
+         student_id_number VARCHAR(100) NOT NULL UNIQUE,
+         student_name VARCHAR(255) NOT NULL,
+         student_course VARCHAR(100),
+         student_yr_level VARCHAR(50),
+         student_email VARCHAR(100),
+         student_contact VARCHAR(100),
+         display_name VARCHAR(255),
+         first_name VARCHAR(100),
+         last_name VARCHAR(100),
+         is_active BOOLEAN DEFAULT TRUE,
+         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+       )
+     `);
+     console.log("✅ Students table ready");
+
+     // Create attendance table (tracks student check-in/check-out)
+     await tempConnection.query(`
+       CREATE TABLE IF NOT EXISTS attendance (
+         id INT AUTO_INCREMENT PRIMARY KEY,
+         student_name VARCHAR(255) NOT NULL,
+         student_id_number VARCHAR(100) NOT NULL,
+         student_course VARCHAR(100),
+         student_yr_level VARCHAR(50),
+         check_in_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+         check_out_time TIMESTAMP,
+         duration INT,
+         status ENUM('checked_in', 'checked_out') DEFAULT 'checked_in',
+         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+       )
+     `);
+     console.log("✅ Attendance table ready");
+
+     await tempConnection.end();
+     console.log("✅ Database initialization complete\n");
   } catch (error) {
     console.error("❌ Database initialization failed:", error.message);
     throw error;
