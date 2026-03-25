@@ -349,6 +349,7 @@ export default function Login() {
             alt=""
             aria-hidden="true"
           />
+
           <div className="login-bg-circle" />
           <div className="login-bg-circle" />
         </div>
@@ -420,7 +421,6 @@ export default function Login() {
               </div>
             </div>
 
-          
 
             {/* Submit */}
             <button

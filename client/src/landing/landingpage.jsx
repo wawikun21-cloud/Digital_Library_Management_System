@@ -606,13 +606,15 @@ export default function LandingPage() {
         }
 
         /* FOOTER */
-        .footer {
+.footer {
           text-align: center;
           padding: 2rem 1.5rem;
           border-top: none;
           font-size: 0.8rem;
           color: var(--parchment);
-          background: #1D3067;
+          background-image: url(/pattern.png);
+          background-size: cover;
+          background-position: center;
         }
         .footer strong { color: var(--parchment); font-family: 'Playfair Display', serif; }
 
