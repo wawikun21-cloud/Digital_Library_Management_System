@@ -6,8 +6,9 @@
 export * from "./booksApi";
 export * from "./searchApi";
 export * from "./transactionsApi";
+export * from "./authApi";
 
-export { default as booksApi } from "./booksApi";
-export { default as searchApi } from "./searchApi";
+export { default as booksApi }        from "./booksApi";
+export { default as searchApi }       from "./searchApi";
 export { default as transactionsApi } from "./transactionsApi";
-
+export { default as authApi }         from "./authApi";

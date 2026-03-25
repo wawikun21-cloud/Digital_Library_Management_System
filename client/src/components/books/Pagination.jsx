@@ -1,5 +1,30 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+function getPageNumbers(current, total) {
+  const delta = 2;
+  const range = [];
+  const rangeWithDots = [];
+
+  range.push(1);
+  for (let i = Math.max(2, current - delta); i <= Math.min(total - 1, current + delta); i++) {
+    range.push(i);
+  }
+  if (total > 1) range.push(total);
+
+  for (let i of range) {
+    if (rangeWithDots.length) {
+      const last = rangeWithDots[rangeWithDots.length - 1];
+      if (i - last === 2) {
+        rangeWithDots.push(last + 1);
+      } else if (i - last !== 1) {
+        rangeWithDots.push('...');
+      }
+    }
+    rangeWithDots.push(i);
+  }
+  return rangeWithDots;
+}
+
 export default function Pagination({ currentPage, totalPages, setCurrentPage }) {
   if (totalPages <= 1) return null;
 
@@ -20,22 +45,27 @@ export default function Pagination({ currentPage, totalPages, setCurrentPage }) 
         </button>
         
         {/* Page numbers */}
-        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-          <button
+{getPageNumbers(currentPage, totalPages).map(page => {
+          if (page === '...') {
+            return <span key={page} className="w-8 h-8 flex items-center justify-center text-[12px] text-muted px-1">...</span>;
+          }
+          return (
+            <button
             key={page}
-            onClick={() => setCurrentPage(page)}
+            onClick={() => setCurrentPage(Number(page))}
             aria-label={`Page ${page}`}
-            aria-current={currentPage === page ? "page" : undefined}
+            aria-current={currentPage === Number(page) ? "page" : undefined}
             className="flex items-center justify-center w-8 h-8 rounded-lg text-[12px] font-medium transition-colors duration-150"
             style={{
-              background: currentPage === page ? "var(--accent-amber)" : "var(--bg-surface)",
-              color: currentPage === page ? "#fff" : "var(--text-secondary)",
-              border: currentPage === page ? "none" : "1px solid var(--border)",
+              background: currentPage === Number(page) ? "var(--accent-amber)" : "var(--bg-surface)",
+              color: currentPage === Number(page) ? "#fff" : "var(--text-secondary)",
+              border: currentPage === Number(page) ? "none" : "1px solid var(--border)",
             }}
-          >
+            >
             {page}
           </button>
-        ))}
+          );
+        })}
         
         <button
           onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}

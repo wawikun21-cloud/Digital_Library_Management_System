@@ -3,7 +3,8 @@
 //  MySQL Database Connection & Initialization
 // ─────────────────────────────────────────────────────────
 
-const mysql = require("mysql2/promise");
+const mysql  = require("mysql2/promise");
+const bcrypt = require("bcryptjs");
 require("dotenv").config();
 
 const dbConfig = {
@@ -30,7 +31,30 @@ async function initDatabase() {
     console.log(`✅ Database '${dbConfig.database}' ready`);
     await conn.query(`USE \`${dbConfig.database}\``);
 
-    // ── books: one row per unique title ──────────────────
+    // ── users ─────────────────────────────────────────────
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id         INT          AUTO_INCREMENT PRIMARY KEY,
+        username   VARCHAR(100) NOT NULL UNIQUE,
+        password   VARCHAR(255) NOT NULL,
+        role       VARCHAR(50)  NOT NULL DEFAULT 'admin',
+        created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log("✅ Users table ready");
+
+    // Seed a default admin if no users exist yet
+    const [existing] = await conn.query("SELECT id FROM users LIMIT 1");
+    if (existing.length === 0) {
+      const hashed = await bcrypt.hash("admin123", 10);
+      await conn.query(
+        "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+        ["admin", hashed, "admin"]
+      );
+      console.log("✅ Default admin created  →  username: admin / password: admin123");
+    }
+
+    // ── books ─────────────────────────────────────────────
     await conn.query(`
       CREATE TABLE IF NOT EXISTS books (
         id            INT          AUTO_INCREMENT PRIMARY KEY,
@@ -60,6 +84,7 @@ async function initDatabase() {
         otherDetails  TEXT         NULL,
         shelf         VARCHAR(100) NULL,
         pages         VARCHAR(20)  NULL,
+        sublocation   VARCHAR(255) NULL,
         collection    VARCHAR(50)  NULL,
         status        VARCHAR(50)  DEFAULT 'Available',
         cover         TEXT         NULL,
@@ -74,7 +99,7 @@ async function initDatabase() {
     `);
     console.log("✅ Books table ready");
 
-    // ── book_copies: one row per physical copy ────────────
+    // ── book_copies ───────────────────────────────────────
     await conn.query(`
       CREATE TABLE IF NOT EXISTS book_copies (
         id               INT         AUTO_INCREMENT PRIMARY KEY,
@@ -93,7 +118,7 @@ async function initDatabase() {
     `);
     console.log("✅ Book copies table ready");
 
-    // ── borrowed_books (legacy — keep for existing data) ──
+    // ── borrowed_books ────────────────────────────────────
     await conn.query(`
       CREATE TABLE IF NOT EXISTS borrowed_books (
         id               INT          AUTO_INCREMENT PRIMARY KEY,
@@ -108,6 +133,28 @@ async function initDatabase() {
       )
     `);
     console.log("✅ Borrowed books table ready");
+
+    // ── lexora_books ──────────────────────────────────────
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS lexora_books (
+        id             INT           AUTO_INCREMENT PRIMARY KEY,
+        title          VARCHAR(500)  NOT NULL,
+        author         VARCHAR(500)  NULL,
+        year           SMALLINT      NULL,
+        collection     VARCHAR(150)  NULL,
+        source         TEXT          NULL,
+        resource_type  VARCHAR(50)   NULL,
+        format         VARCHAR(50)   NULL,
+        program        VARCHAR(150)  NULL,
+        subject_course VARCHAR(500)  NULL,
+        created_at     TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+        updated_at     TIMESTAMP     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_subject_course (subject_course(191)),
+        INDEX idx_program        (program),
+        INDEX idx_resource_type  (resource_type)
+      )
+    `);
+    console.log("✅ Lexora books table ready");
 
     await migrateSchema(conn);
     await conn.end();
@@ -126,13 +173,22 @@ async function migrateSchema(conn) {
     `ALTER TABLE books MODIFY COLUMN publisher VARCHAR(255) NULL`,
     `ALTER TABLE books ADD COLUMN shelf      VARCHAR(100) NULL`,
     `ALTER TABLE books ADD COLUMN pages      VARCHAR(20)  NULL`,
+    `ALTER TABLE books ADD COLUMN sublocation VARCHAR(255) NULL AFTER pages`,
     `ALTER TABLE books ADD COLUMN collection VARCHAR(50)  NULL`,
     `ALTER TABLE books DROP INDEX isbn`,
-    // book_copies columns added after initial release
     `ALTER TABLE book_copies ADD COLUMN date_acquired   DATE NULL`,
     `ALTER TABLE book_copies ADD COLUMN condition_notes TEXT NULL`,
-    // Ensure accession_number is truly unique at DB level
     `ALTER TABLE book_copies ADD UNIQUE INDEX idx_acc_unique (accession_number)`,
+
+    // ── lexora_books column additions (safe on existing installs) ──
+    `ALTER TABLE lexora_books ADD COLUMN format         VARCHAR(50)  NULL AFTER resource_type`,
+    `ALTER TABLE lexora_books ADD COLUMN subject_course VARCHAR(500) NULL AFTER format`,
+    `ALTER TABLE lexora_books ADD COLUMN resource_type  VARCHAR(50)  NULL`,
+    `ALTER TABLE lexora_books ADD COLUMN program        VARCHAR(150) NULL`,
+    `ALTER TABLE lexora_books ADD COLUMN collection     VARCHAR(150) NULL`,
+    `ALTER TABLE lexora_books ADD INDEX idx_subject_course (subject_course(191))`,
+    `ALTER TABLE lexora_books ADD INDEX idx_program        (program)`,
+    `ALTER TABLE lexora_books ADD INDEX idx_resource_type  (resource_type)`,
   ];
 
   for (const sql of migrations) {

@@ -1,5 +1,11 @@
-import { ChevronDown, X, SlidersHorizontal, PenLine, FileSpreadsheet, Search } from "lucide-react";
+import { ChevronDown, X, SlidersHorizontal, PenLine, FileSpreadsheet, Search, Globe } from "lucide-react";
 import { useRef } from "react";
+
+const ALL_MODES = [
+  { mode: "manual",  Icon: PenLine,         label: "Add Manually" },
+  { mode: "import",  Icon: FileSpreadsheet, label: "Import from Excel" },
+  { mode: "lexora",  Icon: Globe,           label: "Import Lexora Excel" },
+];
 
 export default function BookToolbar({ 
   query, 
@@ -11,8 +17,14 @@ export default function BookToolbar({
   setSortBy, 
   ddOpen, 
   setDdOpen, 
-  openModal 
+  openModal,
+  // Pass an array of mode strings to restrict which items appear.
+  // Defaults to all three if omitted.
+  importModes,
 }) {
+  const visibleModes = importModes
+    ? ALL_MODES.filter(m => importModes.includes(m.mode))
+    : ALL_MODES;
   const ddRef = useRef(null);
 
   return (
@@ -120,10 +132,7 @@ export default function BookToolbar({
             style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-lg)" }}
             role="menu"
           >
-{[
-              { mode:"manual",  Icon: PenLine,        label:"Add Manually" },
-              { mode:"import",  Icon: FileSpreadsheet, label:"Import from Excel" },
-            ].map(({ mode, Icon, label }) => (
+{visibleModes.map(({ mode, Icon, label }) => (
               <button
                 key={mode}
                 onClick={() => openModal(mode)}

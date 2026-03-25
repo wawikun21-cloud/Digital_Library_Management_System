@@ -9,7 +9,7 @@ import ConfirmationModal from "../components/ConfirmationModal";
 import Toast from "../components/Toast";
 
 /* ─── API base ──────────────────────────────────── */
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
+// API uses Vite proxy: relative /api/ endpoints
 
 /* ─── Initial sample data ───────────────────────── */
 const INITIAL_TXNS = [
@@ -102,7 +102,7 @@ export default function Borrowed() {
   const fetchTransactions = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/api/transactions`);
+const res = await fetch(`/api/transactions`);
       const data = await res.json();
       if (data.success) {
         // Sanitize dates to ensure they are in valid YYYY-MM-DD format
@@ -122,7 +122,7 @@ export default function Borrowed() {
   // Fetch available books
   const fetchBooks = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/books`);
+const res = await fetch(`/api/books`);
       const data = await res.json();
       if (data.success) {
         // Only show books with quantity > 0
@@ -219,7 +219,7 @@ export default function Borrowed() {
     if (Object.keys(e).length) { setErrors(e); return; }
     
     try {
-      const res = await fetch(`${API_BASE}/api/transactions`, {
+const res = await fetch(`/api/transactions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -248,7 +248,7 @@ export default function Borrowed() {
   /* ── Delete transaction ─────────────────────── */
   async function handleDelete(id) {
     try {
-      const res = await fetch(`${API_BASE}/api/transactions/${id}`, {
+const res = await fetch(`/api/transactions/${id}`, {
         method: "DELETE",
       });
       
@@ -271,7 +271,7 @@ export default function Borrowed() {
   /* ── Return book ───────────────────────────── */
   async function handleReturn(id) {
     try {
-      const res = await fetch(`${API_BASE}/api/transactions/${id}/return`, {
+const res = await fetch(`/api/transactions/${id}/return`, {
         method: "PUT",
       });
       

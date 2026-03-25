@@ -5,7 +5,10 @@ import {
   Copy, Archive, FileText, BookMarked, Fingerprint, List
 } from "lucide-react";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
+// Keep relative so Vite proxy handles routing correctly.
+// Never use the full "http://localhost:3001" here — that bypasses the proxy
+// and causes double /api/api/ prefixing.
+const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
 /* ── status pill ─────────────────────────────────────── */
 function StatusPill({ status }) {
@@ -74,7 +77,8 @@ function CopiesBlock({ bookId, initialCopies }) {
   useEffect(() => {
     if (!bookId || initialCopies?.length) return;
     setLoading(true);
-    fetch(`${API_BASE}/api/books/${bookId}/copies`)
+    // API_BASE is already "/api", so the full path becomes /api/books/:id/copies
+    fetch(`${API_BASE}/books/${bookId}/copies`)
       .then(r => r.json())
       .then(d => { if (d.success) setCopies(d.data); })
       .catch(() => {})

@@ -1,20 +1,24 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, BookOpen, Loader2 } from "lucide-react";
+import authApi from "../services/api/authApi";
 
 /**
- * Login Page - UI/UX Design Only
+ * Login Page
  * Lexora Library Management System
  */
 
 export default function Login() {
+  const navigate = useNavigate();
+
   const [formData, setFormData] = useState({
-    email: "",
-    password: "",
+    username:   "",
+    password:   "",
     rememberMe: false,
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [isLoading,    setIsLoading]    = useState(false);
+  const [error,        setError]        = useState("");
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -22,16 +26,14 @@ export default function Login() {
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
-    // Clear error when user starts typing
     if (error) setError("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Basic validation
-    if (!formData.email.trim()) {
-      setError("Email is required");
+
+    if (!formData.username.trim()) {
+      setError("Username is required");
       return;
     }
     if (!formData.password) {
@@ -40,13 +42,23 @@ export default function Login() {
     }
 
     setIsLoading(true);
-    
-    // Simulate login delay (UI demo only)
-    setTimeout(() => {
+    setError("");
+
+    try {
+      const { user } = await authApi.login(formData.username.trim(), formData.password);
+
+      // Optionally persist a lightweight flag so ProtectedRoute can check quickly
+      sessionStorage.setItem("lexora_user", JSON.stringify(user));
+      if (formData.rememberMe) {
+        localStorage.setItem("lexora_user", JSON.stringify(user));
+      }
+
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      setError(err.message || "Login failed. Please try again.");
+    } finally {
       setIsLoading(false);
-      // Demo: show error for any input
-      setError("Demo mode: No backend connected yet");
-    }, 1500);
+    }
   };
 
   return (
@@ -84,17 +96,12 @@ export default function Login() {
       />
 
       {/* Login Card */}
-      <div
-        className="relative w-full max-w-md animate-in fade-in zoom-in duration-300"
-        style={{
-          animationDelay: "0.1s",
-        }}
-      >
+      <div className="relative w-full max-w-md animate-in fade-in zoom-in duration-300">
         <div
           className="rounded-3xl overflow-hidden"
           style={{
-            background: "var(--bg-surface, #ffffff)",
-            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.4)",
+            background:  "var(--bg-surface, #ffffff)",
+            boxShadow:   "0 25px 50px -12px rgba(0, 0, 0, 0.4)",
           }}
         >
           {/* Header */}
@@ -104,27 +111,20 @@ export default function Login() {
               background: "linear-gradient(180deg, rgba(238,162,58,0.08) 0%, transparent 100%)",
             }}
           >
-            {/* Logo */}
             <div
               className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-5 mx-auto"
               style={{
                 background: "linear-gradient(135deg, #EEA23A 0%, #EA8B33 100%)",
-                boxShadow: "0 8px 20px rgba(238,162,58,0.35)",
+                boxShadow:  "0 8px 20px rgba(238,162,58,0.35)",
               }}
             >
               <BookOpen size={32} className="text-white" />
             </div>
 
-            <h1
-              className="text-2xl font-bold mb-2"
-              style={{ color: "var(--text-primary, #1a1a1a)" }}
-            >
+            <h1 className="text-2xl font-bold mb-2" style={{ color: "var(--text-primary, #1a1a1a)" }}>
               Welcome to Lexora
             </h1>
-            <p
-              className="text-sm"
-              style={{ color: "var(--text-secondary, #666666)" }}
-            >
+            <p className="text-sm" style={{ color: "var(--text-secondary, #666666)" }}>
               Sign in to access your library
             </p>
           </div>
@@ -137,47 +137,46 @@ export default function Login() {
                 className="mb-5 px-4 py-3 rounded-xl text-sm font-medium animate-in slide-in-from-top duration-200"
                 style={{
                   background: "rgba(220,38,38,0.1)",
-                  border: "1px solid rgba(220,38,38,0.2)",
-                  color: "#dc2626",
+                  border:     "1px solid rgba(220,38,38,0.2)",
+                  color:      "#dc2626",
                 }}
               >
                 {error}
               </div>
             )}
 
-            {/* Email Field */}
+            {/* Username Field */}
             <div className="mb-5">
               <label
-                htmlFor="email"
+                htmlFor="username"
                 className="block text-xs font-semibold mb-2"
                 style={{ color: "var(--text-secondary, #666666)" }}
               >
-                Email Address
+                Username
               </label>
-              <div className="relative">
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="admin@lexora.com"
-                  className="w-full px-4 py-3 text-sm rounded-xl border outline-none transition-all duration-200"
-                  style={{
-                    background: "var(--bg-input, #f3f4f6)",
-                    borderColor: "var(--border, #e5e5e5)",
-                    color: "var(--text-primary, #1a1a1a)",
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = "#EEA23A";
-                    e.target.style.boxShadow = "0 0 0 3px rgba(238,162,58,0.15)";
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = "var(--border, #e5e5e5)";
-                    e.target.style.boxShadow = "none";
-                  }}
-                />
-              </div>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                value={formData.username}
+                onChange={handleChange}
+                placeholder="Enter your username"
+                autoComplete="username"
+                className="w-full px-4 py-3 text-sm rounded-xl border outline-none transition-all duration-200"
+                style={{
+                  background:   "var(--bg-input, #f3f4f6)",
+                  borderColor:  "var(--border, #e5e5e5)",
+                  color:        "var(--text-primary, #1a1a1a)",
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = "#EEA23A";
+                  e.target.style.boxShadow   = "0 0 0 3px rgba(238,162,58,0.15)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = "var(--border, #e5e5e5)";
+                  e.target.style.boxShadow   = "none";
+                }}
+              />
             </div>
 
             {/* Password Field */}
@@ -197,19 +196,20 @@ export default function Login() {
                   value={formData.password}
                   onChange={handleChange}
                   placeholder="Enter your password"
+                  autoComplete="current-password"
                   className="w-full px-4 py-3 pr-12 text-sm rounded-xl border outline-none transition-all duration-200"
                   style={{
-                    background: "var(--bg-input, #f3f4f6)",
+                    background:  "var(--bg-input, #f3f4f6)",
                     borderColor: "var(--border, #e5e5e5)",
-                    color: "var(--text-primary, #1a1a1a)",
+                    color:       "var(--text-primary, #1a1a1a)",
                   }}
                   onFocus={(e) => {
                     e.target.style.borderColor = "#EEA23A";
-                    e.target.style.boxShadow = "0 0 0 3px rgba(238,162,58,0.15)";
+                    e.target.style.boxShadow   = "0 0 0 3px rgba(238,162,58,0.15)";
                   }}
                   onBlur={(e) => {
                     e.target.style.borderColor = "var(--border, #e5e5e5)";
-                    e.target.style.boxShadow = "none";
+                    e.target.style.boxShadow   = "none";
                   }}
                 />
                 <button
@@ -234,15 +234,9 @@ export default function Login() {
                   checked={formData.rememberMe}
                   onChange={handleChange}
                   className="w-4 h-4 rounded border-2 transition-all duration-150"
-                  style={{
-                    accentColor: "#EEA23A",
-                    borderColor: "var(--border, #e5e5e5)",
-                  }}
+                  style={{ accentColor: "#EEA23A", borderColor: "var(--border, #e5e5e5)" }}
                 />
-                <span
-                  className="text-xs font-medium"
-                  style={{ color: "var(--text-secondary, #666666)" }}
-                >
+                <span className="text-xs font-medium" style={{ color: "var(--text-secondary, #666666)" }}>
                   Remember me
                 </span>
               </label>
@@ -264,12 +258,12 @@ export default function Login() {
               className="w-full py-3.5 rounded-xl text-sm font-bold text-white transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
               style={{
                 background: "linear-gradient(135deg, #EEA23A 0%, #EA8B33 100%)",
-                boxShadow: "0 4px 15px rgba(238,162,58,0.35)",
+                boxShadow:  "0 4px 15px rgba(238,162,58,0.35)",
               }}
               onMouseEnter={(e) => {
                 if (!isLoading) {
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                  e.currentTarget.style.boxShadow = "0 8px 25px rgba(238,162,58,0.45)";
+                  e.currentTarget.style.transform  = "translateY(-2px)";
+                  e.currentTarget.style.boxShadow  = "0 8px 25px rgba(238,162,58,0.45)";
                 }
               }}
               onMouseLeave={(e) => {
@@ -292,20 +286,16 @@ export default function Login() {
           <div
             className="px-8 py-4 text-center"
             style={{
-              borderTop: "1px solid var(--border-light, #f3f4f6)",
+              borderTop:  "1px solid var(--border-light, #f3f4f6)",
               background: "var(--bg-subtle, #f9fafb)",
             }}
           >
-            <p
-              className="text-xs"
-              style={{ color: "var(--text-muted, #999999)" }}
-            >
+            <p className="text-xs" style={{ color: "var(--text-muted, #999999)" }}>
               © 2026 Lexora Library Management
             </p>
           </div>
-        </div> 
+        </div>
       </div>
     </div>
   );
 }
-

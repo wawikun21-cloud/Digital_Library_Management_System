@@ -4,11 +4,13 @@
 // ─────────────────────────────────────────────────────────
 require("dotenv").config();
 
-const express    = require("express");
-const cors       = require("cors");
+const express      = require("express");
+const cors         = require("cors");
+const session      = require("express-session");
 
-const booksRouter = require("./routes/books");
+const booksRouter        = require("./routes/books");
 const transactionsRouter = require("./routes/transactions");
+const authRouter         = require("./routes/auth");
 const { initDatabase, testConnection } = require("./config/db");
 
 const app  = express();
@@ -17,34 +19,51 @@ const PORT = process.env.PORT || 3001;
 // ── Middleware ───────────────────────────────────────────
 const allowedOrigins = [
   process.env.CLIENT_ORIGIN || "http://localhost:5173",
-  "http://localhost:5174"
+  "http://localhost:5174",
+  "http://localhost:5175"
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      const msg = "The CORS policy for this site does not allow access from the specified Origin.";
       return callback(new Error(msg), false);
     }
     return callback(null, true);
   },
   methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true, // required for sessions with CORS
 }));
-app.use(express.json());
+
+app.use(express.json({ limit: '1000kb' }));
+
+
+// ── Session ──────────────────────────────────────────────
+app.use(session({
+  name:   "lexora.sid",
+  secret: process.env.SESSION_SECRET || "lexora-secret-change-in-production",
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure:   false, // set true if using HTTPS in production
+    maxAge:   1000 * 60 * 60 * 8, // 8 hours
+  },
+}));
 
 // ── Routes ───────────────────────────────────────────────
-app.use("/api/books", booksRouter);
+app.use("/api/auth",         authRouter);
+app.use("/api/books",        booksRouter);
 app.use("/api/transactions", transactionsRouter);
 
 // ── Health check ─────────────────────────────────────────
 app.get("/api/health", async (_req, res) => {
   const dbStatus = await testConnection();
   res.json({
-    status:          dbStatus ? "ok" : "db_error",
-    timestamp:       new Date().toISOString(),
-    database:        dbStatus ? "✅ connected" : "❌ disconnected",
+    status:    dbStatus ? "ok" : "db_error",
+    timestamp: new Date().toISOString(),
+    database:  dbStatus ? "✅ connected" : "❌ disconnected",
   });
 });
 
@@ -62,10 +81,8 @@ app.use((err, _req, res, _next) => {
 // ── Start ────────────────────────────────────────────────
 async function startServer() {
   try {
-    // Initialize database (create tables if not exist)
     await initDatabase();
-    
-    // Test database connection
+
     const dbConnected = await testConnection();
     if (!dbConnected) {
       console.error("⚠️  Warning: Could not connect to MySQL database");
@@ -74,6 +91,7 @@ async function startServer() {
     app.listen(PORT, () => {
       console.log(`\n🚀  Lexora server     →  http://localhost:${PORT}`);
       console.log(`🗄️  Database          →  MySQL (lexora)`);
+      console.log(`🔐  Auth              →  Session-based (no JWT)`);
     });
   } catch (error) {
     console.error("❌ Failed to start server:", error.message);

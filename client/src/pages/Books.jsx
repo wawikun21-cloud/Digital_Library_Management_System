@@ -5,16 +5,18 @@ import BookTable from "../components/BookTable";
 import ConfirmationModal from "../components/ConfirmationModal";
 import Toast from "../components/Toast";
 
-import BookToolbar     from "../components/books/BookToolbar";
+import BookToolbar      from "../components/books/BookToolbar";
 import BookStatusFilter from "../components/books/BookStatusFilter";
-import Pagination      from "../components/books/Pagination";
-import BookModal       from "../components/books/BookModal";
+import Pagination       from "../components/books/Pagination";
+import BookModal        from "../components/books/BookModal";
 
 function isOutOfStock(book) {
   return book.quantity === 0 || book.status === "OutOfStock";
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
+// Fields that only exist in the form state and must never be sent to the server.
+// Sending them causes validateBookData() to return errors → 400 Bad Request.
+const FORM_ONLY_FIELDS = ["_mode", "cover"];
 
 const EMPTY_FORM = {
   title:"", subtitle:"", authors:"", author:"", edition:"",
@@ -27,25 +29,33 @@ const EMPTY_FORM = {
   cover:null, quantity:1,
   accessionNumber:"", callNumber:"", volume:"",
   shelf:"", pages:"", collection:"",
+  sublocation:"",                                  // ✅ FIX: added
   _mode:"manual",
 };
 
+/** Strip form-only keys before sending to the API */
+function toApiPayload(form) {
+  const payload = { ...form };
+  FORM_ONLY_FIELDS.forEach(k => delete payload[k]);
+  return payload;
+}
+
 export default function Books() {
-  const [loading, setLoading]       = useState(true);
-  const [books, setBooks]           = useState([]);
-  const [query, setQuery]           = useState("");
-  const debouncedQuery              = useDebounce(query, 300);
+  const [loading, setLoading]           = useState(true);
+  const [books, setBooks]               = useState([]);
+  const [query, setQuery]               = useState("");
+  const debouncedQuery                  = useDebounce(query, 300);
   const [statusFilter, setStatusFilter] = useState("All");
   const [genreFilter, setGenreFilter]   = useState("");
-  const [sortBy, setSortBy]         = useState("");
-  const [ddOpen, setDdOpen]         = useState(false);
-  const [modal, setModal]           = useState(false);
-  const [form, setForm]             = useState(EMPTY_FORM);
-  const [errors, setErrors]         = useState({});
+  const [sortBy, setSortBy]             = useState("");
+  const [ddOpen, setDdOpen]             = useState(false);
+  const [modal, setModal]               = useState(false);
+  const [form, setForm]                 = useState(EMPTY_FORM);
+  const [errors, setErrors]             = useState({});
   const [selectedBook, setSelectedBook] = useState(null);
-  const [modalMode, setModalMode]   = useState("add");
+  const [modalMode, setModalMode]       = useState("add");
   const [deleteModal, setDeleteModal]   = useState({ open:false, bookId:null, bookTitle:"" });
-  const [toast, setToast]           = useState({ visible:false, message:"", type:"info" });
+  const [toast, setToast]               = useState({ visible:false, message:"", type:"info" });
   const [currentPage, setCurrentPage]   = useState(1);
   const itemsPerPage = 10;
 
@@ -54,7 +64,7 @@ export default function Books() {
   const fetchBooks = async () => {
     try {
       setLoading(true);
-      const res  = await fetch(`${API_BASE}/api/books`);
+      const res  = await fetch(`/api/books`);
       const data = await res.json();
       if (data.success) setBooks(data.data || []);
       else showToast("Failed to load books from database", "error");
@@ -128,10 +138,14 @@ export default function Books() {
       const year     = form.date || form.year ? Number(form.date || form.year) || null : null;
       const author   = form.authors || form.author || "";
 
-      const res    = await fetch(`${API_BASE}/api/books`, {
+      const res = await fetch(`/api/books`, {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ ...form, author, year, quantity }),
+        body: JSON.stringify({
+          ...toApiPayload(form),
+          author, year, quantity,
+          sublocation: form.sublocation?.trim() || null,   // ✅ FIX: explicit pass-through
+        }),
       });
       const result = await res.json();
       if (result.success) {
@@ -155,7 +169,6 @@ export default function Books() {
       `Imported ${total} title${total!==1?"s":""} · ${totalCopies} cop${totalCopies!==1?"ies":"y"} saved`,
       "success"
     );
-    // Refresh full list from server to get accurate counts
     await fetchBooks();
   }, []);
 
@@ -181,7 +194,7 @@ export default function Books() {
   async function confirmDelete() {
     if (!deleteModal.bookId) return;
     try {
-      const res    = await fetch(`${API_BASE}/api/books/${deleteModal.bookId}`, { method:"DELETE" });
+      const res    = await fetch(`/api/books/${deleteModal.bookId}`, { method:"DELETE" });
       const result = await res.json();
       if (result.success) {
         setBooks(books.filter(b => b.id !== deleteModal.bookId));
@@ -216,10 +229,14 @@ export default function Books() {
       const year     = form.date || form.year ? Number(form.date || form.year) || null : null;
       const author   = form.authors || form.author || "";
 
-      const res    = await fetch(`${API_BASE}/api/books/${selectedBook.id}`, {
+      const res = await fetch(`/api/books/${selectedBook.id}`, {
         method:"PUT",
         headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ ...form, author, year, quantity }),
+        body: JSON.stringify({
+          ...toApiPayload(form),
+          author, year, quantity,
+          sublocation: form.sublocation?.trim() || null,   // ✅ FIX: explicit pass-through
+        }),
       });
       const result = await res.json();
       if (result.success) {
@@ -251,6 +268,7 @@ export default function Books() {
         sortBy={sortBy}         setSortBy={setSortBy}
         ddOpen={ddOpen}         setDdOpen={setDdOpen}
         openModal={openModal}
+        importModes={["manual", "import"]}
       />
 
       <BookStatusFilter
@@ -304,4 +322,3 @@ export default function Books() {
     </div>
   );
 }
-// Comment For testing
