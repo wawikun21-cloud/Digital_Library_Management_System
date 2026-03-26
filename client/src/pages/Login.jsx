@@ -338,6 +338,26 @@ export default function Login() {
           font-weight: 600;
           color: var(--navy);
         }
+
+        .login-back-home {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          margin-top: 0.65rem;
+          padding: 0.55rem 1rem;
+          border-radius: 999px;
+          border: 1px solid #e8e0d5;
+          background: var(--cream);
+          color: var(--navy);
+          text-decoration: none;
+          font-weight: 500;
+          transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        }
+        .login-back-home:hover {
+          background: #fff;
+          transform: translateY(-1px);
+          box-shadow: 0 8px 20px rgba(26,20,16,0.12);
+        }
       `}</style>
 
       <div className="login-page">
@@ -442,6 +462,7 @@ export default function Login() {
           {/* ── Footer ── */}
           <div className="login-card-footer">
             <p>© 2026 <strong>Lexora</strong> — Library Management System</p>
+            <a href="/" className="login-back-home">Back home</a>
           </div>
         </div>
       </div>

@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect } from "react";
-import useDebounce from "../hooks/useDebounce";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   AreaChart, Area, ResponsiveContainer,
@@ -12,11 +11,13 @@ import StatsCard from "../components/StatsCard";
 // DATA
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATS = [
-  { label: "Total Books",  value: "1,284", change: "+12 this month", accent: "#132F45", percentage: 85 },
-  { label: "Available",    value: "920",   change: "+5 today",       accent: "#32667F", percentage: 72 },
-  { label: "Out of Stock", value: "364",   change: "+8 this week",   accent: "#dc2626", percentage: 28 },
-  { label: "Returned",     value: "920",   change: "+8 this week",   accent: "#32667F", percentage: 72 },
+const API_BASE = import.meta.env.VITE_API_URL || "/api";
+
+const KPI_PLACEHOLDERS = [
+  { label: "Total Books",  value: "—", change: "Loading...", accent: "#132F45", percentage: undefined },
+  { label: "Available",    value: "—", change: "Loading...", accent: "#32667F", percentage: undefined },
+  { label: "Out of Stock", value: "—", change: "Loading...", accent: "#dc2626", percentage: undefined },
+  { label: "Returned",     value: "—", change: "Loading...", accent: "#32667F", percentage: undefined },
 ];
 
 const SEMESTERS = ["1st Sem", "2nd Sem"];
@@ -815,6 +816,48 @@ export default function Dashboard() {
   const [schoolYear, setSchoolYear] = useState(SCHOOL_YEARS[0]);   // default: most recent
   const [semester,   setSemester]   = useState("2nd Sem");
   const [month,      setMonth]      = useState("All");
+  const [kpiStats,   setKpiStats]   = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadKpis() {
+      try {
+        const res  = await fetch(`${API_BASE}/books/stats`);
+        const json = await res.json();
+        if (cancelled) return;
+        if (json?.success && json?.data) setKpiStats(json.data);
+      } catch (err) {
+        console.error("[Dashboard] Failed to load KPI stats:", err);
+      }
+    }
+
+    loadKpis();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const stats = useMemo(() => {
+    if (!kpiStats) return KPI_PLACEHOLDERS;
+
+    const total      = Number(kpiStats?.total ?? 0);
+    const available  = Number(kpiStats?.available ?? 0);
+    const outOfStock = Number(kpiStats?.outOfStock ?? 0);
+    const returned   = Number(kpiStats?.returned ?? 0);
+
+    const pctOfTotal = n => {
+      if (!total) return undefined;
+      return Math.max(0, Math.min(100, Math.round((n / total) * 100)));
+    };
+
+    return [
+      { label: "Total Books",   value: total.toLocaleString(),      change: "Live", accent: "#132F45", percentage: total ? 100 : undefined },
+      { label: "Available",     value: available.toLocaleString(),  change: "Live", accent: "#32667F", percentage: pctOfTotal(available) },
+      { label: "Out of Stock", value: outOfStock.toLocaleString(), change: "Live", accent: "#dc2626", percentage: pctOfTotal(outOfStock) },
+      { label: "Returned",      value: returned.toLocaleString(),   change: "Live", accent: "#32667F", percentage: pctOfTotal(returned) },
+    ];
+  }, [kpiStats]);
 
   return (
     <main className="flex flex-col gap-4 lg:gap-5" aria-label="Library Analytics Dashboard">
@@ -822,7 +865,7 @@ export default function Dashboard() {
 
       {/* KPI Stats */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-        {STATS.map(stat => (
+        {stats.map(stat => (
           <StatsCard
             key={stat.label}
             label={stat.label}

@@ -73,9 +73,9 @@ export default function LandingPage() {
           --ink: #1a1410;
           --parchment: #faf7f2;
           --cream: #f3ede3;
-          --gold: #c9a84c;
+          --gold: rgb(247 193 79);
           --gold-light: #e8d5a3;
-          --rust: #8b3a2a;
+          --navyblue: #1D3067;
           --sage: #5a6e5c;
           --warm-gray: #9e9189;
           --white: #ffffff;
@@ -107,7 +107,8 @@ export default function LandingPage() {
         }
 
         .topbar-brand-icon {
-          width: 180px; height: 180px;
+          margin-left: 5rem;
+          width: 170px; height: 170px;
           border-radius: 32px;
           display: block;
           object-fit: contain;
@@ -392,7 +393,7 @@ export default function LandingPage() {
           background: linear-gradient(90deg, rgba(201,168,76,0.09), rgba(139,58,42,0.04));
           border-left: 3px solid var(--gold);
         }
-        .result-row.active .result-row-title { color: var(--rust); }
+        .result-row.active .result-row-title { color: var(--navyblue); }
 
         .result-row-icon {
           flex-shrink: 0;
@@ -428,13 +429,14 @@ export default function LandingPage() {
           flex-shrink: 0;
         }
         .row-source-dot.nemco { background: #132F45; }
-        .row-source-dot.lexora { background: var(--gold); }
+        .row-source-dot.lexora { 
+        background: var(--gold); }
         .row-source-label {
           font-size: 0.65rem; font-weight: 600;
           letter-spacing: 0.06em; text-transform: uppercase;
         }
         .row-source-label.nemco { color: #132F45; }
-        .row-source-label.lexora { color: #8a6010; }
+        .row-source-label.lexora { color: var(--gold); }
         .row-status-pill {
           font-size: 0.63rem; font-weight: 500;
           padding: 0.1rem 0.4rem; border-radius: 100px;
@@ -473,8 +475,8 @@ export default function LandingPage() {
         }
         .detail-source-badge.lexora {
           background: rgba(201,168,76,0.1);
-          color: #8a6010;
-          border: 1px solid rgba(201,168,76,0.22);
+          color: var(--gold);
+          border: 1px solid var(--gold);
         }
         .detail-source-badge svg { width: 11px; height: 11px; }
 
@@ -556,8 +558,8 @@ export default function LandingPage() {
           border-radius: 100px;
           font-size: 0.7rem; font-weight: 500;
           background: rgba(201,168,76,0.1);
-          color: #8a6010;
-          border: 1px solid rgba(201,168,76,0.2);
+          color: var(--gold);
+          border: 1px solid var(--gold);
           margin-left: 0.5rem;
         }
 
@@ -665,7 +667,7 @@ export default function LandingPage() {
 
           {/* SEARCH CARD */}
           <form className="search-card" onSubmit={handleSearch}>
-            <div className="search-card-label">Search the Collection</div>
+            <div className="search-card-label">Search the Title or Keyword</div>
             <div className="search-fields">
               {/* Title */}
               <div className="field-wrapper">
