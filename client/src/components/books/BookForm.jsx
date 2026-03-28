@@ -10,42 +10,44 @@ const inputStyle = (err = false) => ({
 export default function BookForm({ form, setForm, errors, setErrors }) {
   const sections = [
     {
-      title: "Basic Information",
+      title: "Title Information",
       fields: [
         { label: "Title", fkey: "title" },
         { label: "Subtitle", fkey: "subtitle" },
         { label: "Authors", fkey: "authors" },
         { label: "Edition", fkey: "edition" },
-        { label: "Genre", fkey: "genre" },
-        { label: "Publisher", fkey: "publisher" },
-        { label: "Date", fkey: "date", type: "number", placeholder: "e.g. 2024" },
-        { label: "Quantity", fkey: "quantity", type: "number", placeholder: "e.g. 5" },
+        { label: "Call No.", fkey: "callNumber" },
+        { label: "Accession No.", fkey: "accessionNumber" },
+        { label: "No. of Copies", fkey: "quantity", type: "number", placeholder: "e.g. 5" },
+        { label: "Volume", fkey: "volume" },
       ]
     },
     {
-      title: "Identifiers",
+      title: "Standard Numbers",
       fields: [
-        { label: "Accession No.", fkey: "accessionNumber" },
+        { label: "LCCN", fkey: "lccn" },
         { label: "ISBN", fkey: "isbn", placeholder: "e.g. 978-0..." },
         { label: "ISSN", fkey: "issn" },
-        { label: "LCCN", fkey: "lccn" },
-        { label: "Call Number", fkey: "callNumber" },
       ]
     },
     {
-      title: "Physical & Additional Details",
+      title: "Publication Information",
       fields: [
-        { label: "Material Type", fkey: "materialType" },
-        { label: "Subtype", fkey: "subtype" },
-        { label: "Extent", fkey: "extent" },
-        { label: "Size", fkey: "size" },
-        { label: "Volume", fkey: "volume" },
-        { label: "Author Name", fkey: "authorName" },
-        { label: "Author Dates", fkey: "authorDates" },
         { label: "Place", fkey: "place" },
-        { label: "Other Physical Details", fkey: "otherDetails" },
+        { label: "Publisher", fkey: "publisher" },
+        { label: "Date", fkey: "date", type: "number", placeholder: "e.g. 2024" },
       ]
-    }
+    },
+    {
+      title: "Physical Description",
+      fields: [
+        { label: "Extent", fkey: "extent" },
+        { label: "Other Details", fkey: "otherDetails" },
+        { label: "Size", fkey: "size" },
+        { label: "Shelf", fkey: "shelf" },
+        { label: "Pages", fkey: "pages", type: "number", placeholder: "e.g. 320" },
+      ]
+    },
   ];
 
   return (

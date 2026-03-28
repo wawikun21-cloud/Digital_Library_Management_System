@@ -1,24 +1,45 @@
-# Debouncing Implementation - COMPLETE ✅
-    
-## Completed Steps:
-- [x] Create `useDebounce` hook (`client/src/hooks/useDebounce.js`)
-- [x] Add debouncing to Books.jsx search (main priority)
-- [x] Fix duplicate import errors (Books.jsx, Records.jsx)
-- [x] Add debouncing to Records.jsx inventory search
-- [x] Verify no Vite/React build errors
+# Library System: Bulk Upload + Hybrid Normalized DB
+## Current Progress: [Phase 0/7] ✅ Planning Complete
 
-## Active Debouncing:
-1. **Books page** (`Books.jsx`) - Search input → filtering/pagination (300ms)
-2. **Records page** (`Records.jsx`) - Inventory search → table filter (300ms)
+### Phase 0: Planning & Analysis ✅
+- [x] Analyze current DB/schema/models
+- [x] Current: denormalized books table (1 row/copy)
+- [x] Design: books (titles) 1→* book_copies *→1 borrow_transactions
+- [x] Get user approval
 
-## Optional Next Steps:
-- Dashboard.jsx audit log search
-- Borrowed.jsx search 
-- RecentlyDeleted.jsx search
+### Phase 1: Database Migration
+- [ ] Create migrate-hybrid-schema.sql
+- [ ] Add books_new, book_copies, borrow_transactions tables
+- [ ] Migrate data: split books → titles + copies
+- [ ] Add constraints/indexes
+- [ ] Update server/config/db.js (init new tables)
 
-## Test Command:
-```
-cd client && npm run dev
-```
+### Phase 2: Backend Models
+- [ ] server/models/Book.js → Titles only (remove accession/quantity)
+- [ ] NEW server/models/BookCopy.js
+- [ ] NEW server/models/BorrowTransaction.js
 
-App now has smooth search performance! 🚀
+### Phase 3: Backend Controllers & Routes
+- [ ] NEW server/controllers/bulkImportController.js
+- [ ] NEW server/routes/bulk-import.js (POST /api/bulk-import)
+- [ ] Update booksController.js (titles endpoint)
+
+### Phase 4: Excel Processing Service
+- [ ] NEW server/services/excelParser.js (xlsx parsing + upsert logic)
+
+### Phase 5: Frontend Integration
+- [ ] Update BookAddImport.jsx → POST /api/bulk-import
+- [ ] Update BookView.jsx → Show copies list
+- [ ] NEW CopyStatus UI components
+
+### Phase 6: Testing
+- [ ] Test migration (sample data)
+- [ ] Test bulk upload (Excel)
+- [ ] Test borrow/return per copy
+
+### Phase 7: Polish & Indexes
+- [ ] Add transactions to bulk import
+- [ ] Performance indexes (accession, status)
+- [ ] Complete ✅
+
+**Next: Phase 1 → Create migration script**
