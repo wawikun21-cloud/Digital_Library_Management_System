@@ -1,45 +1,25 @@
-# Library System: Bulk Upload + Hybrid Normalized DB
-## Current Progress: [Phase 0/7] ✅ Planning Complete
+# Fix Lexora Excel Import: Add Sheet Selection
+✅ **1. Create this TODO.md** (done)
 
-### Phase 0: Planning & Analysis ✅
-- [x] Analyze current DB/schema/models
-- [x] Current: denormalized books table (1 row/copy)
-- [x] Design: books (titles) 1→* book_copies *→1 borrow_transactions
-- [x] Get user approval
+**2. Update parseLexoraExcel() in BookAddImport.jsx**
+- Return `{sheets:[], books:[]}` instead of flat array
+- Track per-sheet books before global dedup
 
-### Phase 1: Database Migration
-- [ ] Create migrate-hybrid-schema.sql
-- [ ] Add books_new, book_copies, borrow_transactions tables
-- [ ] Migrate data: split books → titles + copies
-- [ ] Add constraints/indexes
-- [ ] Update server/config/db.js (init new tables)
+**3. Add sheet selection UI in Step 2**
+- Checkbox list: sheet names + book counts
+- Select All/None buttons
+- Filter preview to selected sheets
 
-### Phase 2: Backend Models
-- [ ] server/models/Book.js → Titles only (remove accession/quantity)
-- [ ] NEW server/models/BookCopy.js
-- [ ] NEW server/models/BorrowTransaction.js
+**4. Modify runImport()**
+- Filter `parsed` to selected sheets' books only
+- Send subset to backend
 
-### Phase 3: Backend Controllers & Routes
-- [ ] NEW server/controllers/bulkImportController.js
-- [ ] NEW server/routes/bulk-import.js (POST /api/bulk-import)
-- [ ] Update booksController.js (titles endpoint)
+**5. Update summary chips**
+- Show selected sheets count, total selected books
 
-### Phase 4: Excel Processing Service
-- [ ] NEW server/services/excelParser.js (xlsx parsing + upsert logic)
+**6. Test & attempt_completion**
+- Upload multi-sheet Excel
+- Select subset → import small batch
+- Verify no limits hit, correct program/collection
 
-### Phase 5: Frontend Integration
-- [ ] Update BookAddImport.jsx → POST /api/bulk-import
-- [ ] Update BookView.jsx → Show copies list
-- [ ] NEW CopyStatus UI components
-
-### Phase 6: Testing
-- [ ] Test migration (sample data)
-- [ ] Test bulk upload (Excel)
-- [ ] Test borrow/return per copy
-
-### Phase 7: Polish & Indexes
-- [ ] Add transactions to bulk import
-- [ ] Performance indexes (accession, status)
-- [ ] Complete ✅
-
-**Next: Phase 1 → Create migration script**
+**Status**: Ready for step 2.

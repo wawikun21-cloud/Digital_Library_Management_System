@@ -96,49 +96,20 @@ const AttendanceModel = {
         return { success: false, error: "Student is already checked in" };
       }
 
-      // Try to get student information from students table first
-      let studentName = student_name;
-      let studentCourse = student_course;
-      let studentYrLevel = student_yr_level;
-      
+      // Validate that student exists in students table
       const [studentRecords] = await pool.query(`
         SELECT student_name, student_course, student_yr_level FROM students 
         WHERE student_id_number = ? AND is_active = true
       `, [student_id_number]);
 
-      if (studentRecords.length > 0) {
-        if (!studentName) studentName = studentRecords[0].student_name;
-        if (!studentCourse) studentCourse = studentRecords[0].student_course || '';
-        if (!studentYrLevel) studentYrLevel = studentRecords[0].student_yr_level || '';
-      } else {
-        // Try to get student information from borrowed books if not in students table
-        if (!studentName) {
-          const [borrowedRecords] = await pool.query(`
-            SELECT DISTINCT borrower_name FROM borrowed_books 
-            WHERE borrower_id_number = ?
-            ORDER BY borrow_date DESC LIMIT 1
-          `, [student_id_number]);
-
-          if (borrowedRecords.length > 0) {
-            studentName = borrowedRecords[0].borrower_name;
-          } else {
-            studentName = `Student ${student_id_number}`; // Default name if not found
-          }
-        }
-
-        if (!studentCourse || !studentYrLevel) {
-          const [borrowedRecords] = await pool.query(`
-            SELECT DISTINCT borrower_course, borrower_yr_level FROM borrowed_books 
-            WHERE borrower_id_number = ?
-            ORDER BY borrow_date DESC LIMIT 1
-          `, [student_id_number]);
-
-          if (borrowedRecords.length > 0) {
-            if (!studentCourse) studentCourse = borrowedRecords[0].borrower_course || '';
-            if (!studentYrLevel) studentYrLevel = borrowedRecords[0].borrower_yr_level || '';
-          }
-        }
+      if (studentRecords.length === 0) {
+        return { success: false, error: "Student does not exist" };
       }
+
+      // Use student information from students table
+      let studentName = student_name || studentRecords[0].student_name;
+      let studentCourse = student_course || studentRecords[0].student_course || '';
+      let studentYrLevel = student_yr_level || studentRecords[0].student_yr_level || '';
 
       const [result] = await pool.query(
         `INSERT INTO attendance (student_name, student_id_number, student_course, student_yr_level, check_in_time, status)

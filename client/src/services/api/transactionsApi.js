@@ -3,7 +3,7 @@
  * Centralized API calls for borrowed/transaction operations
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
 /**
  * Fetch all transactions (borrowed books)
@@ -21,8 +21,8 @@ export async function fetchTransactions(options = {}) {
 
     const queryString = params.toString();
     const url = queryString 
-      ? `${API_BASE}/api/transactions?${queryString}` 
-      : `${API_BASE}/api/transactions`;
+      ? `${API_BASE}/transactions?${queryString}` 
+      : `${API_BASE}/transactions`;
 
     const response = await fetch(url);
     const data = await response.json();
@@ -41,7 +41,7 @@ export async function fetchTransactions(options = {}) {
  */
 export async function fetchTransactionById(id) {
   try {
-    const response = await fetch(`${API_BASE}/api/transactions/${id}`);
+    const response = await fetch(`${API_BASE}/transactions/${id}`);
     const data = await response.json();
     
     return data;
@@ -58,7 +58,7 @@ export async function fetchTransactionById(id) {
  */
 export async function createTransaction(transactionData) {
   try {
-    const response = await fetch(`${API_BASE}/api/transactions`, {
+    const response = await fetch(`${API_BASE}/transactions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -82,7 +82,7 @@ export async function createTransaction(transactionData) {
  */
 export async function returnBook(id, returnData = {}) {
   try {
-    const response = await fetch(`${API_BASE}/api/transactions/${id}/return`, {
+    const response = await fetch(`${API_BASE}/transactions/${id}/return`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -105,7 +105,7 @@ export async function returnBook(id, returnData = {}) {
  */
 export async function deleteTransaction(id) {
   try {
-    const response = await fetch(`${API_BASE}/api/transactions/${id}`, {
+    const response = await fetch(`${API_BASE}/transactions/${id}`, {
       method: "DELETE",
     });
     
@@ -123,7 +123,7 @@ export async function deleteTransaction(id) {
  */
 export async function getTransactionStats() {
   try {
-    const response = await fetch(`${API_BASE}/api/transactions/stats`);
+    const response = await fetch(`${API_BASE}/transactions/stats`);
     const data = await response.json();
     
     return data;
@@ -141,4 +141,3 @@ export default {
   deleteTransaction,
   getTransactionStats,
 };
-

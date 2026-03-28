@@ -8,8 +8,10 @@ import {
   checkOut, 
   deleteAttendance 
 } from '../services/api/attendanceApi';
+import { getStudentByStudentIdNumber } from '../services/api/studentsApi';
 import StatsCard from '../components/StatsCard';
 import Toast from '../components/Toast';
+import useDebounce from '../hooks/useDebounce';
 
 // ─────────────────────────────────────────────────────────
 //  Attendance Page
@@ -28,6 +30,9 @@ export default function Attendance() {
   const [checkInForm, setCheckInForm] = useState({
     student_id_number: ''
   });
+  const [studentDetails, setStudentDetails] = useState(null);
+  const [isLookingUpStudent, setIsLookingUpStudent] = useState(false);
+  const debouncedStudentId = useDebounce(checkInForm.student_id_number, 500);
 
   // ── Toast state ───────────────────────────────────────
   const [toast, setToast] = useState({
@@ -83,6 +88,11 @@ export default function Attendance() {
       return;
     }
 
+    if (!studentDetails) {
+      showToast('Student does not exist', 'error');
+      return;
+    }
+
     try {
       const response = await checkIn(checkInForm);
       if (response.success) {
@@ -90,6 +100,7 @@ export default function Attendance() {
         setCheckInForm({
           student_id_number: ''
         });
+        setStudentDetails(null);
         fetchAttendanceData();
       } else {
         showToast(response.error, 'error');
@@ -169,6 +180,33 @@ export default function Attendance() {
     fetchAttendanceData();
   }, []);
 
+  // ── Look up student details when student ID changes ──
+  useEffect(() => {
+    const lookupStudent = async () => {
+      if (!debouncedStudentId || debouncedStudentId.trim() === '') {
+        setStudentDetails(null);
+        return;
+      }
+
+      setIsLookingUpStudent(true);
+      try {
+        const response = await getStudentByStudentIdNumber(debouncedStudentId);
+        if (response.success) {
+          setStudentDetails(response.data);
+        } else {
+          setStudentDetails(null);
+        }
+      } catch (error) {
+        console.error('Error looking up student:', error);
+        setStudentDetails(null);
+      } finally {
+        setIsLookingUpStudent(false);
+      }
+    };
+
+    lookupStudent();
+  }, [debouncedStudentId]);
+
   return (
     <div className="p-6">
       {/* ── Page Header ──────────────────────────────────── */}
@@ -232,6 +270,37 @@ export default function Attendance() {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
               placeholder="Enter student ID number"
             />
+            {isLookingUpStudent && (
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Looking up student...
+              </p>
+            )}
+            {studentDetails && !isLookingUpStudent && (
+              <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+                <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                  {studentDetails.display_name || studentDetails.student_name}
+                </p>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {studentDetails.student_course && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                      {studentDetails.student_course}
+                    </span>
+                  )}
+                  {studentDetails.student_yr_level && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                      {studentDetails.student_yr_level.toLowerCase().includes('year') 
+                        ? studentDetails.student_yr_level 
+                        : `Year ${studentDetails.student_yr_level}`}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            {!studentDetails && !isLookingUpStudent && checkInForm.student_id_number.trim() !== '' && (
+              <p className="mt-1 text-sm text-red-500 dark:text-red-400">
+                Student does not exist
+              </p>
+            )}
           </div>
           <div className="flex-shrink-0">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -239,7 +308,12 @@ export default function Attendance() {
             </label>
             <button
               type="submit"
-              className="w-full px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-md transition-colors duration-200 flex items-center gap-2"
+              disabled={!studentDetails}
+              className={`w-full px-6 py-2 font-semibold rounded-md transition-colors duration-200 flex items-center gap-2 ${
+                studentDetails
+                  ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                  : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+              }`}
             >
               <ArrowRight className="w-4 h-4" />
               Check In

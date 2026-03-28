@@ -46,6 +46,8 @@ export default function BookForm({ form, setForm, errors, setErrors }) {
         { label: "Size", fkey: "size" },
         { label: "Shelf", fkey: "shelf" },
         { label: "Pages", fkey: "pages", type: "number", placeholder: "e.g. 320" },
+        // ── NEW ──────────────────────────────────────────────
+        { label: "Sublocation", fkey: "sublocation", placeholder: "e.g. Reference Section" },
       ]
     },
   ];
@@ -62,13 +64,13 @@ export default function BookForm({ form, setForm, errors, setErrors }) {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
             {section.fields.map((field) => (
-              <Field 
-                key={field.fkey} 
-                {...field} 
-                form={form} 
-                setForm={setForm} 
-                errors={errors} 
-                setErrors={setErrors} 
+              <Field
+                key={field.fkey}
+                {...field}
+                form={form}
+                setForm={setForm}
+                errors={errors}
+                setErrors={setErrors}
               />
             ))}
           </div>
@@ -101,12 +103,18 @@ function Field({ label, fkey, type = "text", placeholder = "", form, setForm, er
   const id = `field-${fkey}`;
   return (
     <div className="flex flex-col gap-1.5">
-      <label 
+      <label
         htmlFor={id}
-        className="text-[11px] font-bold uppercase tracking-wider pl-0.5" 
+        className="text-[11px] font-bold uppercase tracking-wider pl-0.5"
         style={{ color:"var(--text-secondary)" }}
       >
         {label}
+        {/* Sublocation is optional — show hint */}
+        {fkey === "sublocation" && (
+          <span className="ml-1 normal-case font-normal text-[10px]" style={{ color: "var(--text-muted)" }}>
+            (optional)
+          </span>
+        )}
       </label>
       <input
         id={id}

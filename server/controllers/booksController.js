@@ -70,7 +70,11 @@ const createBook = async (req, res) => {
       return res.status(400).json(errorResponse("Validation failed", 400, validation.errors));
     }
 
-    const result = await BookModel.create(bookData);
+    // sublocation is optional — pass through as-is (null if not provided)
+    const result = await BookModel.create({
+      ...bookData,
+      sublocation: bookData.sublocation || null,
+    });
 
     if (!result.success) {
       return res.status(400).json(errorResponse(result.error, 400));
@@ -98,7 +102,11 @@ const updateBook = async (req, res) => {
       return res.status(400).json(errorResponse("Validation failed", 400, validation.errors));
     }
 
-    const result = await BookModel.update(id, bookData);
+    // sublocation is optional — pass through as-is (null if not provided)
+    const result = await BookModel.update(id, {
+      ...bookData,
+      sublocation: bookData.sublocation || null,
+    });
 
     if (!result.success) {
       return res.status(400).json(errorResponse(result.error, 400));
@@ -150,12 +158,65 @@ const getBookCount = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/books/check-duplicates
+ * Pre-flight check for bulk import duplicates
+ */
+const checkDuplicates = async (req, res) => {
+  try {
+    const { books } = req.body;
+    const result = await BookModel.checkDuplicatesBatch(books);
+
+    if (!result.success) {
+      return res.status(400).json(errorResponse(result.error, 400));
+    }
+
+    res.json({
+      success: true,
+      hasDuplicates: result.hasDuplicates || false,
+      duplicateTitles: result.duplicateTitles || [],
+      duplicateAccessions: result.duplicateAccessions || [],
+    });
+  } catch (error) {
+    console.error("[BooksController] checkDuplicates Error:", error.message);
+    res.status(500).json(errorResponse("Failed to check duplicates", 500));
+  }
+};
+
+/**
+ * POST /api/books/bulk-import
+ * Bulk import books + copies
+ */
+const bulkImport = async (req, res) => {
+  try {
+    const { books } = req.body;
+    const result = await BookModel.bulkImport(books);
+
+    if (!result.success) {
+      return res.status(400).json(errorResponse(result.error, 400));
+    }
+
+    res.json({
+      success: true,
+      imported: result.imported || 0,
+      updated: result.updated || 0,
+      errors: result.errors || 0,
+      data: result.data || [],
+      errorsDetail: result.errorsDetail || []
+    });
+  } catch (error) {
+    console.error("[BooksController] bulkImport Error:", error.message);
+    res.status(500).json(errorResponse("Failed to bulk import", 500));
+  }
+};
+
 module.exports = {
-  getBooks,
+  getBooks,        // ← was missing, now exported
   getBookById,
   createBook,
   updateBook,
   deleteBook,
   getBookCount,
+  checkDuplicates,
+  bulkImport,
 };
-

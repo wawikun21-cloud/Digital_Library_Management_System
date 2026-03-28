@@ -154,6 +154,7 @@ const BookModel = {
         shelf = null, pages = null, collection = null,
         status = "Available", cover = null,
         quantity = null,
+        sublocation = null,                          // ✅ FIX: added
       } = bookData;
 
       const qty = quantity != null ? Number(quantity) : null;
@@ -165,8 +166,8 @@ const BookModel = {
           accessionNumber, callNumber, year, date, publisher, edition,
           materialType, subtype, extent, size, volume, authorName, authorDates,
           place, description, otherDetails, shelf, pages, collection,
-          status, cover, quantity
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          status, cover, quantity, sublocation
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           title, subtitle, author || authors, authors,
           genre, isbn, issn, lccn,
@@ -176,6 +177,7 @@ const BookModel = {
           place, description, otherDetails,
           shelf, pages, collection,
           finalStatus, cover, qty,
+          sublocation,                               // ✅ FIX: added
         ]
       );
 
@@ -208,6 +210,7 @@ const BookModel = {
         cover = null,
         accessionNumbers = [],   // array of accession strings
         dateAcquired = null,
+        sublocation = null,                          // ✅ FIX: added
       } = bookData;
 
       // ── 1. Check if book already exists (by ISBN → title+author → title only) ──
@@ -252,8 +255,8 @@ const BookModel = {
             accessionNumber, callNumber, year, date, publisher, edition,
             materialType, subtype, extent, size, volume, authorName, authorDates,
             place, description, otherDetails, shelf, pages, collection,
-            status, cover, quantity
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            status, cover, quantity, sublocation
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             title, subtitle, authorVal, authorVal,
             genre, isbn, issn, lccn,
@@ -265,6 +268,7 @@ const BookModel = {
             shelf, pages, collection,
             "Available", cover,
             accessionNumbers.length || null,
+            sublocation,                   // ✅ FIX: added
           ]
         );
         bookId = result.insertId;
@@ -354,6 +358,7 @@ const BookModel = {
         description = null, otherDetails = null,
         shelf = null, pages = null, collection = null,
         status = "Available", cover = null, quantity = null,
+        sublocation = null,                          // ✅ FIX: added
       } = bookData;
 
       const [current] = await pool.query("SELECT * FROM books WHERE id = ?", [id]);
@@ -368,7 +373,8 @@ const BookModel = {
           accessionNumber=?, callNumber=?, year=?, date=?, publisher=?, edition=?,
           materialType=?, subtype=?, extent=?, size=?, volume=?,
           authorName=?, authorDates=?, place=?, description=?, otherDetails=?,
-          shelf=?, pages=?, collection=?, status=?, cover=?, quantity=?
+          shelf=?, pages=?, collection=?, status=?, cover=?, quantity=?,
+          sublocation=?
          WHERE id=?`,
         [
           title, subtitle, author || authors, authors,
@@ -377,7 +383,9 @@ const BookModel = {
           publisher, edition, materialType, subtype,
           extent, size, volume, authorName, authorDates,
           place, description, otherDetails,
-          shelf, pages, collection, finalStatus, cover, qty, id,
+          shelf, pages, collection, finalStatus, cover, qty,
+          sublocation,                               // ✅ FIX: added
+          id,
         ]
       );
 
@@ -426,6 +434,104 @@ const BookModel = {
     } catch (error) {
       console.error("[BookModel.getByStatus]", error.message);
       return { success: false, error: error.message };
+    }
+  },
+
+  // ── BATCH DUPLICATE CHECK (for bulk import pre-flight) ──────
+  async checkDuplicatesBatch(books) {
+    try {
+      if (!Array.isArray(books) || books.length === 0) {
+        return { success: true, duplicateTitles: [], duplicateAccessions: [] };
+      }
+
+      const titles = books.map(b => b.title).filter(Boolean);
+      const allAccessions = books.flatMap(b => (b.accessionNumbers || [])).filter(Boolean);
+
+      const duplicateTitles = [];
+      const duplicateAccessions = [];
+
+      // Batch title check
+      if (titles.length > 0) {
+        const placeholders = titles.map(() => '?').join(',');
+        const [titleMatches] = await pool.query(
+          `SELECT id, title FROM books 
+           WHERE LOWER(TRIM(title)) IN (${placeholders})`,
+          titles
+        );
+        for (const match of titleMatches) {
+          const book = books.find(b => b.title.toLowerCase().trim() === match.title.toLowerCase().trim());
+          if (book) {
+            duplicateTitles.push({ title: book.title, existingId: match.id });
+          }
+        }
+      }
+
+      // Batch accession check
+      if (allAccessions.length > 0) {
+        const placeholders = allAccessions.map(() => '?').join(',');
+        const [accMatches] = await pool.query(
+          `SELECT accession_number, book_id FROM book_copies 
+           WHERE accession_number IN (${placeholders})`,
+          allAccessions
+        );
+        for (const match of accMatches) {
+          const book = books.find(b => (b.accessionNumbers || []).includes(match.accession_number));
+          if (book) {
+            duplicateAccessions.push({ 
+              accession: match.accession_number, 
+              book: book.title,
+              existingBookId: match.book_id 
+            });
+          }
+        }
+      }
+
+      return { 
+        success: true, 
+        hasDuplicates: duplicateTitles.length > 0 || duplicateAccessions.length > 0,
+        duplicateTitles, 
+        duplicateAccessions 
+      };
+    } catch (error) {
+      console.error("[BookModel.checkDuplicatesBatch]", error.message);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // ── BULK IMPORT WRAPPER (uses importWithCopies in transaction) ──
+  async bulkImport(books) {
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      const results = [];
+      const errors = [];
+
+      for (const bookData of books) {
+        const result = await this.importWithCopies(bookData);
+        if (result.success) {
+          results.push(result);
+        } else {
+          errors.push({ title: bookData.title || 'Unknown', error: result.error });
+        }
+      }
+
+      await conn.commit();
+
+      return {
+        success: errors.length === 0,
+        imported: results.filter(r => r.isNewBook).length,
+        updated: results.filter(r => !r.isNewBook).length,
+        errors: errors.length,
+        data: results.map(r => r.data),
+        errorsDetail: errors
+      };
+    } catch (error) {
+      await conn.rollback();
+      console.error("[BookModel.bulkImport]", error.message);
+      return { success: false, error: error.message };
+    } finally {
+      conn.release();
     }
   },
 };

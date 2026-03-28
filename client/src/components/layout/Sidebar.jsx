@@ -1,18 +1,19 @@
 import { useState } from 'react';
 import { NavLink, useLocation } from "react-router-dom";
-import { BarChart3, BookOpen, ClipboardList, Trash2, Sun, Moon, X, ChevronDown, Library, Users, User } from "lucide-react";
+import { BarChart3, BookOpen, ClipboardList, Trash2, Sun, Moon, X, ChevronDown, Library, Users, User, Globe } from "lucide-react";
 import Logo from './Logo.jsx';
 
 const SIDEBAR_WIDTHS = { COLLAPSED: 58, EXPANDED: 220 };
 const BRAND_HEIGHT = 66;
 
 const NAV = [
-  { to: "/",         label: "Dashboard", Icon: BarChart3     },
-  { to: "/books", label: "Books", Icon: BookOpen },
-  { to: "/borrowed", label: "Borrowed",  Icon: ClipboardList },
-  { to: "/attendance", label: "Attendance",  Icon: Users },
-  { to: "/students", label: "Students",  Icon: User },
-  { to: "/deleted",  label: "Recently Deleted", Icon: Trash2 },
+  { to: "/dashboard",              label: "Dashboard",       Icon: BarChart3     },
+  { to: "/dashboard/books",        label: "Books",           Icon: BookOpen      },
+  { to: "/dashboard/lexora-books", label: "Lexora Books",    Icon: Globe         },
+  { to: "/dashboard/borrowed",     label: "Borrowed",        Icon: ClipboardList },
+  { to: "/dashboard/attendance",   label: "Attendance",      Icon: Users         },
+  { to: "/dashboard/students",     label: "Students",        Icon: User          },
+  { to: "/dashboard/deleted",      label: "Recently Deleted",Icon: Trash2        }
 ];
 
 /* ─────────────────────────────────────────────────── */
@@ -63,10 +64,7 @@ export default function Sidebar({
 
 /* ── Shared inner content ────────────────────────── */
 function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme }) {
-  const variant  = collapsed ? 'collapsed' : 'expanded';
-  const location = useLocation();
-
-
+  const variant = collapsed ? 'collapsed' : 'expanded';
 
   return (
     <div className="flex flex-col h-full">
@@ -82,13 +80,8 @@ function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme }) {
       {/* Nav */}
       <nav className="flex-1 flex flex-col gap-0.5 p-2 pt-4 overflow-y-auto overflow-x-hidden">
         {NAV.map((item) => (
-            <NavItem
-              key={item.to}
-              item={item}
-              collapsed={collapsed}
-            />
-          ))}
-
+          <NavItem key={item.to} item={item} collapsed={collapsed} />
+        ))}
       </nav>
 
       {/* Footer */}
@@ -124,9 +117,8 @@ function NavItem({ item, collapsed }) {
   return (
     <NavLink
       to={to}
-      end={to === "/"}
+      end={to === "/dashboard"}
       title={collapsed ? label : undefined}
-
       className={({ isActive }) => [
         "flex items-center rounded-lg text-sm font-medium",
         "overflow-hidden whitespace-nowrap select-none transition-colors duration-150 px-3 py-2.5",
@@ -142,7 +134,7 @@ function NavItem({ item, collapsed }) {
           <span className="shrink-0 flex items-center justify-center" style={{ width: 18, minWidth: 18 }}>
             <Icon size={18} style={{ color: isActive ? "#F3B940" : undefined }} />
           </span>
-           {!collapsed && <span className="ml-3 truncate">{label}</span>}
+          {!collapsed && <span className="ml-3 truncate">{label}</span>}
         </>
       )}
     </NavLink>
@@ -159,7 +151,6 @@ function BooksMenu({ item, collapsed, open, onToggle }) {
 
   return (
     <div>
-      {/* ── Books row: NavLink navigates, chevron button toggles submenu ── */}
       <div
         className="flex items-center rounded-lg overflow-hidden"
         style={{
@@ -167,7 +158,6 @@ function BooksMenu({ item, collapsed, open, onToggle }) {
           transition: "background 150ms",
         }}
       >
-        {/* NavLink — icon + label, navigates to /books + opens submenu */}
         <NavLink
           to={to}
           end
@@ -190,7 +180,6 @@ function BooksMenu({ item, collapsed, open, onToggle }) {
           {!collapsed && <span className="ml-3 truncate">{label}</span>}
         </NavLink>
 
-        {/* Chevron button — only toggles the submenu, never navigates */}
         {!collapsed && (
           <button
             onClick={onToggle}
@@ -210,7 +199,6 @@ function BooksMenu({ item, collapsed, open, onToggle }) {
         )}
       </div>
 
-      {/* ── Submenu ── */}
       {!collapsed && (
         <div style={{ overflow: "hidden", maxHeight: open ? 120 : 0, transition: "max-height 280ms ease" }}>
           {children.map(({ to: cTo, label: cLabel, Icon: CIcon }) => (
