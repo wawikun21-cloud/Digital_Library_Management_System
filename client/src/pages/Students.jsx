@@ -48,6 +48,7 @@ export default function Students() {
   const [importFile, setImportFile] = useState(null);
   const [parsedStudentsData, setParsedStudentsData] = useState(null);
   const [importResult, setImportResult] = useState(null);
+  const [importCourse, setImportCourse] = useState('');
   const fileInputRef = useRef(null);
 
   // ── Toast state ─────────────────────────────────────
@@ -169,7 +170,7 @@ export default function Students() {
             return {
               student_id_number: row['Username'] || row['username'] || '',
               student_name: studentName,
-              student_course: '', // Empty since not provided in the Excel file
+              student_course: '', // Will be set by admin in the import dialog
               student_yr_level: yearLevel, // Get from sheet name
               student_email: row['Email'] || row['email'] || '',
               student_contact: '', // Empty since not provided in the Excel file
@@ -199,7 +200,13 @@ export default function Students() {
   // ── Handle bulk import ───────────────────────────────
   const handleBulkImport = async (studentsData) => {
     try {
-      const response = await bulkImportStudents(studentsData);
+      // Apply the selected course to all students
+      const studentsWithCourse = studentsData.map(student => ({
+        ...student,
+        student_course: importCourse
+      }));
+      
+      const response = await bulkImportStudents(studentsWithCourse);
       if (response.success) {
         setImportResult(response.data);
         setParsedStudentsData(null); // Clear parsed data
@@ -723,6 +730,7 @@ export default function Students() {
                   setIsImportModalOpen(false);
                   setImportFile(null);
                   setImportResult(null);
+                  setImportCourse('');
                 }}
                 className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
               >
@@ -775,6 +783,21 @@ export default function Students() {
                       </div>
                     )}
                   </div>
+                </div>
+
+                {/* Course Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Course *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={importCourse}
+                    onChange={(e) => setImportCourse(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    placeholder="Enter course (e.g., BSIT)"
+                  />
                 </div>
 
                 {/* Download Template */}
@@ -841,6 +864,7 @@ export default function Students() {
                     setImportFile(null);
                     setParsedStudentsData(null);
                     setImportResult(null);
+                    setImportCourse('');
                   }}
                   className="px-4 py-2 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 transition-colors"
                 >
@@ -865,10 +889,10 @@ export default function Students() {
                             Name
                           </th>
                           <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">
-                            Email
+                            Year Level
                           </th>
                           <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">
-                            Year Level
+                            Email
                           </th>
                         </tr>
                       </thead>
@@ -882,10 +906,10 @@ export default function Students() {
                               {student.student_name}
                             </td>
                             <td className="py-2 px-3 text-gray-800 dark:text-white">
-                              {student.student_email || 'N/A'}
+                              {student.student_yr_level || 'N/A'}
                             </td>
                             <td className="py-2 px-3 text-gray-800 dark:text-white">
-                              {student.student_yr_level || 'N/A'}
+                              {student.student_email || 'N/A'}
                             </td>
                           </tr>
                         ))}
