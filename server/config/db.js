@@ -38,6 +38,7 @@ async function initDatabase() {
         username   VARCHAR(100) NOT NULL UNIQUE,
         password   VARCHAR(255) NOT NULL,
         role       VARCHAR(50)  NOT NULL DEFAULT 'admin',
+        avatar_url MEDIUMTEXT   NULL,
         created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -167,6 +168,10 @@ async function initDatabase() {
 
 async function migrateSchema(conn) {
   const migrations = [
+    // ── users: avatar column ──────────────────────────────
+    `ALTER TABLE users ADD COLUMN avatar_url MEDIUMTEXT NULL`,
+
+    // ── books ─────────────────────────────────────────────
     `ALTER TABLE books MODIFY COLUMN author    VARCHAR(255) NULL`,
     `ALTER TABLE books MODIFY COLUMN genre     VARCHAR(100) NULL`,
     `ALTER TABLE books MODIFY COLUMN isbn      VARCHAR(50)  NULL`,
@@ -180,7 +185,7 @@ async function migrateSchema(conn) {
     `ALTER TABLE book_copies ADD COLUMN condition_notes TEXT NULL`,
     `ALTER TABLE book_copies ADD UNIQUE INDEX idx_acc_unique (accession_number)`,
 
-    // ── lexora_books column additions (safe on existing installs) ──
+    // ── lexora_books ──────────────────────────────────────
     `ALTER TABLE lexora_books ADD COLUMN format         VARCHAR(50)  NULL AFTER resource_type`,
     `ALTER TABLE lexora_books ADD COLUMN subject_course VARCHAR(500) NULL AFTER format`,
     `ALTER TABLE lexora_books ADD COLUMN resource_type  VARCHAR(50)  NULL`,
