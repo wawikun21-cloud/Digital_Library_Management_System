@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   AreaChart, Area, ResponsiveContainer,
@@ -14,8 +15,8 @@ import StatsCard from "../components/StatsCard";
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
 const KPI_PLACEHOLDERS = [
-  { label: "Total Books",  value: "—", change: "Loading...", accent: "#132F45", percentage: undefined },
-  { label: "Available",    value: "—", change: "Loading...", accent: "#32667F", percentage: undefined },
+  { label: "NEMCO BOOKS",  value: "—", change: "Loading...", accent: "#132F45", percentage: undefined },
+  { label: "LEXORA BOOKS", value: "—", change: "Loading...", accent: "#32667F", percentage: undefined },
   { label: "Out of Stock", value: "—", change: "Loading...", accent: "#dc2626", percentage: undefined },
   { label: "Returned",     value: "—", change: "Loading...", accent: "#32667F", percentage: undefined },
 ];
@@ -813,7 +814,8 @@ function OverdueBooks({ semester, month }) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 export default function Dashboard() {
-  const [schoolYear, setSchoolYear] = useState(SCHOOL_YEARS[0]);   // default: most recent
+  const navigate = useNavigate();
+  const [schoolYear, setSchoolYear] = useState(SCHOOL_YEARS[0]);
   const [semester,   setSemester]   = useState("2nd Sem");
   const [month,      setMonth]      = useState("All");
   const [kpiStats,   setKpiStats]   = useState(null);
@@ -833,31 +835,57 @@ export default function Dashboard() {
     }
 
     loadKpis();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   const stats = useMemo(() => {
     if (!kpiStats) return KPI_PLACEHOLDERS;
 
-    const total      = Number(kpiStats?.total ?? 0);
-    const available  = Number(kpiStats?.available ?? 0);
-    const outOfStock = Number(kpiStats?.outOfStock ?? 0);
-    const returned   = Number(kpiStats?.returned ?? 0);
+    const nemcoTotal      = Number(kpiStats?.nemcoTotal  ?? 0);
+    const lexoraTotal     = Number(kpiStats?.lexoraTotal ?? 0);
+    const nemcoOutOfStock = Number(kpiStats?.nemcoOutOfStock ?? 0);
+    const returned        = Number(kpiStats?.returned    ?? 0);
 
-    const pctOfTotal = n => {
+    const pctOf = (n, total) => {
       if (!total) return undefined;
       return Math.max(0, Math.min(100, Math.round((n / total) * 100)));
     };
 
     return [
-      { label: "Total Books",   value: total.toLocaleString(),      change: "Live", accent: "#132F45", percentage: total ? 100 : undefined },
-      { label: "Available",     value: available.toLocaleString(),  change: "Live", accent: "#32667F", percentage: pctOfTotal(available) },
-      { label: "Out of Stock", value: outOfStock.toLocaleString(), change: "Live", accent: "#dc2626", percentage: pctOfTotal(outOfStock) },
-      { label: "Returned",      value: returned.toLocaleString(),   change: "Live", accent: "#32667F", percentage: pctOfTotal(returned) },
+      {
+        label: "NEMCO BOOKS",
+        value: nemcoTotal.toLocaleString(),
+        change: "Live",
+        accent: "#132F45",
+        percentage: nemcoTotal ? 100 : undefined,
+        onClick: () => navigate("/dashboard/books"),
+      },
+      {
+        label: "LEXORA BOOKS",
+        value: lexoraTotal.toLocaleString(),
+        change: "Live",
+        accent: "#32667F",
+        percentage: lexoraTotal ? 100 : undefined,
+        onClick: () => navigate("/dashboard/lexora-books"),
+      },
+      {
+        label: "Out of Stock",
+        value: nemcoOutOfStock.toLocaleString(),
+        change: "Live",
+        accent: "#dc2626",
+        percentage: pctOf(nemcoOutOfStock, nemcoTotal),
+        onClick: () => navigate("/dashboard/books?status=OutOfStock"),
+      },
+      {
+        label: "Returned",
+        value: returned.toLocaleString(),
+        change: "Live",
+        accent: "#32667F",
+        percentage: pctOf(returned, nemcoTotal),
+        onClick: () => navigate("/dashboard/books?status=Returned"),
+      },
     ];
-  }, [kpiStats]);
+  }, [kpiStats, navigate]);
 
   return (
     <main className="flex flex-col gap-4 lg:gap-5" aria-label="Library Analytics Dashboard">
@@ -873,6 +901,7 @@ export default function Dashboard() {
             change={stat.change}
             accent={stat.accent}
             percentage={stat.percentage}
+            onClick={stat.onClick}
           />
         ))}
       </section>

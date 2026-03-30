@@ -1,31 +1,39 @@
-import { Trash2, Edit2, CheckCircle2, CalendarClock, RotateCcw } from "lucide-react";
+import { CalendarClock } from "lucide-react";
+
+const FINE_PER_DAY = 5;
+
+function calcFine(t) {
+  if (!t.due_date) return 0;
+  // Prefer server-computed value
+  if (t.computed_fine !== null && t.computed_fine !== undefined) return Number(t.computed_fine);
+  // Client-side fallback: use today for Borrowed, return_date for Returned
+  const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+  const refStr   = t.status === "Returned" && t.return_date ? t.return_date : todayStr;
+  const late     = Math.max(0, Math.floor((new Date(refStr + "T00:00:00") - new Date(t.due_date + "T00:00:00")) / 86400000));
+  return late * FINE_PER_DAY;
+}
 
 export default function BorrowedTable({ 
   transactions, 
-  onEdit, 
-  onDelete, 
-  onReturn,
+  onRowClick,
   isOverdue 
 }) {
   // Format date for display
   const formatDate = (iso) => {
     if (!iso) return "—";
-    return new Date(iso + "T00:00:00").toLocaleDateString("en-US", { 
-      month: "short", 
+    const [y, m, d] = iso.slice(0, 10).split("-");
+    return new Date(+y, +m - 1, +d).toLocaleDateString("en-US", {
+      month: "short",
       day: "numeric",
       year: "numeric"
     });
   };
 
   // Get status badge styles
-  const getStatusStyle = (status) => {
-    if (status === "Borrowed") {
-      return { bg: "rgba(50,102,127,0.12)", color: "#32667F" };
-    }
-    if (status === "Returned") {
-      return { bg: "rgba(50,127,79,0.12)", color: "#2d7a4f" };
-    }
-    return { bg: "rgba(234,139,51,0.12)", color: "#c05a0a" };
+  const getStatusStyle = (displayStatus) => {
+    if (displayStatus === "Returned") return { bg: "rgba(50,127,79,0.12)",  color: "#2d7a4f" };
+    if (displayStatus === "Overdue")  return { bg: "rgba(234,139,51,0.12)", color: "#c05a0a" };
+    return { bg: "rgba(50,102,127,0.12)", color: "#32667F" }; // Borrowed
   };
 
   return (
@@ -41,24 +49,29 @@ export default function BorrowedTable({
             <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Due Date</th>
             <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Return Date</th>
             <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Status</th>
-            <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Actions</th>
+            <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Fines</th>
           </tr>
         </thead>
         <tbody>
           {transactions.map((t, idx) => {
-            const isReturned = t.status === "Returned";
-            const overdue = isOverdue && isOverdue(t.due_date, t.status);
-            const statusStyle = getStatusStyle(t.status);
-            
+            const isReturned    = t.status === "Returned";
+            const overdue      = isOverdue && isOverdue(t.due_date, t.status);
+            const displayStatus = isReturned ? "Returned" : overdue ? "Overdue" : "Borrowed";
+            const statusStyle  = getStatusStyle(displayStatus);
+            const fine         = calcFine(t);
+            const finePaid     = !!t.fine_paid;
+
             return (
-              <tr 
-                key={t.id} 
-                className="border-b transition-colors duration-150 hover:bg-opacity-50"
-                style={{ 
+              <tr
+                key={t.id}
+                className="border-b transition-colors duration-150"
+                style={{
                   borderColor: "var(--border-light)",
                   background: "var(--bg-surface)",
                   opacity: isReturned ? 0.65 : 1,
+                  cursor: "pointer",
                 }}
+                onClick={() => onRowClick && onRowClick(t)}
                 onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-hover)"}
                 onMouseLeave={(e) => e.currentTarget.style.background = "var(--bg-surface)"}
               >
@@ -92,7 +105,7 @@ export default function BorrowedTable({
                 </td>
 
                 {/* Contact */}
-                <td className="px-3 py-3 text-[11px] truncate max-w-[100px]" style={{ color: "var(--text-secondary)" }}>
+                <td className="px-3 py-3 text-[11px]" style={{ color: "var(--text-secondary)" }}>
                   {t.borrower_contact || "—"}
                 </td>
 
@@ -116,53 +129,29 @@ export default function BorrowedTable({
 
                 {/* Status */}
                 <td className="px-3 py-3">
-                  <span 
+                  <span
                     className="text-[10px] font-semibold px-2 py-1 rounded"
-                    style={{ 
-                      background: statusStyle.bg, 
-                      color: statusStyle.color 
-                    }}
+                    style={{ background: statusStyle.bg, color: statusStyle.color }}
                   >
-                    {t.status}
+                    {displayStatus}
                   </span>
                 </td>
 
-                {/* Actions */}
+                {/* Fines */}
                 <td className="px-3 py-3">
-                  <div className="flex items-center gap-1">
-                    {!isReturned && (
-                      <button
-                        onClick={() => onReturn(t.id)}
-                        className="p-1.5 rounded-md transition-colors duration-150"
-                        style={{ color: "var(--text-secondary)" }}
-                        title="Mark as Returned"
-                        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(50,127,79,0.1)"; e.currentTarget.style.color = "#2d7a4f"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-secondary)"; }}
-                      >
-                        <CheckCircle2 size={14} />
-                      </button>
-                    )}
-                    <button
-                      onClick={() => onEdit(t)}
-                      className="p-1.5 rounded-md transition-colors duration-150"
-                      style={{ color: "var(--text-secondary)" }}
-                      title="Edit Transaction"
-                      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(50,102,127,0.1)"; e.currentTarget.style.color = "#32667F"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+                  {fine > 0 ? (
+                    <span
+                      className="text-[11px] font-bold px-2 py-1 rounded"
+                      style={{
+                        background: finePaid ? "rgba(50,127,79,0.1)"  : "rgba(234,139,51,0.12)",
+                        color:      finePaid ? "#2d7a4f"               : "#c05a0a",
+                      }}
                     >
-                      <Edit2 size={14} />
-                    </button>
-                    <button
-                      onClick={() => onDelete(t.id)}
-                      className="p-1.5 rounded-md transition-colors duration-150"
-                      style={{ color: "var(--text-secondary)" }}
-                      title="Delete Transaction"
-                      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(234,139,51,0.1)"; e.currentTarget.style.color = "#c05a0a"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-secondary)"; }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                      {finePaid ? "✓ Paid" : `₱${fine}`}
+                    </span>
+                  ) : (
+                    <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>—</span>
+                  )}
                 </td>
               </tr>
             );
@@ -172,4 +161,3 @@ export default function BorrowedTable({
     </div>
   );
 }
-

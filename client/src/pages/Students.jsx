@@ -14,11 +14,14 @@ import {
 } from '../services/api/studentsApi';
 import StatsCard from '../components/StatsCard';
 import Toast from '../components/Toast';
+import Pagination from '../components/books/Pagination';
 
 // ─────────────────────────────────────────────────────────
 //  Students Page
 //  Manage student details and bulk import functionality
 // ─────────────────────────────────────────────────────────
+
+const STUDENTS_PER_PAGE = 10;
 
 export default function Students() {
   // ── State management ──────────────────────────────────
@@ -26,6 +29,9 @@ export default function Students() {
   const [stats, setStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // ── Pagination state ─────────────────────────────────
+  const [currentPage, setCurrentPage] = useState(1);
 
   // ── Modals and forms ─────────────────────────────────
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -106,7 +112,7 @@ export default function Students() {
         return;
       }
       setImportFile(file);
-      parseExcelFile(file); // Automatically parse and show preview when file is selected
+      parseExcelFile(file);
     }
   };
 
@@ -119,15 +125,12 @@ export default function Students() {
         const XLSX = await import('xlsx');
         const workbook = XLSX.read(data, { type: 'array' });
         
-        // Read all sheets in the workbook
         let allStudentsData = [];
         for (let sheetName of workbook.SheetNames) {
           const worksheet = workbook.Sheets[sheetName];
           const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-          // Map Excel columns to our student fields
           const studentsData = jsonData.map(row => {
-            // Extract first and last name from Display Name or separate fields
             let studentName = row['Display Name'] || row['display_name'] || '';
             if (!studentName) {
               const firstName = row['First Name'] || row['first_name'] || '';
@@ -135,45 +138,32 @@ export default function Students() {
               studentName = `${firstName} ${lastName}`.trim();
             }
 
-            // Try to extract year level from sheet name (supports: "1st Year", "First Year", "Sheet1", "1" etc.)
             let yearLevel = '';
             const sheetNameLower = sheetName.toLowerCase();
             
-            // Try to extract numeric year from sheet name
             const numericMatch = sheetNameLower.match(/(\d+)/);
             if (numericMatch) {
               const sheetNumber = parseInt(numericMatch[1]);
-              if (sheetNumber === 1) {
-                yearLevel = '1st Year';
-              } else if (sheetNumber === 2) {
-                yearLevel = '2nd Year';
-              } else if (sheetNumber === 3) {
-                yearLevel = '3rd Year';
-              } else if (sheetNumber === 4) {
-                yearLevel = '4th Year';
-              }
+              if (sheetNumber === 1) yearLevel = '1st Year';
+              else if (sheetNumber === 2) yearLevel = '2nd Year';
+              else if (sheetNumber === 3) yearLevel = '3rd Year';
+              else if (sheetNumber === 4) yearLevel = '4th Year';
             }
             
-            // Fallback to existing text-based detection
             if (!yearLevel) {
-              if (sheetNameLower.includes('1st') || sheetNameLower.includes('first')) {
-                yearLevel = '1st Year';
-              } else if (sheetNameLower.includes('2nd') || sheetNameLower.includes('second')) {
-                yearLevel = '2nd Year';
-              } else if (sheetNameLower.includes('3rd') || sheetNameLower.includes('third')) {
-                yearLevel = '3rd Year';
-              } else if (sheetNameLower.includes('4th') || sheetNameLower.includes('fourth')) {
-                yearLevel = '4th Year';
-              }
+              if (sheetNameLower.includes('1st') || sheetNameLower.includes('first')) yearLevel = '1st Year';
+              else if (sheetNameLower.includes('2nd') || sheetNameLower.includes('second')) yearLevel = '2nd Year';
+              else if (sheetNameLower.includes('3rd') || sheetNameLower.includes('third')) yearLevel = '3rd Year';
+              else if (sheetNameLower.includes('4th') || sheetNameLower.includes('fourth')) yearLevel = '4th Year';
             }
 
             return {
               student_id_number: row['Username'] || row['username'] || '',
               student_name: studentName,
-              student_course: '', // Will be set by admin in the import dialog
-              student_yr_level: yearLevel, // Get from sheet name
+              student_course: '',
+              student_yr_level: yearLevel,
               student_email: row['Email'] || row['email'] || '',
-              student_contact: '', // Empty since not provided in the Excel file
+              student_contact: '',
               display_name: row['Display Name'] || row['display_name'] || '',
               first_name: row['First Name'] || row['first_name'] || '',
               last_name: row['Last Name'] || row['last_name'] || ''
@@ -200,7 +190,6 @@ export default function Students() {
   // ── Handle bulk import ───────────────────────────────
   const handleBulkImport = async (studentsData) => {
     try {
-      // Apply the selected course to all students
       const studentsWithCourse = studentsData.map(student => ({
         ...student,
         student_course: importCourse
@@ -209,7 +198,7 @@ export default function Students() {
       const response = await bulkImportStudents(studentsWithCourse);
       if (response.success) {
         setImportResult(response.data);
-        setParsedStudentsData(null); // Clear parsed data
+        setParsedStudentsData(null);
         showToast(`Successfully imported ${response.data.successful} students`, 'success');
         if (response.data.failed > 0) {
           showToast(`Failed to import ${response.data.failed} students. Check the results for details.`, 'warning');
@@ -290,6 +279,18 @@ export default function Students() {
     return matchesSearch && matchesCourse && matchesYearLevel;
   });
 
+  // ── Pagination calculations ──────────────────────────
+  const totalPages = Math.ceil(filteredStudents.length / STUDENTS_PER_PAGE);
+  const paginatedStudents = filteredStudents.slice(
+    (currentPage - 1) * STUDENTS_PER_PAGE,
+    currentPage * STUDENTS_PER_PAGE
+  );
+
+  // ── Reset to page 1 when filters/search change ──────
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filters]);
+
   // ── Reset form ──────────────────────────────────────
   const resetForm = () => {
     setFormData({
@@ -353,7 +354,7 @@ export default function Students() {
           </button>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-gray-900 dark:text-white font-medium rounded-md transition-colors"
           >
             <Plus className="w-4 h-4" />
             Add Student
@@ -441,6 +442,13 @@ export default function Students() {
               <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             </div>
           </div>
+
+          {/* ── Results count ─────────────────────────── */}
+          {!isLoading && (
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+              Showing {paginatedStudents.length} of {filteredStudents.length} student{filteredStudents.length !== 1 ? 's' : ''}
+            </p>
+          )}
         </div>
       </div>
 
@@ -452,101 +460,112 @@ export default function Students() {
             <span className="ml-3 text-gray-600 dark:text-gray-300">Loading students...</span>
           </div>
         ) : filteredStudents.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-600">
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Student
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    ID Number
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Course
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Year Level
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Email
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Display Name
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    First Name
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Last Name
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredStudents.map((student) => (
-                  <tr key={student.id} className="border-b border-gray-100 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="py-3 px-4 text-sm">
-                      <div className="flex items-center gap-3">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
-                          <User className="w-4 h-4 text-amber-500" />
-                        </div>
-                        <div className="font-medium text-gray-800 dark:text-white">
-                          {student.student_name}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
-                      {student.student_id_number}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
-                      {student.student_course || 'N/A'}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
-                      {student.student_yr_level || 'N/A'}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
-                      {student.student_email || 'N/A'}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
-                      {student.display_name || 'N/A'}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
-                      {student.first_name || 'N/A'}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
-                      {student.last_name || 'N/A'}
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            setSelectedStudent(student);
-                            setFormData(student);
-                            setIsEditMode(true);
-                            setIsModalOpen(true);
-                          }}
-                          className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900 rounded transition-colors"
-                          title="Edit"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteStudent(student.id)}
-                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900 rounded transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-600">
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Student
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      ID Number
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Course
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Year Level
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Email
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Display Name
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      First Name
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Last Name
+                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Actions
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {paginatedStudents.map((student) => (
+                    <tr key={student.id} className="border-b border-gray-100 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <td className="py-3 px-4 text-sm">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
+                            <User className="w-4 h-4 text-amber-500" />
+                          </div>
+                          <div className="font-medium text-gray-800 dark:text-white">
+                            {student.student_name}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
+                        {student.student_id_number}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
+                        {student.student_course || 'N/A'}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
+                        {student.student_yr_level || 'N/A'}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
+                        {student.student_email || 'N/A'}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
+                        {student.display_name || 'N/A'}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
+                        {student.first_name || 'N/A'}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
+                        {student.last_name || 'N/A'}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedStudent(student);
+                              setFormData(student);
+                              setIsEditMode(true);
+                              setIsModalOpen(true);
+                            }}
+                            className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900 rounded transition-colors"
+                            title="Edit"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteStudent(student.id)}
+                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900 rounded transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ── Pagination ─────────────────────────────── */}
+            <div className="mt-4 border-t border-gray-100 dark:border-gray-700 pt-4">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                setCurrentPage={setCurrentPage}
+              />
+            </div>
+          </>
         ) : (
           <div className="text-center py-12">
             <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -559,176 +578,123 @@ export default function Students() {
 
       {/* ── Student Form Modal ───────────────────────────── */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-600">
-              <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
-                {isEditMode ? 'Edit Student' : 'Add Student'}
-              </h2>
-              <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  setIsEditMode(false);
-                  resetForm();
-                }}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-              >
-                <XCircle className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="p-6">
-              <form onSubmit={isEditMode ? handleUpdateStudent : handleCreateStudent}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Student ID Number *
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div
+            className="rounded-lg shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+          >
+            <h2
+              className="text-xl font-bold mb-6"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {isEditMode ? 'Edit Student' : 'Add New Student'}
+            </h2>
+            <form onSubmit={isEditMode ? handleUpdateStudent : handleCreateStudent}>
+              <div className="space-y-4">
+                {[
+                  { label: 'Student ID Number *', key: 'student_id_number', type: 'text', required: true, placeholder: 'Enter student ID number' },
+                  { label: 'Student Name *',      key: 'student_name',      type: 'text', required: true, placeholder: 'Enter student name' },
+                  { label: 'Course *',            key: 'student_course',    type: 'text', required: true, placeholder: 'Enter course (e.g., BSIT)' },
+                  { label: 'Email',               key: 'student_email',     type: 'email', placeholder: 'Enter email address' },
+                  { label: 'Contact Number',      key: 'student_contact',   type: 'text', placeholder: 'Enter contact number' },
+                ].map(({ label, key, type, required, placeholder }) => (
+                  <div key={key}>
+                    <label
+                      className="block text-sm font-medium mb-1"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      {label}
                     </label>
                     <input
-                      type="text"
-                      required
-                      value={formData.student_id_number}
-                      onChange={(e) => setFormData({ ...formData, student_id_number: e.target.value })}
-                      disabled={isEditMode}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
-                      placeholder="Enter student ID number"
+                      type={type}
+                      required={required}
+                      value={formData[key]}
+                      onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
+                      placeholder={placeholder}
+                      className="w-full px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      style={{
+                        background: 'var(--bg-main)',
+                        border: '1px solid var(--border)',
+                        color: 'var(--text-primary)',
+                      }}
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Student Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.student_name}
-                      onChange={(e) => setFormData({ ...formData, student_name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      placeholder="Enter student name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Course
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.student_course}
-                      onChange={(e) => setFormData({ ...formData, student_course: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      placeholder="Enter course"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Year Level
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.student_yr_level}
-                      onChange={(e) => setFormData({ ...formData, student_yr_level: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      placeholder="Enter year level"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.student_email}
-                      onChange={(e) => setFormData({ ...formData, student_email: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      placeholder="Enter email address"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Contact Number
-                    </label>
-                    <input
-                      type="tel"
-                      value={formData.student_contact}
-                      onChange={(e) => setFormData({ ...formData, student_contact: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      placeholder="Enter contact number"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Display Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.display_name}
-                      onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      placeholder="Enter display name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      First Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.first_name}
-                      onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      placeholder="Enter first name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Last Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.last_name}
-                      onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      placeholder="Enter last name"
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center justify-end gap-3 mt-6">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsModalOpen(false);
-                      setIsEditMode(false);
-                      resetForm();
+                ))}
+                <div>
+                  <label
+                    className="block text-sm font-medium mb-1"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    Year Level
+                  </label>
+                  <select
+                    value={formData.student_yr_level}
+                    onChange={(e) => setFormData({ ...formData, student_yr_level: e.target.value })}
+                    className="w-full px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    style={{
+                      background: 'var(--bg-main)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-primary)',
                     }}
-                    className="px-4 py-2 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 transition-colors"
                   >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md transition-colors flex items-center gap-2"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    {isEditMode ? 'Save Changes' : 'Add Student'}
-                  </button>
+                    <option value="">Select year level</option>
+                    <option value="1st Year">1st Year</option>
+                    <option value="2nd Year">2nd Year</option>
+                    <option value="3rd Year">3rd Year</option>
+                    <option value="4th Year">4th Year</option>
+                  </select>
                 </div>
-              </form>
-            </div>
+              </div>
+
+              {/* ── Modal footer ──────────────────────────── */}
+              <div
+                className="flex items-center justify-end gap-3 mt-6 pt-4"
+                style={{ borderTop: '1px solid var(--border)' }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setIsEditMode(false);
+                    resetForm();
+                  }}
+                  className="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                  style={{
+                    background: 'var(--bg-main)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-md text-sm font-medium text-white transition-colors"
+                  style={{ background: 'var(--accent-amber)' }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                >
+                  {isEditMode ? 'Update Student' : 'Add Student'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
       {/* ── Bulk Import Modal ────────────────────────────── */}
       {isImportModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-600">
-              <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">
                 Bulk Import Students
               </h2>
               <button
                 onClick={() => {
                   setIsImportModalOpen(false);
                   setImportFile(null);
+                  setParsedStudentsData(null);
                   setImportResult(null);
                   setImportCourse('');
                 }}
@@ -737,195 +703,192 @@ export default function Students() {
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
-            <div className="p-6">
-              <div className="space-y-4">
-                {/* File Upload */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Upload Excel File
-                  </label>
-                  <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center">
-                    {importFile ? (
-                      <div className="flex flex-col items-center">
-                        <FileSpreadsheet className="w-12 h-12 text-green-500 mb-2" />
-                        <p className="text-sm text-gray-600 dark:text-gray-300 mb-1">{importFile.name}</p>
-                        <p className="text-xs text-gray-400">
-                          {(importFile.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
-                        <button
-                          onClick={() => setImportFile(null)}
-                          className="mt-2 text-red-500 hover:text-red-700 text-sm"
-                        >
-                          Remove File
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center">
-                        <Upload className="w-12 h-12 text-gray-400 mb-2" />
-                        <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-                          Drag & drop Excel file here or click to browse
-                        </p>
-                        <label className="cursor-pointer">
-                          <input
-                            type="file"
-                            accept=".xlsx, .xls"
-                            onChange={handleFileChange}
-                            className="hidden"
-                            ref={fileInputRef}
-                          />
-                          <span className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm">
-                            Choose File
-                          </span>
-                        </label>
-                        <p className="text-xs text-gray-500 mt-2">
-                          Supports Excel files (.xlsx, .xls)
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
 
-                {/* Course Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Course *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={importCourse}
-                    onChange={(e) => setImportCourse(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    placeholder="Enter course (e.g., BSIT)"
-                  />
-                </div>
-
-                {/* Download Template */}
-                <div className="flex items-center justify-center">
-                  <button
-                    onClick={downloadSampleTemplate}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
-                  >
-                    <Download className="w-4 h-4" />
-                    Download Sample Template
-                  </button>
-                </div>
-
-                {/* Import Results */}
-                {importResult && (
-                  <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-md">
-                    <h3 className="text-sm font-semibold text-gray-800 dark:text-white mb-2">
-                      Import Results
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-green-500" />
-                        <span className="text-sm text-gray-800 dark:text-white">
-                          Successfully imported: {importResult.successful}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <XCircle className="w-4 h-4 text-red-500" />
-                        <span className="text-sm text-gray-800 dark:text-white">
-                          Failed to import: {importResult.failed}
-                        </span>
-                      </div>
+            <div className="space-y-4">
+              {/* File Upload Area */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Upload Excel File
+                </label>
+                <div
+                  className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files[0];
+                    if (file) handleFileChange({ target: { files: [file] } });
+                  }}
+                >
+                  {importFile ? (
+                    <div className="flex flex-col items-center">
+                      <FileSpreadsheet className="w-12 h-12 text-green-500 mb-2" />
+                      <p className="text-sm text-gray-800 dark:text-white font-medium">
+                        {importFile.name}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {(importFile.size / 1024).toFixed(1)} KB
+                      </p>
+                      <button
+                        onClick={() => {
+                          setImportFile(null);
+                          setParsedStudentsData(null);
+                          if (fileInputRef.current) fileInputRef.current.value = '';
+                        }}
+                        className="mt-2 text-xs text-red-500 hover:text-red-700"
+                      >
+                        Remove File
+                      </button>
                     </div>
-                    {importResult.errors.length > 0 && (
-                      <div className="mt-2 p-2 bg-red-50 dark:bg-red-900 rounded-md">
-                        <h4 className="text-xs font-semibold text-red-700 dark:text-red-300 mb-1">
-                          Errors:
-                        </h4>
-                        <div className="text-xs text-red-600 dark:text-red-400 max-h-32 overflow-y-auto">
-                          {importResult.errors.map((error, index) => (
-                            <div key={index} className="mb-1">
-                              <strong>Row {error.index + 2}:</strong> {error.error}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  ) : (
+                    <div className="flex flex-col items-center">
+                      <Upload className="w-12 h-12 text-gray-400 mb-2" />
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
+                        Drag & drop Excel file here or click to browse
+                      </p>
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept=".xlsx, .xls"
+                          onChange={handleFileChange}
+                          className="hidden"
+                          ref={fileInputRef}
+                        />
+                        <span className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm">
+                          Choose File
+                        </span>
+                      </label>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Supports Excel files (.xlsx, .xls)
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 mt-6">
-                {parsedStudentsData && !importResult && (
-                  <button
-                    onClick={() => handleBulkImport(parsedStudentsData)}
-                    className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
-                  >
-                    Import to Database
-                  </button>
-                )}
+              {/* Course Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Course *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={importCourse}
+                  onChange={(e) => setImportCourse(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  placeholder="Enter course (e.g., BSIT)"
+                />
+              </div>
+
+              {/* Download Template */}
+              <div className="flex items-center justify-center">
                 <button
-                  onClick={() => {
-                    setIsImportModalOpen(false);
-                    setImportFile(null);
-                    setParsedStudentsData(null);
-                    setImportResult(null);
-                    setImportCourse('');
-                  }}
-                  className="px-4 py-2 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 transition-colors"
+                  onClick={downloadSampleTemplate}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
                 >
-                  Close
+                  <Download className="w-4 h-4" />
+                  Download Sample Template
                 </button>
               </div>
 
-              {/* Parsed Data Preview */}
-              {parsedStudentsData && !importResult && (
-                <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-md">
-                  <h3 className="text-sm font-semibold text-gray-800 dark:text-white mb-3">
-                    Parsed Students Data ({parsedStudentsData.length} students)
+              {/* Import Results */}
+              {importResult && (
+                <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-md">
+                  <h3 className="text-sm font-semibold text-gray-800 dark:text-white mb-2">
+                    Import Results
                   </h3>
-                  <div className="overflow-x-auto max-h-60">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-200 dark:border-gray-600">
-                          <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">
-                            ID Number
-                          </th>
-                          <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">
-                            Name
-                          </th>
-                          <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">
-                            Year Level
-                          </th>
-                          <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">
-                            Email
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {parsedStudentsData.slice(0, 5).map((student, index) => (
-                          <tr key={index} className="border-b border-gray-100 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">
-                            <td className="py-2 px-3 text-gray-800 dark:text-white">
-                              {student.student_id_number}
-                            </td>
-                            <td className="py-2 px-3 text-gray-800 dark:text-white">
-                              {student.student_name}
-                            </td>
-                            <td className="py-2 px-3 text-gray-800 dark:text-white">
-                              {student.student_yr_level || 'N/A'}
-                            </td>
-                            <td className="py-2 px-3 text-gray-800 dark:text-white">
-                              {student.student_email || 'N/A'}
-                            </td>
-                          </tr>
-                        ))}
-                        {parsedStudentsData.length > 5 && (
-                          <tr>
-                            <td colSpan="4" className="py-2 px-3 text-center text-gray-500 dark:text-gray-400">
-                              And {parsedStudentsData.length - 5} more students...
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-green-500" />
+                      <span className="text-sm text-gray-800 dark:text-white">
+                        Successfully imported: {importResult.successful}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <XCircle className="w-4 h-4 text-red-500" />
+                      <span className="text-sm text-gray-800 dark:text-white">
+                        Failed to import: {importResult.failed}
+                      </span>
+                    </div>
                   </div>
+                  {importResult.errors.length > 0 && (
+                    <div className="mt-2 p-2 bg-red-50 dark:bg-red-900 rounded-md">
+                      <h4 className="text-xs font-semibold text-red-700 dark:text-red-300 mb-1">
+                        Errors:
+                      </h4>
+                      <div className="text-xs text-red-600 dark:text-red-400 max-h-32 overflow-y-auto">
+                        {importResult.errors.map((error, index) => (
+                          <div key={index} className="mb-1">
+                            <strong>Row {error.index + 2}:</strong> {error.error}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+
+            <div className="flex items-center justify-end gap-3 mt-6">
+              {parsedStudentsData && !importResult && (
+                <button
+                  onClick={() => handleBulkImport(parsedStudentsData)}
+                  className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
+                >
+                  Import to Database
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setImportFile(null);
+                  setParsedStudentsData(null);
+                  setImportResult(null);
+                  setImportCourse('');
+                }}
+                className="px-4 py-2 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+
+            {/* Parsed Data Preview */}
+            {parsedStudentsData && !importResult && (
+              <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-md">
+                <h3 className="text-sm font-semibold text-gray-800 dark:text-white mb-3">
+                  Parsed Students Data ({parsedStudentsData.length} students)
+                </h3>
+                <div className="overflow-x-auto max-h-60">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-gray-600">
+                        <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">ID Number</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">Name</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">Year Level</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">Email</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsedStudentsData.slice(0, 5).map((student, index) => (
+                        <tr key={index} className="border-b border-gray-100 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">
+                          <td className="py-2 px-3 text-gray-800 dark:text-white">{student.student_id_number}</td>
+                          <td className="py-2 px-3 text-gray-800 dark:text-white">{student.student_name}</td>
+                          <td className="py-2 px-3 text-gray-800 dark:text-white">{student.student_yr_level || 'N/A'}</td>
+                          <td className="py-2 px-3 text-gray-800 dark:text-white">{student.student_email || 'N/A'}</td>
+                        </tr>
+                      ))}
+                      {parsedStudentsData.length > 5 && (
+                        <tr>
+                          <td colSpan="4" className="py-2 px-3 text-center text-gray-500 dark:text-gray-400">
+                            And {parsedStudentsData.length - 5} more students...
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

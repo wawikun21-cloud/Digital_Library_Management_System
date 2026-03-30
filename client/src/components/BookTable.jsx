@@ -29,7 +29,19 @@ export default function BookTable({
         </thead>
         <tbody>
           {books.map((book, idx) => {
-            const isOutOfStock = book.quantity === 0 || book.status === "OutOfStock";
+            // Use display_status (derived from book_copies) when available.
+            // Falls back to raw status/quantity for books without copy records.
+            const effectiveStatus = book.display_status || book.status;
+            const availCopies = book.available_copies;
+            const isOutOfStock =
+              effectiveStatus === "OutOfStock" ||
+              (availCopies !== undefined && availCopies !== null
+                ? Number(availCopies) === 0
+                : book.quantity === 0);
+            // Show available / total  (e.g. "2 / 3"), or just quantity if no copies table
+            const qtyLabel = book.total_copies
+              ? `${availCopies ?? 0} / ${book.total_copies}`
+              : (book.quantity ?? 0);
             return (
               <tr 
                 key={book.id} 
@@ -87,11 +99,11 @@ export default function BookTable({
                   </span>
                 </td>
                 <td className="px-3 py-3.5">
-                  <span 
+                  <span
                     className="text-[13px] font-bold"
                     style={{ color: isOutOfStock ? "var(--status-red)" : "var(--text-primary)" }}
                   >
-                    {book.quantity || 0}
+                    {qtyLabel}
                   </span>
                 </td>
                 <td className="px-3 py-3.5">

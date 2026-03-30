@@ -16,6 +16,9 @@ const dbConfig = {
   waitForConnections: true,
   connectionLimit:    10,
   queueLimit:         0,
+  // Return DATE/DATETIME columns as plain strings (e.g. "2025-03-15")
+  // instead of JS Date objects, which shift the date by timezone offset.
+  dateStrings:        true,
 };
 
 const pool = mysql.createPool(dbConfig);

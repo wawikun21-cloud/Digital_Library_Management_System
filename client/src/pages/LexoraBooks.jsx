@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import {
   PackageX, BookOpen, X,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
@@ -51,6 +52,8 @@ export default function LexoraBooks() {
   const [modalMode, setModalMode]       = useState("add");
   const [toast, setToast]               = useState({ visible: false, message: "", type: "info" });
 
+  const location = useLocation();
+
   // ── Fetch ────────────────────────────────────────────────
   const fetchBooks = useCallback(async () => {
     try {
@@ -72,6 +75,15 @@ export default function LexoraBooks() {
   }, []);
 
   useEffect(() => { fetchBooks(); }, [fetchBooks]);
+
+  // ── Apply URL filter params on mount ─────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const program      = params.get("program");
+    const resourceType = params.get("resourceType");
+    if (program)      setProgramFilter(program);
+    if (resourceType) setResourceTypeFilter(resourceType);
+  }, [location.search]);
 
   // ── Client-side filter + sort ────────────────────────────
   const filteredBooks = useMemo(() => {

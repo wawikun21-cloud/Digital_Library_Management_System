@@ -26,7 +26,10 @@ function BookViewPanel({ book, onEdit, onDelete }) {
     Borrowed:   { bg: "rgba(249,115,22,0.1)", text: "#ea580c", dot: "#f97316" },
     OutOfStock: { bg: "rgba(239,68,68,0.1)",  text: "#dc2626", dot: "#ef4444" },
   };
-  const sc = statusColors[book.status] || statusColors.Available;
+  // Use display_status (computed from book_copies) when available,
+  // fall back to raw status. Never trust books.status for availability.
+  const effectiveStatus = book.display_status || book.status;
+  const sc = statusColors[effectiveStatus] || statusColors.Available;
 
   const InfoRow = ({ label, value, full = false }) => {
     if (!value && value !== 0) return null;
@@ -63,7 +66,7 @@ function BookViewPanel({ book, onEdit, onDelete }) {
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold"
              style={{ background: sc.bg, color: sc.text }}>
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: sc.dot, display: "inline-block" }} />
-          {book.status || "Available"}
+          {effectiveStatus || "Available"}
         </div>
 
         {book.shelf && (
@@ -73,7 +76,13 @@ function BookViewPanel({ book, onEdit, onDelete }) {
           <DetailChip icon={MapPin} label="Sublocation" value={book.sublocation} />
         )}
         {(book.total_copies || book.quantity) && (
-          <DetailChip icon={Layers} label="Copies" value={`${book.available_copies ?? book.quantity ?? 0} / ${book.total_copies || book.quantity}`} />
+          <DetailChip icon={Layers} label="Copies" value={
+            book.total_copies
+              ? `${book.available_copies ?? 0} / ${book.total_copies}`
+              : book.quantity != null
+              ? `${book.quantity}`
+              : null
+          } />
         )}
       </div>
 

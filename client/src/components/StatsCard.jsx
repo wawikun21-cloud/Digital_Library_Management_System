@@ -1,6 +1,6 @@
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 
-export default function StatsCard({ label, value, change, accent, percentage }) {
+export default function StatsCard({ label, value, change, accent, percentage, onClick }) {
   const up   = change?.startsWith("+");
   const down = change?.startsWith("-");
 
@@ -12,12 +12,13 @@ export default function StatsCard({ label, value, change, accent, percentage }) 
 
   return (
     <div
-      className="relative rounded-2xl p-3 sm:p-4 overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-lg stats-card"
+      className={`relative rounded-2xl p-3 sm:p-4 overflow-hidden transition-all duration-300 hover:shadow-lg stats-card ${onClick ? "cursor-pointer" : ""}`}
       style={{
         background: "var(--bg-surface)",
         border: "1px solid var(--border)",
         boxShadow: "var(--shadow-sm)",
       }}
+      onClick={onClick}
     >
       {/* ── Top accent bar ── */}
       <div
@@ -115,4 +116,3 @@ export default function StatsCard({ label, value, change, accent, percentage }) 
     </div>
   );
 }
-

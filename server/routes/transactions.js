@@ -1,210 +1,173 @@
 // ─────────────────────────────────────────────────────────
 //  routes/transactions.js
-//  Transactions API Routes (Borrow/Return Books)
 // ─────────────────────────────────────────────────────────
 
 const express = require("express");
-const router = express.Router();
+const router  = express.Router();
 const TransactionModel = require("../models/Transaction");
 
-/**
- * GET /api/transactions
- * Get all transactions
- */
-router.get("/", async (req, res) => {
-  try {
-    const result = await TransactionModel.getAll();
-    if (!result.success) {
-      return res.status(400).json({ success: false, error: result.error });
-    }
-    res.json({ success: true, data: result.data });
-  } catch (error) {
-    console.error("[GET /api/transactions] Error:", error.message);
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
+// ── Static routes first ───────────────────────────────────
+
+router.get("/active",  async (req, res) => {
+  const result = await TransactionModel.getActiveBorrows();
+  res.status(result.success ? 200 : 400).json(result);
 });
 
-/**
- * GET /api/transactions/active
- * Get all active borrows
- */
-router.get("/active", async (req, res) => {
-  try {
-    const result = await TransactionModel.getActiveBorrows();
-    if (!result.success) {
-      return res.status(400).json({ success: false, error: result.error });
-    }
-    res.json({ success: true, data: result.data });
-  } catch (error) {
-    console.error("[GET /api/transactions/active] Error:", error.message);
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
-});
-
-/**
- * GET /api/transactions/overdue
- * Get all overdue borrows
- */
 router.get("/overdue", async (req, res) => {
+  const result = await TransactionModel.getOverdueBorrows();
+  res.status(result.success ? 200 : 400).json(result);
+});
+
+router.get("/stats",   async (req, res) => {
+  const result = await TransactionModel.getStats();
+  res.status(result.success ? 200 : 400).json(result);
+});
+
+// ── Borrower / book search ────────────────────────────────
+
+/**
+ * GET /api/transactions/lookup/student/:idNumber
+ * Look up a student by their ID number
+ */
+router.get("/lookup/student/:idNumber", async (req, res) => {
   try {
-    const result = await TransactionModel.getOverdueBorrows();
-    if (!result.success) {
-      return res.status(400).json({ success: false, error: result.error });
-    }
-    res.json({ success: true, data: result.data });
-  } catch (error) {
-    console.error("[GET /api/transactions/overdue] Error:", error.message);
+    const result = await TransactionModel.lookupStudent(req.params.idNumber);
+    res.status(result.success ? 200 : 404).json(result);
+  } catch (err) {
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
 /**
- * GET /api/transactions/stats
- * Get transaction statistics
+ * GET /api/transactions/lookup/faculty?q=name
+ * Search faculty by name
  */
-router.get("/stats", async (req, res) => {
+router.get("/lookup/faculty", async (req, res) => {
   try {
-    const result = await TransactionModel.getStats();
-    if (!result.success) {
-      return res.status(400).json({ success: false, error: result.error });
-    }
-    res.json({ success: true, data: result.data });
-  } catch (error) {
-    console.error("[GET /api/transactions/stats] Error:", error.message);
+    const { q = "" } = req.query;
+    const result = await TransactionModel.searchFaculty(q);
+    res.status(result.success ? 200 : 400).json(result);
+  } catch (err) {
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
 /**
- * GET /api/transactions/:id
- * Get transaction by ID
+ * GET /api/transactions/search/books?q=query
+ * Search available books by accession number or title
  */
-router.get("/:id", async (req, res) => {
+router.get("/search/books", async (req, res) => {
   try {
-    const { id } = req.params;
-    const result = await TransactionModel.getById(id);
-
-    if (!result.success) {
-      return res.status(404).json({ success: false, error: result.error });
-    }
-
-    res.json({ success: true, data: result.data });
-  } catch (error) {
-    console.error("[GET /api/transactions/:id] Error:", error.message);
+    const { q = "" } = req.query;
+    const result = await TransactionModel.searchBooks(q);
+    res.status(result.success ? 200 : 400).json(result);
+  } catch (err) {
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
-/**
- * GET /api/transactions/book/:bookId
- * Get transactions by book ID
- */
+// ── CRUD ─────────────────────────────────────────────────
+
+router.get("/", async (req, res) => {
+  const result = await TransactionModel.getAll();
+  res.status(result.success ? 200 : 400).json(result);
+});
+
 router.get("/book/:bookId", async (req, res) => {
-  try {
-    const { bookId } = req.params;
-    const result = await TransactionModel.getByBookId(bookId);
+  const result = await TransactionModel.getByBookId(req.params.bookId);
+  res.status(result.success ? 200 : 400).json(result);
+});
 
-    if (!result.success) {
-      return res.status(400).json({ success: false, error: result.error });
-    }
-
-    res.json({ success: true, data: result.data });
-  } catch (error) {
-    console.error("[GET /api/transactions/book/:bookId] Error:", error.message);
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
+router.get("/:id", async (req, res) => {
+  const result = await TransactionModel.getById(req.params.id);
+  res.status(result.success ? 200 : 404).json(result);
 });
 
 /**
  * POST /api/transactions
- * Create a new transaction (borrow a book)
+ * Create a new borrow transaction
  */
 router.post("/", async (req, res) => {
   try {
-    const {
-      book_id,
-      borrower_name,
-      borrower_id_number,
-      borrower_contact,
-      borrower_email,
-      borrower_course,
-      borrower_yr_level,
-      borrow_date,
-      due_date,
-    } = req.body;
-
-    // Validate required fields
+    const { book_id, accession_number, borrower_name, due_date } = req.body;
     const errors = [];
-    if (!book_id) errors.push("Book ID is required");
-    if (!borrower_name?.trim()) errors.push("Borrower name is required");
-    if (!due_date) errors.push("Due date is required");
+    if (!book_id)                errors.push("Book ID is required");
+    if (!accession_number)       errors.push("Accession number required for availability tracking");
+    if (!borrower_name?.trim())  errors.push("Borrower name is required");
+    if (!due_date)               errors.push("Due date is required");
+    if (errors.length) return res.status(400).json({ success: false, error: errors.join(", ") });
 
-    if (errors.length > 0) {
-      return res.status(400).json({ success: false, error: errors.join(", ") });
-    }
+    const result = await TransactionModel.create(req.body);
+    res.status(result.success ? 201 : 400).json(result);
+  } catch (err) {
+    console.error("[POST /api/transactions]", err.message);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
 
-    const result = await TransactionModel.create({
-      book_id,
-      borrower_name,
-      borrower_id_number,
-      borrower_contact,
-      borrower_email,
-      borrower_course,
-      borrower_yr_level,
-      borrow_date,
-      due_date,
-    });
-
-    if (!result.success) {
-      return res.status(400).json({ success: false, error: result.error });
-    }
-
-    res.status(201).json({ success: true, data: result.data });
-  } catch (error) {
-    console.error("[POST /api/transactions] Error:", error.message);
+/**
+ * PUT /api/transactions/:id
+ * Update transaction details (edit)
+ */
+router.put("/:id", async (req, res) => {
+  try {
+    const result = await TransactionModel.update(req.params.id, req.body);
+    res.status(result.success ? 200 : 400).json(result);
+  } catch (err) {
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
 /**
  * PUT /api/transactions/:id/return
- * Return a book (update transaction)
+ * Mark a book as returned
  */
 router.put("/:id/return", async (req, res) => {
   try {
-    const { id } = req.params;
-    const result = await TransactionModel.returnBook(id);
+    const result = await TransactionModel.returnBook(req.params.id);
+    res.status(result.success ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
 
-    if (!result.success) {
-      return res.status(400).json({ success: false, error: result.error });
-    }
+/**
+ * PUT /api/transactions/:id/extend
+ * Extend the due date by N days (default 1)
+ */
+router.put("/:id/extend", async (req, res) => {
+  try {
+    const days   = Number(req.body.days) || 1;
+    const result = await TransactionModel.extend(req.params.id, days);
+    res.status(result.success ? 200 : 400).json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
 
-    res.json({ success: true, data: result.data });
-  } catch (error) {
-    console.error("[PUT /api/transactions/:id/return] Error:", error.message);
+/**
+ * PUT /api/transactions/:id/pay-fine
+ * Mark the fine for a transaction as paid
+ */
+router.put("/:id/pay-fine", async (req, res) => {
+  try {
+    const result = await TransactionModel.payFine(req.params.id);
+    res.status(result.success ? 200 : 400).json(result);
+  } catch (err) {
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
 /**
  * DELETE /api/transactions/:id
- * Delete a transaction
  */
 router.delete("/:id", async (req, res) => {
   try {
-    const { id } = req.params;
-    const result = await TransactionModel.delete(id);
-
-    if (!result.success) {
-      return res.status(404).json({ success: false, error: result.error });
-    }
-
-    res.json({ success: true, data: result.data });
-  } catch (error) {
-    console.error("[DELETE /api/transactions/:id] Error:", error.message);
+    const result = await TransactionModel.delete(req.params.id);
+    res.status(result.success ? 200 : 404).json(result);
+  } catch (err) {
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
 module.exports = router;
-

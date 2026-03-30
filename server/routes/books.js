@@ -46,7 +46,12 @@ router.get("/public-search", async (req, res) => {
          b.accessionNumber, b.callNumber, b.pages,
          b.sublocation,
          COALESCE(cc.total_copies, b.quantity) AS total_copies,
-         COALESCE(cc.avail_copies, 0)          AS available_copies,
+         COALESCE(cc.avail_copies, b.quantity) AS available_copies,
+         CASE
+           WHEN cc.total_copies IS NULL THEN b.status
+           WHEN cc.avail_copies = 0     THEN 'OutOfStock'
+           ELSE 'Available'
+         END AS display_status,
          'nemco' AS source
        FROM books b
        LEFT JOIN (
@@ -111,6 +116,38 @@ router.get("/count/all", async (req, res) => {
   } catch (err) {
     console.error("[GET /api/books/count/all]", err.message);
     res.status(500).json({ success:false, error:"Internal server error" });
+  }
+});
+
+// GET /api/books/stats  — dashboard KPI counts for Nemco + Lexora
+router.get("/stats", async (req, res) => {
+  try {
+    const nemcoResult  = await BookModel.getStats();
+    const { pool }     = require("../config/db");
+
+    const [[{ lexoraTotal }]] = await pool.query("SELECT COUNT(*) AS lexoraTotal FROM lexora_books");
+
+    if (!nemcoResult.success) {
+      return res.status(400).json({ success: false, error: nemcoResult.error });
+    }
+
+    const { nemco } = nemcoResult.data;
+
+    res.json({
+      success: true,
+      data: {
+        // Nemco
+        nemcoTotal:      nemco.total,
+        nemcoOutOfStock: nemco.outOfStock,
+        // Lexora
+        lexoraTotal:     Number(lexoraTotal),
+        // Shared
+        returned:        nemco.returned,
+      },
+    });
+  } catch (err) {
+    console.error("[GET /api/books/stats]", err.message);
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 

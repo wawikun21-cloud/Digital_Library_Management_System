@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────
 
 const StudentModel = require("../models/Student");
+const FacultyModel = require("../models/Faculty");
 
 const StudentsController = {
   /**
@@ -209,25 +210,72 @@ const StudentsController = {
     try {
       const result = await StudentModel.getStats();
       if (result.success) {
-        res.status(200).json({
-          success: true,
-          data: result.data,
-          message: "Student statistics retrieved successfully"
-        });
+        res.status(200).json({ success: true, data: result.data, message: "Student statistics retrieved successfully" });
       } else {
-        res.status(400).json({
-          success: false,
-          error: result.error
-        });
+        res.status(400).json({ success: false, error: result.error });
       }
     } catch (error) {
       console.error("[StudentsController.getStudentStats] Error:", error);
-      res.status(500).json({
-        success: false,
-        error: "Internal server error"
-      });
+      res.status(500).json({ success: false, error: "Internal server error" });
     }
-  }
+  },
+
+  // ── Faculty ─────────────────────────────────────────
+
+  async getAllFaculty(req, res) {
+    try {
+      const result = await FacultyModel.getAll();
+      res.status(result.success ? 200 : 400).json(result.success
+        ? { success: true, data: result.data }
+        : { success: false, error: result.error });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async createFaculty(req, res) {
+    try {
+      const result = await FacultyModel.create(req.body);
+      res.status(result.success ? 201 : 400).json(result.success
+        ? { success: true, data: result.data, message: "Faculty created successfully" }
+        : { success: false, error: result.error });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async updateFaculty(req, res) {
+    try {
+      const result = await FacultyModel.update(req.params.id, req.body);
+      res.status(result.success ? 200 : 400).json(result.success
+        ? { success: true, data: result.data, message: "Faculty updated successfully" }
+        : { success: false, error: result.error });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async deleteFaculty(req, res) {
+    try {
+      const result = await FacultyModel.delete(req.params.id);
+      res.status(result.success ? 200 : 400).json(result.success
+        ? { success: true, data: result.data, message: "Faculty deleted successfully" }
+        : { success: false, error: result.error });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  async bulkImportFaculty(req, res) {
+    try {
+      const result = await FacultyModel.bulkImport(req.body);
+      res.status(result.success ? 201 : 400).json(result.success
+        ? { success: true, data: result.data, message: "Bulk import completed" }
+        : { success: false, error: result.error });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
 };
 
 module.exports = StudentsController;

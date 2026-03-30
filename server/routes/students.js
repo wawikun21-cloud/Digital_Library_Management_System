@@ -8,7 +8,21 @@ const router = express.Router();
 const StudentsController = require("../controllers/studentsController");
 
 // ─────────────────────────────────────────────────────────
-//  GET Routes
+//  Faculty Routes (static — must be before /:id)
+// ─────────────────────────────────────────────────────────
+
+router.get("/faculty",              StudentsController.getAllFaculty);
+router.post("/faculty",             StudentsController.createFaculty);
+router.post("/faculty/bulk-import", StudentsController.bulkImportFaculty);
+router.put("/faculty/:id",          StudentsController.updateFaculty);
+router.delete("/faculty/:id",       StudentsController.deleteFaculty);
+
+// ─────────────────────────────────────────────────────────
+//  Student Routes
+// ─────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────
+//  Student Routes
 // ─────────────────────────────────────────────────────────
 
 /**

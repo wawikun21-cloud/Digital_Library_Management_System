@@ -6,6 +6,7 @@ import Books          from "./pages/Books";
 import Borrowed       from "./pages/Borrowed";
 import Attendance     from "./pages/Attendance";
 import Students       from "./pages/Students";
+import Faculty        from "./pages/Faculty";
 import RecentlyDeleted from "./pages/RecentlyDeleted";
 import LexoraBooks     from "./pages/LexoraBooks";
 import Login           from "./pages/Login";
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="borrowed"        element={<Borrowed />}        />
           <Route path="attendance"      element={<Attendance />}      />
           <Route path="students"        element={<Students />}        />
+          <Route path="faculty"         element={<Faculty />}         />
           <Route path="deleted"         element={<RecentlyDeleted />} />
         </Route>
 

@@ -141,7 +141,13 @@ function CopiesBlock({ bookId, initialCopies }) {
 
 /* ── main component ──────────────────────────────────── */
 export default function BookView({ book }) {
-  const isAvailable = (book?.quantity ?? 0) > 0 && book?.status !== "OutOfStock";
+  // Use display_status (derived from book_copies) when available.
+  // Falls back to raw status + quantity check for books without copies.
+  const effectiveStatus = book?.display_status || book?.status;
+  const availCopies = book?.available_copies;
+  const isAvailable = effectiveStatus !== "OutOfStock" && (
+    availCopies !== undefined ? Number(availCopies) > 0 : (book?.quantity ?? 0) > 0
+  );
 
   // copies may come from getById (book.copies) or be fetched via CopiesBlock
   const initialCopies = book?.copies || [];

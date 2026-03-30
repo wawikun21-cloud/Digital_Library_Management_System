@@ -1,19 +1,27 @@
 import { useState } from 'react';
 import { NavLink, useLocation } from "react-router-dom";
-import { BarChart3, BookOpen, ClipboardList, Trash2, Sun, Moon, X, ChevronDown, Library, Users, User, Globe } from "lucide-react";
+import { BarChart3, BookOpen, ClipboardList, Trash2, Sun, Moon, X, ChevronDown, Library, Users, User, Globe, UserCheck } from "lucide-react";
 import Logo from './Logo.jsx';
 
 const SIDEBAR_WIDTHS = { COLLAPSED: 58, EXPANDED: 220 };
 const BRAND_HEIGHT = 66;
 
-const NAV = [
-  { to: "/dashboard",              label: "Dashboard",       Icon: BarChart3     },
-  { to: "/dashboard/books",        label: "Books",           Icon: BookOpen      },
-  { to: "/dashboard/lexora-books", label: "Lexora Books",    Icon: Globe         },
-  { to: "/dashboard/borrowed",     label: "Borrowed",        Icon: ClipboardList },
-  { to: "/dashboard/attendance",   label: "Attendance",      Icon: Users         },
-  { to: "/dashboard/students",     label: "Students",        Icon: User          },
-  { to: "/dashboard/deleted",      label: "Recently Deleted",Icon: Trash2        }
+const NAV_ITEMS = [
+  { to: "/dashboard",              label: "Dashboard",        Icon: BarChart3     },
+  { to: "/dashboard/books",        label: "Books",            Icon: BookOpen      },
+  { to: "/dashboard/lexora-books", label: "Lexora Books",     Icon: Globe         },
+  { to: "/dashboard/borrowed",     label: "Borrowed",         Icon: ClipboardList },
+  {
+    label: "Attendance",
+    to: "/dashboard/attendance",
+    Icon: Users,
+    isGroup: true,
+    children: [
+      { to: "/dashboard/students", label: "Students", Icon: User      },
+      { to: "/dashboard/faculty",  label: "Faculty",  Icon: UserCheck },
+    ],
+  },
+  { to: "/dashboard/deleted",      label: "Recently Deleted", Icon: Trash2        },
 ];
 
 /* ─────────────────────────────────────────────────── */
@@ -64,7 +72,13 @@ export default function Sidebar({
 
 /* ── Shared inner content ────────────────────────── */
 function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme }) {
-  const variant = collapsed ? 'collapsed' : 'expanded';
+  const location = useLocation();
+  const variant  = collapsed ? 'collapsed' : 'expanded';
+
+  // Auto-open Attendance group if a child is active
+  const attendanceGroup      = NAV_ITEMS.find(i => i.isGroup);
+  const attendanceChildActive = attendanceGroup?.children.some(c => location.pathname.startsWith(c.to));
+  const [attendanceOpen, setAttendanceOpen] = useState(attendanceChildActive || false);
 
   return (
     <div className="flex flex-col h-full">
@@ -79,9 +93,19 @@ function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme }) {
 
       {/* Nav */}
       <nav className="flex-1 flex flex-col gap-0.5 p-2 pt-4 overflow-y-auto overflow-x-hidden">
-        {NAV.map((item) => (
-          <NavItem key={item.to} item={item} collapsed={collapsed} />
-        ))}
+        {NAV_ITEMS.map((item) =>
+          item.isGroup ? (
+            <StudentsMenu
+              key={item.label}
+              item={item}
+              collapsed={collapsed}
+              open={attendanceOpen}
+              onToggle={() => setAttendanceOpen(o => !o)}
+            />
+          ) : (
+            <NavItem key={item.to} item={item} collapsed={collapsed} />
+          )
+        )}
       </nav>
 
       {/* Footer */}
@@ -141,9 +165,9 @@ function NavItem({ item, collapsed }) {
   );
 }
 
-/* ── Books row + collapsible submenu ─────────────── */
-function BooksMenu({ item, collapsed, open, onToggle }) {
-  const { to, label, Icon, children } = item;
+/* ── Attendance group: header = NavLink, chevron = toggle ── */
+function StudentsMenu({ item, collapsed, open, onToggle }) {
+  const { label, to, Icon, children } = item;
   const location       = useLocation();
   const anyChildActive = children.some(c => location.pathname.startsWith(c.to));
   const isSelfActive   = location.pathname === to;
@@ -153,37 +177,34 @@ function BooksMenu({ item, collapsed, open, onToggle }) {
     <div>
       <div
         className="flex items-center rounded-lg overflow-hidden"
-        style={{
-          background: isHighlighted ? "rgba(238,162,58,0.18)" : "transparent",
-          transition: "background 150ms",
-        }}
+        style={{ background: isHighlighted ? "rgba(238,162,58,0.18)" : "transparent" }}
       >
+        {/* ── Clickable label → navigates to /dashboard/attendance ── */}
         <NavLink
           to={to}
           end
           title={collapsed ? label : undefined}
-          onClick={() => { if (!collapsed && !open) onToggle(); }}
-          className={[
-            "flex items-center flex-1 text-sm font-medium",
-            "overflow-hidden whitespace-nowrap select-none transition-colors duration-150",
-            "px-3 py-2.5",
-            isHighlighted ? "text-white" : "hover:text-amber-400",
-          ].join(" ")}
-          style={{
-            color: isHighlighted ? "#fff" : "var(--text-on-sidebar)",
+          className="flex items-center flex-1 px-3 py-2.5 text-sm font-medium overflow-hidden whitespace-nowrap select-none transition-colors duration-150"
+          style={({ isActive }) => ({
+            color:      isActive || anyChildActive ? "#fff" : "var(--text-on-sidebar)",
             background: "transparent",
-          }}
+          })}
         >
-          <span className="shrink-0 flex items-center justify-center" style={{ width: 18, minWidth: 18 }}>
-            <Icon size={18} style={{ color: isHighlighted ? "#F3B940" : undefined }} />
-          </span>
-          {!collapsed && <span className="ml-3 truncate">{label}</span>}
+          {({ isActive }) => (
+            <>
+              <span className="shrink-0 flex items-center justify-center" style={{ width: 18, minWidth: 18 }}>
+                <Icon size={18} style={{ color: isActive || anyChildActive ? "#F3B940" : undefined }} />
+              </span>
+              {!collapsed && <span className="ml-3 truncate">{label}</span>}
+            </>
+          )}
         </NavLink>
 
+        {/* ── Chevron → only toggles submenu, does NOT navigate ── */}
         {!collapsed && (
           <button
-            onClick={onToggle}
-            aria-label="Toggle Records submenu"
+            onClick={e => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
+            aria-label="Toggle submenu"
             className="shrink-0 flex items-center justify-center rounded-md transition-colors duration-150 hover:bg-white/10"
             style={{ width: 28, height: 28, marginRight: 4, color: "var(--text-on-sidebar)" }}
           >
@@ -199,8 +220,9 @@ function BooksMenu({ item, collapsed, open, onToggle }) {
         )}
       </div>
 
+      {/* ── Submenu ── */}
       {!collapsed && (
-        <div style={{ overflow: "hidden", maxHeight: open ? 120 : 0, transition: "max-height 280ms ease" }}>
+        <div style={{ overflow: "hidden", maxHeight: open ? `${children.length * 44}px` : "0px", transition: "max-height 280ms ease" }}>
           {children.map(({ to: cTo, label: cLabel, Icon: CIcon }) => (
             <NavLink
               key={cTo}
@@ -211,7 +233,7 @@ function BooksMenu({ item, collapsed, open, onToggle }) {
                 isActive ? "text-white" : "hover:text-amber-400",
               ].join(" ")}
               style={({ isActive }) => ({
-                paddingLeft: 44,
+                paddingLeft:  44,
                 paddingRight: 12,
                 color:      isActive ? "#fff" : "var(--text-on-sidebar)",
                 background: isActive ? "rgba(238,162,58,0.15)" : "transparent",

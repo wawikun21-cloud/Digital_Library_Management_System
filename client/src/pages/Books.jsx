@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import useDebounce from "../hooks/useDebounce";
 import { PackageX } from "lucide-react";
 import BookTable from "../components/BookTable";
@@ -11,7 +12,11 @@ import Pagination       from "../components/books/Pagination";
 import BookModal        from "../components/books/BookModal";
 
 function isOutOfStock(book) {
-  return book.quantity === 0 || book.status === "OutOfStock";
+  const effectiveStatus = book.display_status || book.status;
+  const availCopies = book.available_copies;
+  if (effectiveStatus === "OutOfStock") return true;
+  if (availCopies !== undefined && availCopies !== null) return Number(availCopies) === 0;
+  return book.quantity === 0;
 }
 
 // Fields that only exist in the form state and must never be sent to the server.
@@ -59,7 +64,16 @@ export default function Books() {
   const [currentPage, setCurrentPage]   = useState(1);
   const itemsPerPage = 10;
 
+  const location = useLocation();
+
   useEffect(() => { fetchBooks(); }, []);
+
+  // ── Apply URL filter param on mount (e.g. ?status=OutOfStock) ──
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const s = params.get("status");
+    if (s) setStatusFilter(s);
+  }, [location.search]);
 
   const fetchBooks = async () => {
     try {
@@ -81,7 +95,7 @@ export default function Books() {
       if (q && !["title","author","genre","isbn","publisher","accessionNumber","accession_list"]
           .some(k => b[k]?.toString().toLowerCase().includes(q))) return false;
       if (statusFilter !== "All" && statusFilter === "OutOfStock" && !isOutOfStock(b)) return false;
-      if (statusFilter !== "All" && statusFilter !== "OutOfStock" && b.status !== statusFilter) return false;
+      if (statusFilter !== "All" && statusFilter !== "OutOfStock" && (b.display_status || b.status) !== statusFilter) return false;
       if (genreFilter && b.genre !== genreFilter) return false;
       return true;
     });

@@ -54,12 +54,27 @@ export default function LandingPage() {
     return String(val);
   };
 
-  const statusColor = (status) => {
-    if (!status) return { bg: "#e8f5e9", text: "#2e7d32", label: "Available" };
-    const s = status.toLowerCase();
-    if (s === "available") return { bg: "#e8f5e9", text: "#2e7d32", label: "Available" };
-    if (s === "borrowed") return { bg: "#fff3e0", text: "#e65100", label: "Borrowed" };
-    return { bg: "#f3e5f5", text: "#6a1b9a", label: status };
+const statusColor = (book) => {
+    // Use display_status when available (computed from book_copies),
+    // otherwise fall back to raw status + quantity check.
+    const effectiveStatus = book.display_status || book.status;
+    const availCopies = book.available_copies;
+
+    // Out of stock: no available copies or explicit status
+    if (
+      effectiveStatus === "OutOfStock" ||
+      (availCopies !== undefined && availCopies !== null && Number(availCopies) === 0) ||
+      (availCopies === undefined && book.quantity === 0)
+    ) {
+      return { bg: "#fee2e2", text: "#dc2626", label: "Out of Stock" };
+    }
+    if (!effectiveStatus || effectiveStatus.toLowerCase() === "available") {
+      return { bg: "#e8f5e9", text: "#2e7d32", label: "Available" };
+    }
+    if (effectiveStatus.toLowerCase() === "borrowed") {
+      return { bg: "#fff3e0", text: "#e65100", label: "Borrowed" };
+    }
+    return { bg: "#f3e5f5", text: "#6a1b9a", label: effectiveStatus };
   };
 
   return (
@@ -753,7 +768,7 @@ export default function LandingPage() {
               {/* LEFT — list */}
               <div className="results-list">
                 {results.map((book, i) => {
-                  const sc = statusColor(book.status);
+                  const sc = statusColor(book);
                   const isLexora = book.source === "lexora";
                   const isActive = selectedBook?.id === book.id && selectedBook?.source === book.source;
                   return (
@@ -803,7 +818,7 @@ export default function LandingPage() {
                   </div>
                 ) : (() => {
                   const b = selectedBook;
-                  const sc = statusColor(b.status);
+                  const sc = statusColor(b);
                   const isLexora = b.source === "lexora";
                   const isNemco  = b.source === "nemco";
                   return (

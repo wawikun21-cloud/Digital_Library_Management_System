@@ -1,25 +1,15 @@
-# Fix Lexora Excel Import: Add Sheet Selection
-✅ **1. Create this TODO.md** (done)
+# Digital Library Management System - Badge/Quantity Fix TODO
 
-**2. Update parseLexoraExcel() in BookAddImport.jsx**
-- Return `{sheets:[], books:[]}` instead of flat array
-- Track per-sheet books before global dedup
+## Approved Plan Status: ✅ Confirmed (LandingPage.jsx only)
 
-**3. Add sheet selection UI in Step 2**
-- Checkbox list: sheet names + book counts
-- Select All/None buttons
-- Filter preview to selected sheets
+**Current Progress:**
+- [x] Analyzed all relevant files (BookTable.jsx ✅ correct, Landingpage.jsx ❌ wrong badge)
+- [x] Confirmed backend TransactionModel correctly syncs quantity
+- [x] Plan approved: Fix statusColor() in landingpage.jsx to check quantity first
 
-**4. Modify runImport()**
-- Filter `parsed` to selected sheets' books only
-- Send subset to backend
+**Remaining Steps:**
+1. [ ] Edit `client/src/landing/landingpage.jsx` - Update statusColor(book) to prioritize quantity===0 → red "Out of Stock"
+2. [ ] Test: Borrow book → Landing search → Verify red badge when qty=0  
+3. [ ] `attempt_completion`
 
-**5. Update summary chips**
-- Show selected sheets count, total selected books
-
-**6. Test & attempt_completion**
-- Upload multi-sheet Excel
-- Select subset → import small batch
-- Verify no limits hit, correct program/collection
-
-**Status**: Ready for step 2.
+**Next Action:** Apply the single-line statusColor fix to landingpage.jsx

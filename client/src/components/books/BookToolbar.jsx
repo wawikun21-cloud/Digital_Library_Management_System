@@ -80,10 +80,10 @@ export default function BookToolbar({
               fontFamily:  "inherit",
             }}
           >
-            <option value="">All Genres</option>
+            <option value="">All Program</option>
             {genres.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
-        </div>
+        </div>  
 
         {/* Sort */}
         <div className="relative flex items-center">

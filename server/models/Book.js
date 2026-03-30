@@ -13,11 +13,17 @@ const BookModel = {
       const [rows] = await pool.query(`
         SELECT
           b.*,
-          COALESCE(cc.total_copies,   b.quantity) AS quantity,
-          COALESCE(cc.total_copies,   b.quantity) AS total_copies,
-          COALESCE(cc.avail_copies,   0)          AS available_copies,
-          COALESCE(cc.borrowed_copies,0)          AS borrowed_copies,
-          cc.accession_list
+          COALESCE(cc.total_copies,    b.quantity) AS quantity,
+          COALESCE(cc.total_copies,    b.quantity) AS total_copies,
+          COALESCE(cc.avail_copies,    b.quantity) AS available_copies,
+          COALESCE(cc.borrowed_copies, 0)          AS borrowed_copies,
+          cc.accession_list,
+          -- Derived display status: if copies table exists use it, else use books.status
+          CASE
+            WHEN cc.total_copies IS NULL THEN b.status
+            WHEN cc.avail_copies = 0     THEN 'OutOfStock'
+            ELSE 'Available'
+          END AS display_status
         FROM books b
         LEFT JOIN (
           SELECT
@@ -43,12 +49,22 @@ const BookModel = {
     try {
       const [rows] = await pool.query(`
         SELECT b.*,
-          COALESCE(cc.total_copies, b.quantity) AS quantity,
-          cc.accession_list
+          COALESCE(cc.total_copies,   b.quantity) AS quantity,
+          COALESCE(cc.total_copies,   b.quantity) AS total_copies,
+          COALESCE(cc.avail_copies,   b.quantity) AS available_copies,
+          COALESCE(cc.borrowed_copies,0)          AS borrowed_copies,
+          cc.accession_list,
+          CASE
+            WHEN cc.total_copies IS NULL THEN b.status
+            WHEN cc.avail_copies = 0     THEN 'OutOfStock'
+            ELSE 'Available'
+          END AS display_status
         FROM books b
         LEFT JOIN (
           SELECT book_id,
-            COUNT(*) AS total_copies,
+            COUNT(*)                  AS total_copies,
+            SUM(status = 'Available') AS avail_copies,
+            SUM(status = 'Borrowed')  AS borrowed_copies,
             GROUP_CONCAT(accession_number ORDER BY accession_number SEPARATOR ', ') AS accession_list
           FROM book_copies GROUP BY book_id
         ) cc ON cc.book_id = b.id
@@ -92,11 +108,22 @@ const BookModel = {
       const t = `%${query}%`;
       const [rows] = await pool.query(
         `SELECT b.*,
-           COALESCE(cc.total_copies, b.quantity) AS quantity,
-           cc.accession_list
+           COALESCE(cc.total_copies,   b.quantity) AS quantity,
+           COALESCE(cc.total_copies,   b.quantity) AS total_copies,
+           COALESCE(cc.avail_copies,   b.quantity) AS available_copies,
+           COALESCE(cc.borrowed_copies,0)          AS borrowed_copies,
+           cc.accession_list,
+           CASE
+             WHEN cc.total_copies IS NULL THEN b.status
+             WHEN cc.avail_copies = 0     THEN 'OutOfStock'
+             ELSE 'Available'
+           END AS display_status
          FROM books b
          LEFT JOIN (
-           SELECT book_id, COUNT(*) AS total_copies,
+           SELECT book_id,
+             COUNT(*)                  AS total_copies,
+             SUM(status = 'Available') AS avail_copies,
+             SUM(status = 'Borrowed')  AS borrowed_copies,
              GROUP_CONCAT(accession_number ORDER BY accession_number SEPARATOR ', ') AS accession_list
            FROM book_copies GROUP BY book_id
          ) cc ON cc.book_id = b.id
@@ -116,11 +143,22 @@ const BookModel = {
   async filter(status, genre) {
     try {
       let q = `SELECT b.*,
-        COALESCE(cc.total_copies, b.quantity) AS quantity,
-        cc.accession_list
+        COALESCE(cc.total_copies,   b.quantity) AS quantity,
+        COALESCE(cc.total_copies,   b.quantity) AS total_copies,
+        COALESCE(cc.avail_copies,   b.quantity) AS available_copies,
+        COALESCE(cc.borrowed_copies,0)          AS borrowed_copies,
+        cc.accession_list,
+        CASE
+          WHEN cc.total_copies IS NULL THEN b.status
+          WHEN cc.avail_copies = 0     THEN 'OutOfStock'
+          ELSE 'Available'
+        END AS display_status
         FROM books b
         LEFT JOIN (
-          SELECT book_id, COUNT(*) AS total_copies,
+          SELECT book_id,
+            COUNT(*)                  AS total_copies,
+            SUM(status = 'Available') AS avail_copies,
+            SUM(status = 'Borrowed')  AS borrowed_copies,
             GROUP_CONCAT(accession_number ORDER BY accession_number SEPARATOR ', ') AS accession_list
           FROM book_copies GROUP BY book_id
         ) cc ON cc.book_id = b.id
@@ -420,6 +458,28 @@ const BookModel = {
       return { success: true, count: rows[0].count };
     } catch (error) {
       console.error("[BookModel.getCount]", error.message);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // ── GET DASHBOARD STATS (Nemco) ───────────────────────
+  async getStats() {
+    try {
+      const [[{ total }]]      = await pool.query("SELECT COUNT(*) AS total FROM books");
+      const [[{ outOfStock }]] = await pool.query(
+        "SELECT COUNT(*) AS outOfStock FROM books WHERE status = 'OutOfStock' OR quantity = 0"
+      );
+      const [[{ returned }]]   = await pool.query(
+        "SELECT COUNT(*) AS returned FROM borrowed_books WHERE status = 'Returned'"
+      );
+      return {
+        success: true,
+        data: {
+          nemco: { total: Number(total), outOfStock: Number(outOfStock), returned: Number(returned) },
+        },
+      };
+    } catch (error) {
+      console.error("[BookModel.getStats]", error.message);
       return { success: false, error: error.message };
     }
   },
