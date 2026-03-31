@@ -5,38 +5,41 @@
 
 const { pool } = require("../config/db");
 
+// Reusable SELECT fragment with live copy counts
+const BOOK_SELECT = `
+  SELECT
+    b.*,
+    COALESCE(cc.total_copies,    b.quantity) AS quantity,
+    COALESCE(cc.total_copies,    b.quantity) AS total_copies,
+    COALESCE(cc.avail_copies,    b.quantity) AS available_copies,
+    COALESCE(cc.borrowed_copies, 0)          AS borrowed_copies,
+    cc.accession_list,
+    CASE
+      WHEN cc.total_copies IS NULL THEN b.status
+      WHEN cc.avail_copies = 0     THEN 'OutOfStock'
+      ELSE 'Available'
+    END AS display_status
+  FROM books b
+  LEFT JOIN (
+    SELECT
+      book_id,
+      COUNT(*)                                        AS total_copies,
+      SUM(status = 'Available')                       AS avail_copies,
+      SUM(status = 'Borrowed')                        AS borrowed_copies,
+      GROUP_CONCAT(accession_number ORDER BY accession_number SEPARATOR ', ') AS accession_list
+    FROM book_copies
+    GROUP BY book_id
+  ) cc ON cc.book_id = b.id
+`;
+
 const BookModel = {
 
-  // ── GET ALL (with copy counts + accessions) ────────────
+  // ── GET ALL ───────────────────────────────────────────
   async getAll() {
     try {
-      const [rows] = await pool.query(`
-        SELECT
-          b.*,
-          COALESCE(cc.total_copies,    b.quantity) AS quantity,
-          COALESCE(cc.total_copies,    b.quantity) AS total_copies,
-          COALESCE(cc.avail_copies,    b.quantity) AS available_copies,
-          COALESCE(cc.borrowed_copies, 0)          AS borrowed_copies,
-          cc.accession_list,
-          -- Derived display status: if copies table exists use it, else use books.status
-          CASE
-            WHEN cc.total_copies IS NULL THEN b.status
-            WHEN cc.avail_copies = 0     THEN 'OutOfStock'
-            ELSE 'Available'
-          END AS display_status
-        FROM books b
-        LEFT JOIN (
-          SELECT
-            book_id,
-            COUNT(*)                                        AS total_copies,
-            SUM(status = 'Available')                       AS avail_copies,
-            SUM(status = 'Borrowed')                        AS borrowed_copies,
-            GROUP_CONCAT(accession_number ORDER BY accession_number SEPARATOR ', ') AS accession_list
-          FROM book_copies
-          GROUP BY book_id
-        ) cc ON cc.book_id = b.id
-        ORDER BY b.created_at DESC
-      `);
+      const [rows] = await pool.query(
+        `${BOOK_SELECT} ORDER BY b.created_at DESC`
+      );
       return { success: true, data: rows };
     } catch (error) {
       console.error("[BookModel.getAll]", error.message);
@@ -44,36 +47,14 @@ const BookModel = {
     }
   },
 
-  // ── GET BY ID (with copies array) ─────────────────────
+  // ── GET BY ID ─────────────────────────────────────────
   async getById(id) {
     try {
-      const [rows] = await pool.query(`
-        SELECT b.*,
-          COALESCE(cc.total_copies,   b.quantity) AS quantity,
-          COALESCE(cc.total_copies,   b.quantity) AS total_copies,
-          COALESCE(cc.avail_copies,   b.quantity) AS available_copies,
-          COALESCE(cc.borrowed_copies,0)          AS borrowed_copies,
-          cc.accession_list,
-          CASE
-            WHEN cc.total_copies IS NULL THEN b.status
-            WHEN cc.avail_copies = 0     THEN 'OutOfStock'
-            ELSE 'Available'
-          END AS display_status
-        FROM books b
-        LEFT JOIN (
-          SELECT book_id,
-            COUNT(*)                  AS total_copies,
-            SUM(status = 'Available') AS avail_copies,
-            SUM(status = 'Borrowed')  AS borrowed_copies,
-            GROUP_CONCAT(accession_number ORDER BY accession_number SEPARATOR ', ') AS accession_list
-          FROM book_copies GROUP BY book_id
-        ) cc ON cc.book_id = b.id
-        WHERE b.id = ?
-      `, [id]);
-
+      const [rows] = await pool.query(
+        `${BOOK_SELECT} WHERE b.id = ?`, [id]
+      );
       if (!rows.length) return { success: false, error: "Book not found" };
 
-      // Also fetch individual copies
       const [copies] = await pool.query(
         `SELECT id, accession_number, status, date_acquired, condition_notes
          FROM book_copies WHERE book_id = ? ORDER BY accession_number`,
@@ -87,7 +68,7 @@ const BookModel = {
     }
   },
 
-  // ── GET COPIES FOR A BOOK ──────────────────────────────
+  // ── GET COPIES FOR A BOOK ─────────────────────────────
   async getCopies(bookId) {
     try {
       const [rows] = await pool.query(
@@ -107,26 +88,7 @@ const BookModel = {
     try {
       const t = `%${query}%`;
       const [rows] = await pool.query(
-        `SELECT b.*,
-           COALESCE(cc.total_copies,   b.quantity) AS quantity,
-           COALESCE(cc.total_copies,   b.quantity) AS total_copies,
-           COALESCE(cc.avail_copies,   b.quantity) AS available_copies,
-           COALESCE(cc.borrowed_copies,0)          AS borrowed_copies,
-           cc.accession_list,
-           CASE
-             WHEN cc.total_copies IS NULL THEN b.status
-             WHEN cc.avail_copies = 0     THEN 'OutOfStock'
-             ELSE 'Available'
-           END AS display_status
-         FROM books b
-         LEFT JOIN (
-           SELECT book_id,
-             COUNT(*)                  AS total_copies,
-             SUM(status = 'Available') AS avail_copies,
-             SUM(status = 'Borrowed')  AS borrowed_copies,
-             GROUP_CONCAT(accession_number ORDER BY accession_number SEPARATOR ', ') AS accession_list
-           FROM book_copies GROUP BY book_id
-         ) cc ON cc.book_id = b.id
+        `${BOOK_SELECT}
          WHERE b.title LIKE ? OR b.author LIKE ? OR b.genre LIKE ?
             OR b.isbn LIKE ? OR b.accessionNumber LIKE ? OR cc.accession_list LIKE ?
          ORDER BY b.title ASC`,
@@ -140,33 +102,36 @@ const BookModel = {
   },
 
   // ── FILTER ────────────────────────────────────────────
+  // FIX: OutOfStock filter now uses the derived display_status (from copy counts)
+  // instead of filtering on the raw books.status column, which is often stale.
   async filter(status, genre) {
     try {
-      let q = `SELECT b.*,
-        COALESCE(cc.total_copies,   b.quantity) AS quantity,
-        COALESCE(cc.total_copies,   b.quantity) AS total_copies,
-        COALESCE(cc.avail_copies,   b.quantity) AS available_copies,
-        COALESCE(cc.borrowed_copies,0)          AS borrowed_copies,
-        cc.accession_list,
-        CASE
-          WHEN cc.total_copies IS NULL THEN b.status
-          WHEN cc.avail_copies = 0     THEN 'OutOfStock'
-          ELSE 'Available'
-        END AS display_status
-        FROM books b
-        LEFT JOIN (
-          SELECT book_id,
-            COUNT(*)                  AS total_copies,
-            SUM(status = 'Available') AS avail_copies,
-            SUM(status = 'Borrowed')  AS borrowed_copies,
-            GROUP_CONCAT(accession_number ORDER BY accession_number SEPARATOR ', ') AS accession_list
-          FROM book_copies GROUP BY book_id
-        ) cc ON cc.book_id = b.id
-        WHERE 1=1`;
+      let q = `${BOOK_SELECT} WHERE 1=1`;
       const params = [];
 
-      if (status && status !== "All") { q += " AND b.status = ?"; params.push(status); }
-      if (genre)                       { q += " AND b.genre = ?";  params.push(genre);  }
+      if (status && status !== "All") {
+        if (status === "OutOfStock") {
+          // Match books where all copies are borrowed OR quantity is 0
+          q += ` AND (
+            (cc.total_copies IS NOT NULL AND cc.avail_copies = 0)
+            OR (cc.total_copies IS NULL AND (b.quantity = 0 OR b.status = 'OutOfStock'))
+          )`;
+        } else if (status === "Available") {
+          q += ` AND (
+            (cc.total_copies IS NOT NULL AND cc.avail_copies > 0)
+            OR (cc.total_copies IS NULL AND b.quantity > 0 AND b.status = 'Available')
+          )`;
+        } else {
+          q += " AND b.status = ?";
+          params.push(status);
+        }
+      }
+
+      if (genre) {
+        q += " AND b.genre = ?";
+        params.push(genre);
+      }
+
       q += " ORDER BY b.created_at DESC";
 
       const [rows] = await pool.query(q, params);
@@ -177,7 +142,7 @@ const BookModel = {
     }
   },
 
-  // ── CREATE (single book, no copies) ───────────────────
+  // ── CREATE (single book, no copies) ──────────────────
   async create(bookData) {
     try {
       const {
@@ -192,7 +157,7 @@ const BookModel = {
         shelf = null, pages = null, collection = null,
         status = "Available", cover = null,
         quantity = null,
-        sublocation = null,                          // ✅ FIX: added
+        sublocation = null,
       } = bookData;
 
       const qty = quantity != null ? Number(quantity) : null;
@@ -215,7 +180,7 @@ const BookModel = {
           place, description, otherDetails,
           shelf, pages, collection,
           finalStatus, cover, qty,
-          sublocation,                               // ✅ FIX: added
+          sublocation,
         ]
       );
 
@@ -228,8 +193,7 @@ const BookModel = {
     }
   },
 
-  // ── IMPORT WITH COPIES (bulk import) ──────────────────
-  // bookData.accessionNumbers = ["14023C1", "14024C2", ...]
+  // ── IMPORT WITH COPIES (bulk import) ─────────────────
   async importWithCopies(bookData) {
     const conn = await pool.getConnection();
     try {
@@ -246,15 +210,14 @@ const BookModel = {
         description = null, otherDetails = null,
         shelf = null, pages = null, collection = null,
         cover = null,
-        accessionNumbers = [],   // array of accession strings
+        accessionNumbers = [],
         dateAcquired = null,
-        sublocation = null,                          // ✅ FIX: added
+        sublocation = null,
       } = bookData;
 
-      // ── 1. Check if book already exists (by ISBN → title+author → title only) ──
+      // 1. Find existing book by ISBN → title+author → title only
       let bookId = null;
 
-      // 1a. ISBN match (most reliable)
       if (isbn) {
         const [existing] = await conn.query(
           "SELECT id FROM books WHERE isbn = ? LIMIT 1", [isbn]
@@ -262,19 +225,19 @@ const BookModel = {
         if (existing.length) bookId = existing[0].id;
       }
 
-      // 1b. Title + author match
       if (!bookId) {
         const authorVal = (author || authors || "").trim();
         if (authorVal) {
           const [existing] = await conn.query(
-            "SELECT id FROM books WHERE LOWER(TRIM(title)) = LOWER(TRIM(?)) AND LOWER(TRIM(COALESCE(author,''))) = LOWER(?) LIMIT 1",
+            `SELECT id FROM books
+             WHERE LOWER(TRIM(title)) = LOWER(TRIM(?))
+               AND LOWER(TRIM(COALESCE(author,''))) = LOWER(?) LIMIT 1`,
             [title, authorVal]
           );
           if (existing.length) bookId = existing[0].id;
         }
       }
 
-      // 1c. Title-only match (catches blank-author duplicates from Excel)
       if (!bookId) {
         const [existing] = await conn.query(
           "SELECT id FROM books WHERE LOWER(TRIM(title)) = LOWER(TRIM(?)) LIMIT 1",
@@ -283,7 +246,7 @@ const BookModel = {
         if (existing.length) bookId = existing[0].id;
       }
 
-      // ── 2. Insert book if not exists ──────────────────────────────
+      // 2. Insert book if new
       const isNewBook = !bookId;
       if (isNewBook) {
         const authorVal = author || authors || null;
@@ -298,7 +261,7 @@ const BookModel = {
           [
             title, subtitle, authorVal, authorVal,
             genre, isbn, issn, lccn,
-            accessionNumbers[0] || null,   // first accession as primary
+            accessionNumbers[0] || null,
             callNumber, year || date, date,
             publisher, edition, materialType, subtype,
             extent, size, volume, authorName, authorDates,
@@ -306,13 +269,13 @@ const BookModel = {
             shelf, pages, collection,
             "Available", cover,
             accessionNumbers.length || null,
-            sublocation,                   // ✅ FIX: added
+            sublocation,
           ]
         );
         bookId = result.insertId;
       }
 
-      // ── 3. Insert each copy — skip duplicates ─────────────────────
+      // 3. Insert each copy, skip duplicates
       const insertedCopies = [];
       const skippedCopies  = [];
 
@@ -320,7 +283,6 @@ const BookModel = {
         if (!accNo || !accNo.trim()) continue;
         const acc = accNo.trim();
 
-        // Check duplicate
         const [dup] = await conn.query(
           "SELECT id FROM book_copies WHERE accession_number = ? LIMIT 1", [acc]
         );
@@ -329,7 +291,6 @@ const BookModel = {
           continue;
         }
 
-        // Parse date_acquired
         let da = null;
         if (dateAcquired) {
           try { da = new Date(dateAcquired).toISOString().split("T")[0]; } catch (_) {}
@@ -343,21 +304,22 @@ const BookModel = {
         insertedCopies.push(acc);
       }
 
-      // ── 4. Update quantity to actual copy count ───────────────────
+      // 4. Sync quantity to actual copy count
       await conn.query(
         `UPDATE books
-         SET quantity      = (SELECT COUNT(*) FROM book_copies WHERE book_id = ?),
-             accessionNumber = (SELECT accession_number FROM book_copies WHERE book_id = ? ORDER BY accession_number LIMIT 1)
+         SET quantity       = (SELECT COUNT(*) FROM book_copies WHERE book_id = ?),
+             accessionNumber = (SELECT accession_number FROM book_copies
+                                WHERE book_id = ? ORDER BY accession_number LIMIT 1)
          WHERE id = ?`,
         [bookId, bookId, bookId]
       );
 
       await conn.commit();
 
-      // ── 5. Return full book + copies ──────────────────────────────
       const [bookRows] = await conn.query("SELECT * FROM books WHERE id = ?", [bookId]);
       const [copies]   = await conn.query(
-        "SELECT id, accession_number, status, date_acquired FROM book_copies WHERE book_id = ? ORDER BY accession_number",
+        `SELECT id, accession_number, status, date_acquired
+         FROM book_copies WHERE book_id = ? ORDER BY accession_number`,
         [bookId]
       );
 
@@ -383,6 +345,8 @@ const BookModel = {
   },
 
   // ── UPDATE ────────────────────────────────────────────
+  // FIX: no longer blindly overwrites quantity from form data when copies exist.
+  // If book_copies rows exist for this book, quantity is re-derived from them.
   async update(id, bookData) {
     try {
       const {
@@ -396,13 +360,30 @@ const BookModel = {
         description = null, otherDetails = null,
         shelf = null, pages = null, collection = null,
         status = "Available", cover = null, quantity = null,
-        sublocation = null,                          // ✅ FIX: added
+        sublocation = null,
       } = bookData;
 
       const [current] = await pool.query("SELECT * FROM books WHERE id = ?", [id]);
       if (!current.length) return { success: false, error: "Book not found" };
 
-      const qty = quantity != null ? Number(quantity) : current[0].quantity;
+      // Check whether this book has copy rows; if so, use the live count
+      const [[{ copyCount }]] = await pool.query(
+        "SELECT COUNT(*) AS copyCount FROM book_copies WHERE book_id = ?", [id]
+      );
+
+      let qty;
+      if (copyCount > 0) {
+        // Copies table is the source of truth — recount available copies
+        const [[{ availCount }]] = await pool.query(
+          "SELECT SUM(status = 'Available') AS availCount FROM book_copies WHERE book_id = ?",
+          [id]
+        );
+        qty = Number(availCount);
+      } else {
+        // No copies table — use form value or keep existing
+        qty = quantity != null ? Number(quantity) : current[0].quantity;
+      }
+
       const finalStatus = qty === 0 ? "OutOfStock" : (status || current[0].status);
 
       await pool.query(
@@ -422,7 +403,7 @@ const BookModel = {
           extent, size, volume, authorName, authorDates,
           place, description, otherDetails,
           shelf, pages, collection, finalStatus, cover, qty,
-          sublocation,                               // ✅ FIX: added
+          sublocation,
           id,
         ]
       );
@@ -462,7 +443,7 @@ const BookModel = {
     }
   },
 
-  // ── GET DASHBOARD STATS (Nemco) ───────────────────────
+  // ── GET DASHBOARD STATS ───────────────────────────────
   async getStats() {
     try {
       const [[{ total }]]      = await pool.query("SELECT COUNT(*) AS total FROM books");
@@ -497,60 +478,59 @@ const BookModel = {
     }
   },
 
-  // ── BATCH DUPLICATE CHECK (for bulk import pre-flight) ──────
+  // ── BATCH DUPLICATE CHECK ─────────────────────────────
   async checkDuplicatesBatch(books) {
     try {
       if (!Array.isArray(books) || books.length === 0) {
         return { success: true, duplicateTitles: [], duplicateAccessions: [] };
       }
 
-      const titles = books.map(b => b.title).filter(Boolean);
+      const titles       = books.map(b => b.title).filter(Boolean);
       const allAccessions = books.flatMap(b => (b.accessionNumbers || [])).filter(Boolean);
 
-      const duplicateTitles = [];
+      const duplicateTitles     = [];
       const duplicateAccessions = [];
 
-      // Batch title check
       if (titles.length > 0) {
-        const placeholders = titles.map(() => '?').join(',');
+        const placeholders = titles.map(() => "?").join(",");
         const [titleMatches] = await pool.query(
-          `SELECT id, title FROM books 
-           WHERE LOWER(TRIM(title)) IN (${placeholders})`,
-          titles
+          `SELECT id, title FROM books WHERE LOWER(TRIM(title)) IN (${placeholders})`,
+          titles.map(t => t.toLowerCase().trim())
         );
         for (const match of titleMatches) {
-          const book = books.find(b => b.title.toLowerCase().trim() === match.title.toLowerCase().trim());
-          if (book) {
-            duplicateTitles.push({ title: book.title, existingId: match.id });
-          }
+          const book = books.find(
+            b => b.title.toLowerCase().trim() === match.title.toLowerCase().trim()
+          );
+          if (book) duplicateTitles.push({ title: book.title, existingId: match.id });
         }
       }
 
-      // Batch accession check
       if (allAccessions.length > 0) {
-        const placeholders = allAccessions.map(() => '?').join(',');
+        const placeholders = allAccessions.map(() => "?").join(",");
         const [accMatches] = await pool.query(
-          `SELECT accession_number, book_id FROM book_copies 
+          `SELECT accession_number, book_id FROM book_copies
            WHERE accession_number IN (${placeholders})`,
           allAccessions
         );
         for (const match of accMatches) {
-          const book = books.find(b => (b.accessionNumbers || []).includes(match.accession_number));
+          const book = books.find(
+            b => (b.accessionNumbers || []).includes(match.accession_number)
+          );
           if (book) {
-            duplicateAccessions.push({ 
-              accession: match.accession_number, 
-              book: book.title,
-              existingBookId: match.book_id 
+            duplicateAccessions.push({
+              accession:     match.accession_number,
+              book:          book.title,
+              existingBookId: match.book_id,
             });
           }
         }
       }
 
-      return { 
-        success: true, 
+      return {
+        success: true,
         hasDuplicates: duplicateTitles.length > 0 || duplicateAccessions.length > 0,
-        duplicateTitles, 
-        duplicateAccessions 
+        duplicateTitles,
+        duplicateAccessions,
       };
     } catch (error) {
       console.error("[BookModel.checkDuplicatesBatch]", error.message);
@@ -558,40 +538,36 @@ const BookModel = {
     }
   },
 
-  // ── BULK IMPORT WRAPPER (uses importWithCopies in transaction) ──
+  // ── BULK IMPORT ───────────────────────────────────────
+  // FIX: removed the outer getConnection/beginTransaction wrapper.
+  // importWithCopies() manages its own transaction per book — wrapping it in
+  // another outer transaction on a different connection had no effect and
+  // wasted a connection.
   async bulkImport(books) {
-    const conn = await pool.getConnection();
     try {
-      await conn.beginTransaction();
-
       const results = [];
-      const errors = [];
+      const errors  = [];
 
       for (const bookData of books) {
         const result = await this.importWithCopies(bookData);
         if (result.success) {
           results.push(result);
         } else {
-          errors.push({ title: bookData.title || 'Unknown', error: result.error });
+          errors.push({ title: bookData.title || "Unknown", error: result.error });
         }
       }
 
-      await conn.commit();
-
       return {
-        success: errors.length === 0,
-        imported: results.filter(r => r.isNewBook).length,
-        updated: results.filter(r => !r.isNewBook).length,
-        errors: errors.length,
-        data: results.map(r => r.data),
-        errorsDetail: errors
+        success:      true,
+        imported:     results.filter(r =>  r.isNewBook).length,
+        updated:      results.filter(r => !r.isNewBook).length,
+        errors:       errors.length,
+        data:         results.map(r => r.data),
+        errorsDetail: errors,
       };
     } catch (error) {
-      await conn.rollback();
       console.error("[BookModel.bulkImport]", error.message);
       return { success: false, error: error.message };
-    } finally {
-      conn.release();
     }
   },
 };

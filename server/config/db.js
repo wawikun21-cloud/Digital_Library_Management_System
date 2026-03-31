@@ -18,7 +18,7 @@ const dbConfig = {
   queueLimit:         0,
   // Return DATE/DATETIME columns as plain strings (e.g. "2025-03-15")
   // instead of JS Date objects, which shift the date by timezone offset.
-  dateStrings:        true,
+  dateStrings: true,
 };
 
 const pool = mysql.createPool(dbConfig);
@@ -34,7 +34,7 @@ async function initDatabase() {
     console.log(`✅ Database '${dbConfig.database}' ready`);
     await conn.query(`USE \`${dbConfig.database}\``);
 
-    // ── users ─────────────────────────────────────────────
+    // ── users ──────────────────────────────────────────
     await conn.query(`
       CREATE TABLE IF NOT EXISTS users (
         id         INT          AUTO_INCREMENT PRIMARY KEY,
@@ -47,7 +47,6 @@ async function initDatabase() {
     `);
     console.log("✅ Users table ready");
 
-    // Seed a default admin if no users exist yet
     const [existing] = await conn.query("SELECT id FROM users LIMIT 1");
     if (existing.length === 0) {
       const hashed = await bcrypt.hash("admin123", 10);
@@ -58,43 +57,43 @@ async function initDatabase() {
       console.log("✅ Default admin created  →  username: admin / password: admin123");
     }
 
-    // ── books ─────────────────────────────────────────────
+    // ── books ──────────────────────────────────────────
     await conn.query(`
       CREATE TABLE IF NOT EXISTS books (
-        id            INT          AUTO_INCREMENT PRIMARY KEY,
-        title         VARCHAR(255) NOT NULL,
-        subtitle      VARCHAR(255) NULL,
-        author        VARCHAR(255) NULL,
-        authors       TEXT         NULL,
-        genre         VARCHAR(100) NULL,
-        isbn          VARCHAR(50)  NULL,
-        issn          VARCHAR(20)  NULL,
-        lccn          VARCHAR(20)  NULL,
-        accessionNumber VARCHAR(50) NULL,
-        callNumber    VARCHAR(100) NULL,
-        year          INT          NULL,
-        date          INT          NULL,
-        publisher     VARCHAR(255) NULL,
-        edition       VARCHAR(50)  NULL,
-        materialType  VARCHAR(50)  NULL,
-        subtype       VARCHAR(50)  NULL,
-        extent        VARCHAR(100) NULL,
-        size          VARCHAR(50)  NULL,
-        volume        VARCHAR(20)  NULL,
-        authorName    VARCHAR(255) NULL,
-        authorDates   VARCHAR(50)  NULL,
-        place         VARCHAR(255) NULL,
-        description   TEXT         NULL,
-        otherDetails  TEXT         NULL,
-        shelf         VARCHAR(100) NULL,
-        pages         VARCHAR(20)  NULL,
-        sublocation   VARCHAR(255) NULL,
-        collection    VARCHAR(50)  NULL,
-        status        VARCHAR(50)  DEFAULT 'Available',
-        cover         TEXT         NULL,
-        quantity      INT          DEFAULT 1,
-        created_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-        updated_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        id              INT          AUTO_INCREMENT PRIMARY KEY,
+        title           VARCHAR(255) NOT NULL,
+        subtitle        VARCHAR(255) NULL,
+        author          VARCHAR(255) NULL,
+        authors         TEXT         NULL,
+        genre           VARCHAR(100) NULL,
+        isbn            VARCHAR(50)  NULL,
+        issn            VARCHAR(20)  NULL,
+        lccn            VARCHAR(20)  NULL,
+        accessionNumber VARCHAR(50)  NULL,
+        callNumber      VARCHAR(100) NULL,
+        year            INT          NULL,
+        date            INT          NULL,
+        publisher       VARCHAR(255) NULL,
+        edition         VARCHAR(50)  NULL,
+        materialType    VARCHAR(50)  NULL,
+        subtype         VARCHAR(50)  NULL,
+        extent          VARCHAR(100) NULL,
+        size            VARCHAR(50)  NULL,
+        volume          VARCHAR(20)  NULL,
+        authorName      VARCHAR(255) NULL,
+        authorDates     VARCHAR(50)  NULL,
+        place           VARCHAR(255) NULL,
+        description     TEXT         NULL,
+        otherDetails    TEXT         NULL,
+        shelf           VARCHAR(100) NULL,
+        pages           VARCHAR(20)  NULL,
+        sublocation     VARCHAR(255) NULL,
+        collection      VARCHAR(50)  NULL,
+        status          VARCHAR(50)  DEFAULT 'Available',
+        cover           TEXT         NULL,
+        quantity        INT          DEFAULT 1,
+        created_at      TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+        updated_at      TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_accession  (accessionNumber),
         INDEX idx_authors    (authors(100)),
         INDEX idx_callNumber (callNumber),
@@ -103,7 +102,7 @@ async function initDatabase() {
     `);
     console.log("✅ Books table ready");
 
-    // ── book_copies ───────────────────────────────────────
+    // ── book_copies ────────────────────────────────────
     await conn.query(`
       CREATE TABLE IF NOT EXISTS book_copies (
         id               INT         AUTO_INCREMENT PRIMARY KEY,
@@ -115,30 +114,46 @@ async function initDatabase() {
         condition_notes  TEXT        NULL,
         created_at       TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE,
-        INDEX idx_book_id   (book_id),
-        INDEX idx_acc       (accession_number),
-        INDEX idx_status    (status)
+        INDEX idx_book_id (book_id),
+        INDEX idx_acc     (accession_number),
+        INDEX idx_status  (status)
       )
     `);
     console.log("✅ Book copies table ready");
 
-    // ── borrowed_books ────────────────────────────────────
+    // ── borrowed_books ─────────────────────────────────
+    // FIX: complete column set so Transaction model never hits "Unknown column"
     await conn.query(`
       CREATE TABLE IF NOT EXISTS borrowed_books (
-        id               INT          AUTO_INCREMENT PRIMARY KEY,
-        book_id          INT          NOT NULL,
-        borrower_name    VARCHAR(255) NOT NULL,
-        borrower_contact VARCHAR(100),
-        borrow_date      TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-        due_date         DATE         NOT NULL,
-        return_date      DATE,
-        status           VARCHAR(50)  DEFAULT 'Borrowed',
-        FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+        id                 INT          AUTO_INCREMENT PRIMARY KEY,
+        book_id            INT          NOT NULL,
+        accession_number   VARCHAR(50)  NULL,
+        borrower_type      VARCHAR(20)  NOT NULL DEFAULT 'student',
+        borrower_name      VARCHAR(255) NOT NULL,
+        borrower_id_number VARCHAR(50)  NULL,
+        borrower_contact   VARCHAR(100) NULL,
+        borrower_email     VARCHAR(255) NULL,
+        borrower_course    VARCHAR(100) NULL,
+        borrower_yr_level  VARCHAR(20)  NULL,
+        borrow_date        DATE         NOT NULL DEFAULT (CURDATE()),
+        due_date           DATE         NOT NULL,
+        return_date        DATE         NULL,
+        status             VARCHAR(50)  NOT NULL DEFAULT 'Borrowed',
+        fine_paid          TINYINT(1)   NOT NULL DEFAULT 0,
+        fine_amount        DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        created_at         TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+        updated_at         TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE,
+        INDEX idx_book_id          (book_id),
+        INDEX idx_borrower_id      (borrower_id_number),
+        INDEX idx_status           (status),
+        INDEX idx_due_date         (due_date),
+        INDEX idx_accession_number (accession_number)
       )
     `);
     console.log("✅ Borrowed books table ready");
 
-    // ── lexora_books ──────────────────────────────────────
+    // ── lexora_books ───────────────────────────────────
     await conn.query(`
       CREATE TABLE IF NOT EXISTS lexora_books (
         id             INT           AUTO_INCREMENT PRIMARY KEY,
@@ -171,24 +186,42 @@ async function initDatabase() {
 
 async function migrateSchema(conn) {
   const migrations = [
-    // ── users: avatar column ──────────────────────────────
+    // ── users ──────────────────────────────────────────
     `ALTER TABLE users ADD COLUMN avatar_url MEDIUMTEXT NULL`,
 
-    // ── books ─────────────────────────────────────────────
+    // ── books ──────────────────────────────────────────
     `ALTER TABLE books MODIFY COLUMN author    VARCHAR(255) NULL`,
     `ALTER TABLE books MODIFY COLUMN genre     VARCHAR(100) NULL`,
     `ALTER TABLE books MODIFY COLUMN isbn      VARCHAR(50)  NULL`,
     `ALTER TABLE books MODIFY COLUMN publisher VARCHAR(255) NULL`,
-    `ALTER TABLE books ADD COLUMN shelf      VARCHAR(100) NULL`,
-    `ALTER TABLE books ADD COLUMN pages      VARCHAR(20)  NULL`,
+    `ALTER TABLE books ADD COLUMN shelf       VARCHAR(100) NULL`,
+    `ALTER TABLE books ADD COLUMN pages       VARCHAR(20)  NULL`,
     `ALTER TABLE books ADD COLUMN sublocation VARCHAR(255) NULL AFTER pages`,
-    `ALTER TABLE books ADD COLUMN collection VARCHAR(50)  NULL`,
+    `ALTER TABLE books ADD COLUMN collection  VARCHAR(50)  NULL`,
     `ALTER TABLE books DROP INDEX isbn`,
+
+    // ── book_copies ────────────────────────────────────
     `ALTER TABLE book_copies ADD COLUMN date_acquired   DATE NULL`,
     `ALTER TABLE book_copies ADD COLUMN condition_notes TEXT NULL`,
     `ALTER TABLE book_copies ADD UNIQUE INDEX idx_acc_unique (accession_number)`,
 
-    // ── lexora_books ──────────────────────────────────────
+    // ── borrowed_books — add all columns the Transaction model writes ──
+    `ALTER TABLE borrowed_books ADD COLUMN accession_number   VARCHAR(50)   NULL AFTER book_id`,
+    `ALTER TABLE borrowed_books ADD COLUMN borrower_type      VARCHAR(20)   NOT NULL DEFAULT 'student' AFTER accession_number`,
+    `ALTER TABLE borrowed_books ADD COLUMN borrower_id_number VARCHAR(50)   NULL AFTER borrower_name`,
+    `ALTER TABLE borrowed_books ADD COLUMN borrower_email     VARCHAR(255)  NULL AFTER borrower_contact`,
+    `ALTER TABLE borrowed_books ADD COLUMN borrower_course    VARCHAR(100)  NULL AFTER borrower_email`,
+    `ALTER TABLE borrowed_books ADD COLUMN borrower_yr_level  VARCHAR(20)   NULL AFTER borrower_course`,
+    `ALTER TABLE borrowed_books ADD COLUMN fine_paid          TINYINT(1)    NOT NULL DEFAULT 0`,
+    `ALTER TABLE borrowed_books ADD COLUMN fine_amount        DECIMAL(10,2) NOT NULL DEFAULT 0.00`,
+    `ALTER TABLE borrowed_books ADD COLUMN updated_at         TIMESTAMP     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`,
+    `ALTER TABLE borrowed_books ADD INDEX idx_borrower_id      (borrower_id_number)`,
+    `ALTER TABLE borrowed_books ADD INDEX idx_due_date         (due_date)`,
+    `ALTER TABLE borrowed_books ADD INDEX idx_accession_number (accession_number)`,
+    // Normalize borrow_date to DATE (was TIMESTAMP in old schema)
+    `ALTER TABLE borrowed_books MODIFY COLUMN borrow_date DATE NOT NULL DEFAULT (CURDATE())`,
+
+    // ── lexora_books ───────────────────────────────────
     `ALTER TABLE lexora_books ADD COLUMN format         VARCHAR(50)  NULL AFTER resource_type`,
     `ALTER TABLE lexora_books ADD COLUMN subject_course VARCHAR(500) NULL AFTER format`,
     `ALTER TABLE lexora_books ADD COLUMN resource_type  VARCHAR(50)  NULL`,
@@ -204,7 +237,12 @@ async function migrateSchema(conn) {
       await conn.query(sql);
       console.log(`  ✅ Migration: ${sql.slice(0, 65)}…`);
     } catch (err) {
-      if ([1091, 1060, 1054, 1061].includes(err.errno)) {
+      // 1091 = can't drop index (doesn't exist)
+      // 1060 = duplicate column
+      // 1054 = unknown column
+      // 1061 = duplicate key name
+      // 1292 = incorrect date value (borrow_date DEFAULT expr on older MySQL)
+      if ([1091, 1060, 1054, 1061, 1292].includes(err.errno)) {
         console.log(`  ⏭️  Already applied: ${sql.slice(0, 65)}…`);
       } else {
         console.warn(`  ⚠️  Migration warning: ${err.message}`);

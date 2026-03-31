@@ -1,14 +1,10 @@
 // ─────────────────────────────────────────────────────────
-//  models/Transaction.js  (UPDATED)
-//  - lookupStudent now supports partial ID match (live search)
-//  - searchFaculty unchanged
+//  models/Transaction.js
 // ─────────────────────────────────────────────────────────
 
 const { pool } = require("../config/db");
 
-// Returns today's date as "YYYY-MM-DD" in local server time (not UTC).
-// Using new Date().toISOString() returns UTC which can be 1 day behind
-// in UTC+8 (Philippines) before 8am.
+// Returns today's date as "YYYY-MM-DD" in local server time.
 function localDateStr(date = new Date()) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -19,8 +15,6 @@ function localDateStr(date = new Date()) {
 const FINE_PER_DAY = 5; // ₱5 per day overdue
 
 // Compute fine SQL fragment — used in every SELECT.
-// Fine accrues on overdue Borrowed books; once Returned it's frozen at return_date.
-// fine_amount column stores any manually overridden or paid amount.
 const FINE_SQL = `
   CASE
     WHEN t.status = 'Returned' THEN
@@ -31,18 +25,22 @@ const FINE_SQL = `
   END AS computed_fine
 `;
 
+// Full SELECT fragment reused across queries
+const SELECT_FULL = `
+  SELECT t.*, b.title AS book_title, b.author AS book_author,
+         b.accessionNumber AS book_accession,
+         ${FINE_SQL}
+  FROM borrowed_books t
+  LEFT JOIN books b ON t.book_id = b.id
+`;
+
 const TransactionModel = {
 
   async getAll() {
     try {
-      const [rows] = await pool.query(`
-        SELECT t.*, b.title AS book_title, b.author AS book_author,
-               b.accessionNumber AS book_accession,
-               ${FINE_SQL}
-        FROM borrowed_books t
-        LEFT JOIN books b ON t.book_id = b.id
-        ORDER BY t.borrow_date DESC
-      `);
+      const [rows] = await pool.query(
+        `${SELECT_FULL} ORDER BY t.borrow_date DESC`
+      );
       return { success: true, data: rows };
     } catch (error) {
       console.error("[TransactionModel.getAll]", error.message);
@@ -52,14 +50,9 @@ const TransactionModel = {
 
   async getById(id) {
     try {
-      const [rows] = await pool.query(`
-        SELECT t.*, b.title AS book_title, b.author AS book_author,
-               b.accessionNumber AS book_accession,
-               ${FINE_SQL}
-        FROM borrowed_books t
-        LEFT JOIN books b ON t.book_id = b.id
-        WHERE t.id = ?
-      `, [id]);
+      const [rows] = await pool.query(
+        `${SELECT_FULL} WHERE t.id = ?`, [id]
+      );
       if (!rows.length) return { success: false, error: "Transaction not found" };
       return { success: true, data: rows[0] };
     } catch (error) {
@@ -118,12 +111,8 @@ const TransactionModel = {
   },
 
   // ── Look up student by ID number ──────────────────────
-  // Supports both EXACT match (used when confirming) and
-  // PARTIAL match (used for live dropdown search).
-  // The route passes the raw query string so we do LIKE search.
   async lookupStudent(studentIdNumber) {
     try {
-      // Try exact match first
       const [exact] = await pool.query(
         `SELECT student_id_number, student_name, first_name, last_name,
                 student_course, student_yr_level, student_contact, student_email
@@ -134,7 +123,6 @@ const TransactionModel = {
       );
       if (exact.length) return { success: true, data: exact[0], multiple: false };
 
-      // Fallback: partial match (for live typing)
       const [rows] = await pool.query(
         `SELECT student_id_number, student_name, first_name, last_name,
                 student_course, student_yr_level, student_contact, student_email
@@ -148,8 +136,6 @@ const TransactionModel = {
       );
 
       if (!rows.length) return { success: false, error: "Student not found" };
-
-      // If multiple results, return them all so the frontend can show a list
       return { success: true, data: rows, multiple: rows.length > 1 };
     } catch (error) {
       console.error("[TransactionModel.lookupStudent]", error.message);
@@ -157,7 +143,7 @@ const TransactionModel = {
     }
   },
 
-  // ── Look up faculty by name (partial search) ──────────
+  // ── Look up faculty by name ───────────────────────────
   async searchFaculty(query) {
     try {
       const [rows] = await pool.query(
@@ -172,7 +158,7 @@ const TransactionModel = {
     }
   },
 
-  // ── Search books by accession number or title ─────────
+  // ── Search available books ────────────────────────────
   async searchBooks(query) {
     try {
       const t = `%${query}%`;
@@ -201,9 +187,7 @@ const TransactionModel = {
           GROUP BY book_id
         ) cc ON cc.book_id = b.id
         WHERE
-          -- Match title or accession number (books table or any copy)
           (b.title LIKE ? OR b.accessionNumber LIKE ? OR cc.accession_list LIKE ?)
-          -- Only show books that have at least 1 available copy
           AND COALESCE(cc.avail_copies, b.quantity) > 0
         ORDER BY b.title ASC
         LIMIT 10`,
@@ -216,7 +200,7 @@ const TransactionModel = {
     }
   },
 
-  // ── Check how many books a borrower currently has ─────
+  // ── Active borrow count for a borrower ───────────────
   async getActiveBorrowCount(borrowerIdNumber, borrowerName) {
     try {
       let rows;
@@ -240,9 +224,14 @@ const TransactionModel = {
     }
   },
 
-  // ── Create transaction (single book) ─────────────────
-async create(transactionData) {
+  // ── Create transaction (single book borrow) ──────────
+  // FIX: was using `book` before declaring it (ReferenceError crash).
+  // FIX: wrapped in a DB transaction so copy status + quantity stay in sync.
+  async create(transactionData) {
+    const conn = await pool.getConnection();
     try {
+      await conn.beginTransaction();
+
       const {
         book_id, accession_number, borrower_name, borrower_id_number,
         borrower_contact, borrower_email,
@@ -251,33 +240,77 @@ async create(transactionData) {
         borrow_date, due_date,
       } = transactionData;
 
-      // Use provided accession or fallback to book's primary
-      const finalAccession = accession_number || book[0].accessionNumber;
-      if (!finalAccession) {
-        return { success: false, error: "Accession number required for accurate availability tracking" };
+      // 1. Fetch book FIRST (was referenced before declaration in original)
+      const [book] = await conn.query(
+        "SELECT * FROM books WHERE id = ? FOR UPDATE", [book_id]
+      );
+      if (!book.length) {
+        await conn.rollback();
+        return { success: false, error: "Book not found" };
       }
-      const useAccession = finalAccession;
 
-      // Check book availability
-      const [book] = await pool.query("SELECT * FROM books WHERE id = ?", [book_id]);
-      if (!book.length)          return { success: false, error: "Book not found" };
-      if (book[0].quantity <= 0) return { success: false, error: "Book is not available" };
+      // 2. Resolve which copy to borrow
+      let useAccession = accession_number || null;
 
-      // Enforce max 2 books per borrower
+      if (useAccession) {
+        // Verify the requested copy is still available
+        const [copyCheck] = await conn.query(
+          `SELECT id FROM book_copies
+           WHERE book_id = ? AND accession_number = ? AND status = 'Available'
+           LIMIT 1`,
+          [book_id, useAccession]
+        );
+        if (!copyCheck.length) {
+          await conn.rollback();
+          return { success: false, error: `Copy ${useAccession} is not available` };
+        }
+      } else {
+        // Auto-select the first available copy
+        const [available] = await conn.query(
+          `SELECT accession_number FROM book_copies
+           WHERE book_id = ? AND status = 'Available'
+           ORDER BY accession_number LIMIT 1`,
+          [book_id]
+        );
+        if (available.length) {
+          useAccession = available[0].accession_number;
+        } else if (book[0].accessionNumber) {
+          // No copies table entries — fall back to books.accessionNumber
+          useAccession = book[0].accessionNumber;
+        } else {
+          await conn.rollback();
+          return { success: false, error: "No available copy found for this book" };
+        }
+      }
+
+      // 3. Check availability via quantity
+      if (book[0].quantity <= 0) {
+        await conn.rollback();
+        return { success: false, error: "Book is not available (out of stock)" };
+      }
+
+      // 4. Enforce max 2 active borrows per borrower
       const countResult = await this.getActiveBorrowCount(borrower_id_number, borrower_name);
       if (countResult.success && countResult.count >= 2) {
+        await conn.rollback();
         return { success: false, error: "Borrower already has 2 books borrowed (maximum reached)" };
       }
 
-      // 1. Mark specific copy as borrowed
-      await pool.query(
-        `UPDATE book_copies SET status = 'Borrowed' 
+      // 5. Mark specific copy as Borrowed
+      await conn.query(
+        `UPDATE book_copies SET status = 'Borrowed'
          WHERE book_id = ? AND accession_number = ?`,
         [book_id, useAccession]
       );
 
-      // 2. Create transaction record
-      const [result] = await pool.query(
+      // 6. Decrement quantity
+      await conn.query(
+        "UPDATE books SET quantity = quantity - 1 WHERE id = ?",
+        [book_id]
+      );
+
+      // 7. Insert transaction record
+      const [result] = await conn.query(
         `INSERT INTO borrowed_books
            (book_id, accession_number, borrower_name, borrower_id_number, borrower_contact,
             borrower_email, borrower_course, borrower_yr_level, borrower_type,
@@ -287,32 +320,30 @@ async create(transactionData) {
           book_id, useAccession, borrower_name, borrower_id_number || null,
           borrower_contact || null, borrower_email || null,
           borrower_course || null, borrower_yr_level || null,
-          borrower_type || 'student',
+          borrower_type || "student",
           borrow_date || localDateStr(),
           due_date,
         ]
       );
 
-      // Decrease quantity
-      await pool.query("UPDATE books SET quantity = quantity - 1 WHERE id = ?", [book_id]);
+      await conn.commit();
 
-      const [rows] = await pool.query(`
-        SELECT t.*, b.title AS book_title, b.author AS book_author,
-               b.accessionNumber AS book_accession,
-               ${FINE_SQL}
-        FROM borrowed_books t LEFT JOIN books b ON t.book_id = b.id
-        WHERE t.id = ?
-      `, [result.insertId]);
+      const [rows] = await pool.query(
+        `${SELECT_FULL} WHERE t.id = ?`, [result.insertId]
+      );
 
-      console.log(`✅ Borrowed: "${book[0].title}" by ${borrower_name}`);
+      console.log(`✅ Borrowed: "${book[0].title}" (${useAccession}) by ${borrower_name}`);
       return { success: true, data: rows[0] };
     } catch (error) {
+      await conn.rollback();
       console.error("[TransactionModel.create]", error.message);
       return { success: false, error: error.message };
+    } finally {
+      conn.release();
     }
   },
 
-  // ── Update transaction details ─────────────────────────
+  // ── Update transaction metadata (borrower details / dates) ──
   async update(id, data) {
     try {
       const {
@@ -320,6 +351,11 @@ async create(transactionData) {
         borrower_email, borrower_course, borrower_yr_level,
         borrow_date, due_date,
       } = data;
+
+      const [existing] = await pool.query(
+        "SELECT id FROM borrowed_books WHERE id = ?", [id]
+      );
+      if (!existing.length) return { success: false, error: "Transaction not found" };
 
       await pool.query(
         `UPDATE borrowed_books
@@ -334,14 +370,7 @@ async create(transactionData) {
         ]
       );
 
-      const [rows] = await pool.query(`
-        SELECT t.*, b.title AS book_title, b.author AS book_author,
-               b.accessionNumber AS book_accession,
-               ${FINE_SQL}
-        FROM borrowed_books t LEFT JOIN books b ON t.book_id = b.id
-        WHERE t.id = ?
-      `, [id]);
-
+      const [rows] = await pool.query(`${SELECT_FULL} WHERE t.id = ?`, [id]);
       return { success: true, data: rows[0] };
     } catch (error) {
       console.error("[TransactionModel.update]", error.message);
@@ -349,12 +378,14 @@ async create(transactionData) {
     }
   },
 
-  // ── Extend due date by N days ─────────────────────────
+  // ── Extend due date ───────────────────────────────────
   async extend(id, days = 1) {
     try {
-      const [rows] = await pool.query("SELECT * FROM borrowed_books WHERE id = ?", [id]);
-      if (!rows.length)                    return { success: false, error: "Transaction not found" };
-      if (rows[0].status === "Returned")   return { success: false, error: "Cannot extend a returned book" };
+      const [rows] = await pool.query(
+        "SELECT * FROM borrowed_books WHERE id = ?", [id]
+      );
+      if (!rows.length)                  return { success: false, error: "Transaction not found" };
+      if (rows[0].status === "Returned") return { success: false, error: "Cannot extend a returned book" };
 
       await pool.query(
         `UPDATE borrowed_books
@@ -363,14 +394,7 @@ async create(transactionData) {
         [days, id]
       );
 
-      const [updated] = await pool.query(`
-        SELECT t.*, b.title AS book_title, b.author AS book_author,
-               b.accessionNumber AS book_accession,
-               ${FINE_SQL}
-        FROM borrowed_books t LEFT JOIN books b ON t.book_id = b.id
-        WHERE t.id = ?
-      `, [id]);
-
+      const [updated] = await pool.query(`${SELECT_FULL} WHERE t.id = ?`, [id]);
       console.log(`✅ Extended transaction ${id} by ${days} day(s)`);
       return { success: true, data: updated[0] };
     } catch (error) {
@@ -380,59 +404,108 @@ async create(transactionData) {
   },
 
   // ── Return a book ─────────────────────────────────────
-async returnBook(id) {
+  // FIX: original never restored books.quantity on return — stock leaked forever.
+  // FIX: now wrapped in DB transaction to keep copies + quantity in sync.
+  // FIX: final SELECT now includes FINE_SQL so computed_fine is populated.
+  async returnBook(id) {
+    const conn = await pool.getConnection();
     try {
-      const [transaction] = await pool.query("SELECT * FROM borrowed_books WHERE id = ?", [id]);
-      if (!transaction.length)                    return { success: false, error: "Transaction not found" };
-      if (transaction[0].status === "Returned")   return { success: false, error: "Book already returned" };
+      await conn.beginTransaction();
+
+      const [transaction] = await conn.query(
+        "SELECT * FROM borrowed_books WHERE id = ? FOR UPDATE", [id]
+      );
+      if (!transaction.length) {
+        await conn.rollback();
+        return { success: false, error: "Transaction not found" };
+      }
+      if (transaction[0].status === "Returned") {
+        await conn.rollback();
+        return { success: false, error: "Book already returned" };
+      }
 
       const returnDate = localDateStr();
-      
-      // 1. Mark specific copy available again
-      await pool.query(
-        `UPDATE book_copies SET status = 'Available' 
+
+      // 1. Mark specific copy as Available again
+      await conn.query(
+        `UPDATE book_copies SET status = 'Available'
          WHERE book_id = ? AND accession_number = ?`,
         [transaction[0].book_id, transaction[0].accession_number]
       );
 
-      // 2. Mark transaction returned
-      await pool.query(
-        `UPDATE borrowed_books SET status = 'Returned', return_date = ? WHERE id = ?`,
+      // 2. Restore quantity on the books table
+      await conn.query(
+        "UPDATE books SET quantity = quantity + 1 WHERE id = ?",
+        [transaction[0].book_id]
+      );
+
+      // 3. Mark transaction as returned
+      await conn.query(
+        "UPDATE borrowed_books SET status = 'Returned', return_date = ? WHERE id = ?",
         [returnDate, id]
       );
 
-      const [rows] = await pool.query(`
-        SELECT t.*, b.title AS book_title, b.author AS book_author,
-               b.accessionNumber AS book_accession, t.accession_number
-        FROM borrowed_books t LEFT JOIN books b ON t.book_id = b.id
-        WHERE t.id = ?
-      `, [id]);
+      await conn.commit();
+
+      // 4. Re-fetch with full FINE_SQL so computed_fine is populated
+      const [rows] = await pool.query(`${SELECT_FULL} WHERE t.id = ?`, [id]);
 
       console.log(`✅ Returned: ${rows[0].book_title} (${rows[0].accession_number})`);
       return { success: true, data: rows[0] };
     } catch (error) {
+      await conn.rollback();
       console.error("[TransactionModel.returnBook]", error.message);
       return { success: false, error: error.message };
+    } finally {
+      conn.release();
     }
   },
 
-  // ── Delete ────────────────────────────────────────────
+  // ── Delete transaction ────────────────────────────────
+  // FIX: original restored books.quantity but never reset book_copies.status.
+  // The copy would remain 'Borrowed' in the copies table forever.
   async delete(id) {
+    const conn = await pool.getConnection();
     try {
-      const [transaction] = await pool.query("SELECT * FROM borrowed_books WHERE id = ?", [id]);
-      if (!transaction.length) return { success: false, error: "Transaction not found" };
+      await conn.beginTransaction();
 
-      if (transaction[0].status === "Borrowed") {
-        await pool.query(
+      const [transaction] = await conn.query(
+        "SELECT * FROM borrowed_books WHERE id = ?", [id]
+      );
+      if (!transaction.length) {
+        await conn.rollback();
+        return { success: false, error: "Transaction not found" };
+      }
+
+      const txn = transaction[0];
+
+      // If still borrowed, restore stock atomically
+      if (txn.status === "Borrowed") {
+        // Reset the copy status
+        if (txn.accession_number) {
+          await conn.query(
+            `UPDATE book_copies SET status = 'Available'
+             WHERE book_id = ? AND accession_number = ?`,
+            [txn.book_id, txn.accession_number]
+          );
+        }
+        // Restore quantity
+        await conn.query(
           "UPDATE books SET quantity = quantity + 1 WHERE id = ?",
-          [transaction[0].book_id]
+          [txn.book_id]
         );
       }
-      await pool.query("DELETE FROM borrowed_books WHERE id = ?", [id]);
-      return { success: true, data: transaction[0] };
+
+      await conn.query("DELETE FROM borrowed_books WHERE id = ?", [id]);
+      await conn.commit();
+
+      return { success: true, data: txn };
     } catch (error) {
+      await conn.rollback();
       console.error("[TransactionModel.delete]", error.message);
       return { success: false, error: error.message };
+    } finally {
+      conn.release();
     }
   },
 
@@ -449,13 +522,12 @@ async returnBook(id) {
     }
   },
 
-  // ── Mark fine as paid ────────────────────────────────
+  // ── Mark fine as paid ─────────────────────────────────
   async payFine(id) {
     try {
       const [rows] = await pool.query("SELECT * FROM borrowed_books WHERE id = ?", [id]);
       if (!rows.length) return { success: false, error: "Transaction not found" };
 
-      // Compute the fine amount at time of payment and store it
       const t = rows[0];
       let fineAmount = 0;
       if (t.due_date) {
@@ -467,18 +539,11 @@ async returnBook(id) {
       }
 
       await pool.query(
-        `UPDATE borrowed_books SET fine_paid = 1, fine_amount = ? WHERE id = ?`,
+        "UPDATE borrowed_books SET fine_paid = 1, fine_amount = ? WHERE id = ?",
         [fineAmount, id]
       );
 
-      const [updated] = await pool.query(`
-        SELECT t.*, b.title AS book_title, b.author AS book_author,
-               b.accessionNumber AS book_accession,
-               ${FINE_SQL}
-        FROM borrowed_books t LEFT JOIN books b ON t.book_id = b.id
-        WHERE t.id = ?
-      `, [id]);
-
+      const [updated] = await pool.query(`${SELECT_FULL} WHERE t.id = ?`, [id]);
       console.log(`✅ Fine paid: transaction ${id} — ₱${fineAmount}`);
       return { success: true, data: updated[0] };
     } catch (error) {
