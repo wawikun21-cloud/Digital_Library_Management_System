@@ -1,47 +1,41 @@
 // ─────────────────────────────────────────────────────────
-//  Lexora Backend  —  index.js
-//  Express + MySQL Database
+//  server/index.js
+//  Entry point — Express app + Socket.io server
 // ─────────────────────────────────────────────────────────
+
 require("dotenv").config();
+const http    = require("http");
+const express = require("express");
+const cors    = require("cors");
+const path    = require("path");
+const session = require("express-session");
 
-const express      = require("express");
-const cors         = require("cors");
-const session      = require("express-session");
-
-const booksRouter        = require("./routes/books");
-const transactionsRouter = require("./routes/transactions");
-const attendanceRouter = require("./routes/attendance");
-const studentsRouter = require("./routes/students");
-const authRouter         = require("./routes/auth");
 const { initDatabase, testConnection } = require("./config/db");
+const { initSocket }                   = require("./utils/websocket");
 
-const app  = express();
-const PORT = process.env.PORT || 3001;
+// ── Routes ────────────────────────────────────────────────
+const authRoutes         = require("./routes/auth");
+const booksRoutes        = require("./routes/books");
+const transactionRoutes  = require("./routes/transactions");
+const attendanceRoutes   = require("./routes/attendance");
+const studentsRoutes     = require("./routes/students");
+const analyticsRoutes    = require("./routes/analytics");
 
-// ── Middleware ───────────────────────────────────────────
-const allowedOrigins = [
-  process.env.CLIENT_ORIGIN || "http://localhost:5173",
-  "http://localhost:5174",
-  "http://localhost:5175"
-];
+// ── Analytics controller (for the /api/books/stats shortcut) ──
+const AnalyticsController = require("./controllers/AnalyticsController");
+const app    = express();
+const server = http.createServer(app);
 
+// ── Middleware ────────────────────────────────────────────
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = "The CORS policy for this site does not allow access from the specified Origin.";
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
-  },
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true, // required for sessions with CORS
+  // .env uses CLIENT_ORIGIN — fall back to CLIENT_URL for backwards compat
+  origin: process.env.CLIENT_ORIGIN || process.env.CLIENT_URL || "http://localhost:5173",
+  credentials: true,
 }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
 
-app.use(express.json({ limit: '1000kb' }));
-
-
-// ── Session ──────────────────────────────────────────────
+// ── Session ───────────────────────────────────────────────
 app.use(session({
   name:   "lexora.sid",
   secret: process.env.SESSION_SECRET || "lexora-secret-change-in-production",
@@ -49,58 +43,60 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure:   false, // set true if using HTTPS in production
+    secure:   process.env.NODE_ENV === "production",
+    sameSite: "lax",
     maxAge:   1000 * 60 * 60 * 8, // 8 hours
   },
 }));
 
-// ── Routes ───────────────────────────────────────────────
-app.use("/api/auth",         authRouter);
-app.use("/api/books",        booksRouter);
-app.use("/api/transactions", transactionsRouter);
-app.use("/api/attendance", attendanceRouter);
-app.use("/api/students", studentsRouter);
+// ── Static uploads ────────────────────────────────────────
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// ── Health check ─────────────────────────────────────────
-app.get("/api/health", async (_req, res) => {
-  const dbStatus = await testConnection();
-  res.json({
-    status:    dbStatus ? "ok" : "db_error",
-    timestamp: new Date().toISOString(),
-    database:  dbStatus ? "✅ connected" : "❌ disconnected",
+// ── API Routes ────────────────────────────────────────────
+app.use("/api/auth",         authRoutes);
+app.use("/api/books",        booksRoutes);
+app.use("/api/transactions", transactionRoutes);
+app.use("/api/attendance",   attendanceRoutes);
+app.use("/api/students",     studentsRoutes);
+app.use("/api/analytics",    analyticsRoutes);
+
+// KPI stats shortcut — keeps existing Dashboard fetch URL working
+// GET /api/books/stats  (must be registered BEFORE the wildcard /:id route in books router)
+app.get("/api/books/stats", AnalyticsController.getBookStats);
+
+// ── Health check ──────────────────────────────────────────
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// ── 404 handler ───────────────────────────────────────────
+app.use((req, res) => {
+  res.status(404).json({ success: false, message: "Route not found" });
+});
+
+// ── Global error handler ──────────────────────────────────
+app.use((err, req, res, _next) => {
+  console.error("[Express error]", err.message);
+  res.status(500).json({ success: false, message: "Internal server error" });
+});
+
+// ── Start ─────────────────────────────────────────────────
+const PORT = process.env.PORT || 3001;
+
+async function start() {
+  await initDatabase();
+  await testConnection();
+
+  // Attach Socket.io AFTER http.createServer
+  initSocket(server);
+
+  server.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🔌 WebSocket (Socket.io) ready on port ${PORT}`);
   });
-});
-
-// ── 404 fallback ─────────────────────────────────────────
-app.use((_req, res) => {
-  res.status(404).json({ success: false, error: "Route not found" });
-});
-
-// ── Global error handler ─────────────────────────────────
-app.use((err, _req, res, _next) => {
-  console.error("[Server Error]", err);
-  res.status(500).json({ success: false, error: "Internal server error" });
-});
-
-// ── Start ────────────────────────────────────────────────
-async function startServer() {
-  try {
-    await initDatabase();
-
-    const dbConnected = await testConnection();
-    if (!dbConnected) {
-      console.error("⚠️  Warning: Could not connect to MySQL database");
-    }
-
-    app.listen(PORT, () => {
-      console.log(`\n🚀  Lexora server     →  http://localhost:${PORT}`);
-      console.log(`🗄️  Database          →  MySQL (lexora)`);
-      console.log(`🔐  Auth              →  Session-based (no JWT)`);
-    });
-  } catch (error) {
-    console.error("❌ Failed to start server:", error.message);
-    process.exit(1);
-  }
 }
 
-startServer();
+start().catch(err => {
+  console.error("❌ Failed to start server:", err);
+  process.exit(1);
+});

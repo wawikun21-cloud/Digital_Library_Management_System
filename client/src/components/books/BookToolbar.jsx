@@ -80,7 +80,7 @@ export default function BookToolbar({
               fontFamily:  "inherit",
             }}
           >
-            <option value="">All Program</option>
+            <option value="">All Genre</option>
             {genres.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
         </div>  
