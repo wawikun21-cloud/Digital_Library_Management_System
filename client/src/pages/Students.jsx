@@ -55,6 +55,9 @@ export default function Students() {
   const [parsedStudentsData, setParsedStudentsData] = useState(null);
   const [importResult, setImportResult] = useState(null);
   const [importCourse, setImportCourse] = useState('');
+  const [importSchoolYear, setImportSchoolYear] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
   const fileInputRef = useRef(null);
 
   // ── Toast state ─────────────────────────────────────
@@ -69,6 +72,9 @@ export default function Students() {
     course: 'All',
     yearLevel: 'All'
   });
+
+  // ── School Year tab state ────────────────────────────
+  const [selectedSY, setSelectedSY] = useState(null);
 
   // ── Fetch students data ─────────────────────────────
   const fetchStudentsData = async () => {
@@ -189,14 +195,35 @@ export default function Students() {
 
   // ── Handle bulk import ───────────────────────────────
   const handleBulkImport = async (studentsData) => {
+    setIsImporting(true);
+    setImportProgress(0);
+
+    // Simulate progress ticks while the real request is in-flight
+    const totalSteps = 90; // advance to 90% then jump to 100 on success
+    const interval = setInterval(() => {
+      setImportProgress(prev => {
+        if (prev >= totalSteps) {
+          clearInterval(interval);
+          return prev;
+        }
+        // slow down as it approaches 90 so it never "finishes" early
+        const increment = prev < 60 ? 4 : prev < 80 ? 2 : 0.5;
+        return Math.min(prev + increment, totalSteps);
+      });
+    }, 200);
+
     try {
       const studentsWithCourse = studentsData.map(student => ({
         ...student,
-        student_course: importCourse
+        student_course: importCourse,
+        student_school_year: importSchoolYear
       }));
-      
+
       const response = await bulkImportStudents(studentsWithCourse);
+      clearInterval(interval);
+
       if (response.success) {
+        setImportProgress(100);
         setImportResult(response.data);
         setParsedStudentsData(null);
         showToast(`Successfully imported ${response.data.successful} students`, 'success');
@@ -205,10 +232,15 @@ export default function Students() {
         }
         fetchStudentsData();
       } else {
-        showToast(response.error, 'error');
+        setImportProgress(0);
+        showToast(response.error || 'Import failed', 'error');
       }
     } catch (error) {
+      clearInterval(interval);
+      setImportProgress(0);
       showToast('Failed to import students', 'error');
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -268,6 +300,25 @@ export default function Students() {
     }
   };
 
+  // ── Derive sorted school years from students ─────────
+  // Must be declared BEFORE filteredStudents which depends on it
+  const schoolYears = [...new Set(
+    students.map(s => s.student_school_year).filter(Boolean)
+  )].sort((a, b) => {
+    const aYear = parseInt((a || '').split('-')[1] || a || 0);
+    const bYear = parseInt((b || '').split('-')[1] || b || 0);
+    return bYear - aYear;
+  });
+
+  // ── Auto-select the latest S.Y. when students load ──
+  useEffect(() => {
+    if (schoolYears.length > 0) {
+      setSelectedSY(prev => prev && schoolYears.includes(prev) ? prev : schoolYears[0]);
+    } else {
+      setSelectedSY(null);
+    }
+  }, [students]); // eslint-disable-line
+
   // ── Filter students ─────────────────────────────────
   const filteredStudents = students.filter(student => {
     const matchesSearch = !searchTerm ||
@@ -276,7 +327,8 @@ export default function Students() {
       (student.student_course && student.student_course.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCourse = filters.course === 'All' || student.student_course === filters.course;
     const matchesYearLevel = filters.yearLevel === 'All' || student.student_yr_level === filters.yearLevel;
-    return matchesSearch && matchesCourse && matchesYearLevel;
+    const matchesSY = schoolYears.length === 0 || !selectedSY || student.student_school_year === selectedSY;
+    return matchesSearch && matchesCourse && matchesYearLevel && matchesSY;
   });
 
   // ── Pagination calculations ──────────────────────────
@@ -286,10 +338,10 @@ export default function Students() {
     currentPage * STUDENTS_PER_PAGE
   );
 
-  // ── Reset to page 1 when filters/search change ──────
+  // ── Reset to page 1 when filters/search/SY change ───
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filters]);
+  }, [searchTerm, filters, selectedSY]);
 
   // ── Reset form ──────────────────────────────────────
   const resetForm = () => {
@@ -346,7 +398,12 @@ export default function Students() {
         </div>
         <div className="flex items-center gap-4">
           <button
-            onClick={() => setIsImportModalOpen(true)}
+            onClick={() => {
+              const now = new Date();
+              const syStart = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
+              setImportSchoolYear(`${syStart}-${syStart + 1}`);
+              setIsImportModalOpen(true);
+            }}
             className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
           >
             <Upload className="w-4 h-4" />
@@ -389,6 +446,37 @@ export default function Students() {
               color="purple"
             />
           ))}
+        </div>
+      )}
+
+      {/* ── School Year Tabs ─────────────────────────────── */}
+      {schoolYears.length > 0 && (
+        <div className="mb-4">
+          <div className="flex items-center gap-1 flex-wrap">
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-400 mr-2">
+              School Year:
+            </span>
+            {schoolYears.map(sy => (
+              <button
+                key={sy}
+                onClick={() => setSelectedSY(sy)}
+                className={`px-4 py-1.5 rounded-full text-sm font-semibold border-2 transition-colors ${
+                  selectedSY === sy
+                    ? 'bg-amber-500 border-amber-600 text-gray-900'
+                    : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-amber-400 hover:text-amber-700 dark:hover:text-amber-400'
+                }`}
+              >
+                {sy}
+                <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full font-normal ${
+                  selectedSY === sy
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                }`}>
+                  {students.filter(s => s.student_school_year === sy).length}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -692,20 +780,51 @@ export default function Students() {
               </h2>
               <button
                 onClick={() => {
+                  if (isImporting) return; // block closing mid-import
                   setIsImportModalOpen(false);
                   setImportFile(null);
                   setParsedStudentsData(null);
                   setImportResult(null);
                   setImportCourse('');
+                  setImportSchoolYear('');
+                  setImportProgress(0);
                 }}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled={isImporting}
               >
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
 
             <div className="space-y-4">
-              {/* File Upload Area */}
+              {/* ── Import Progress Bar ─────────────────────── */}
+              {isImporting && (
+                <div className="p-4 bg-amber-100 dark:bg-amber-900/20 border-2 border-amber-400 dark:border-amber-700 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-amber-900 dark:text-amber-300 flex items-center gap-2">
+                      {/* Spinner */}
+                      <svg className="animate-spin w-4 h-4 text-amber-600 dark:text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                      </svg>
+                      Importing students, please wait…
+                    </span>
+                    <span className="text-sm font-bold text-amber-900 dark:text-amber-300">
+                      {Math.round(importProgress)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-amber-200 dark:bg-amber-800 rounded-full h-3 overflow-hidden">
+                    <div
+                      className="bg-amber-500 dark:bg-amber-400 h-3 rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${importProgress}%` }}
+                    />
+                  </div>
+                  <p className="text-xs font-medium text-amber-800 dark:text-amber-400 mt-2">
+                    ⚠ Do not close this window while import is in progress.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Upload Excel File
@@ -770,14 +889,53 @@ export default function Students() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Course *
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={importCourse}
-                  onChange={(e) => setImportCourse(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  placeholder="Enter course (e.g., BSIT)"
-                />
+                <div className="relative">
+                  <select
+                    required
+                    value={importCourse}
+                    onChange={(e) => setImportCourse(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none"
+                  >
+                    <option value="">Select a course</option>
+                    {['BSIT', 'BEED', 'BSED', 'BA', 'BSCRIM'].map(course => (
+                      <option key={course} value={course}>{course}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* School Year Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  School Year *
+                </label>
+                <div className="relative">
+                  <select
+                    required
+                    value={importSchoolYear}
+                    onChange={(e) => setImportSchoolYear(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none"
+                  >
+                    <option value="">Select school year</option>
+                    {(() => {
+                      const currentYear = new Date().getFullYear();
+                      // Current S.Y. starts in current year if month >= June, else previous year
+                      const syStartYear = new Date().getMonth() >= 5 ? currentYear : currentYear - 1;
+                      // Generate current S.Y. + 5 past years
+                      return Array.from({ length: 6 }, (_, i) => {
+                        const start = syStartYear - i;
+                        return `${start}-${start + 1}`;
+                      });
+                    })().map(sy => (
+                      <option key={sy} value={sy}>{sy}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  All students in this import batch will be tagged with this school year.
+                </p>
               </div>
 
               {/* Download Template */}
@@ -830,23 +988,55 @@ export default function Students() {
             </div>
 
             <div className="flex items-center justify-end gap-3 mt-6">
+              {importResult && (
+                <button
+                  onClick={() => {
+                    setImportResult(null);
+                    setImportFile(null);
+                    setParsedStudentsData(null);
+                    setImportCourse('');
+                    setImportSchoolYear('');
+                    setImportProgress(0);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-gray-900 font-semibold border-2 border-amber-600 rounded-md transition-colors shadow-sm"
+                >
+                  <Upload className="w-4 h-4 text-gray-900" />
+                  Import Again
+                </button>
+              )}
               {parsedStudentsData && !importResult && (
                 <button
                   onClick={() => handleBulkImport(parsedStudentsData)}
-                  className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
+                  disabled={isImporting}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-green-300 disabled:cursor-not-allowed text-white rounded-md transition-colors"
                 >
-                  Import to Database
+                  {isImporting ? (
+                    <>
+                      <svg className="animate-spin w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-40" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                      </svg>
+                      Importing…
+                    </>
+                  ) : (
+                    'Import to Database'
+                  )}
                 </button>
               )}
               <button
                 onClick={() => {
+                  if (isImporting) return;
                   setIsImportModalOpen(false);
                   setImportFile(null);
                   setParsedStudentsData(null);
                   setImportResult(null);
                   setImportCourse('');
+                  setImportSchoolYear('');
+                  setImportProgress(0);
                 }}
-                className="px-4 py-2 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 transition-colors"
+                disabled={isImporting}
+                className="px-4 py-2 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Close
               </button>

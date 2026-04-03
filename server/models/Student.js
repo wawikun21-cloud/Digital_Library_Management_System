@@ -71,6 +71,7 @@ const StudentModel = {
         student_name,
         student_course,
         student_yr_level,
+        student_school_year,
         student_email,
         student_contact,
         display_name,
@@ -89,9 +90,9 @@ const StudentModel = {
       }
 
       const [result] = await pool.query(
-        `INSERT INTO students (student_id_number, student_name, student_course, student_yr_level, student_email, student_contact, display_name, first_name, last_name)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [student_id_number, student_name, student_course || null, student_yr_level || null, student_email || null, student_contact || null, display_name || null, first_name || null, last_name || null]
+        `INSERT INTO students (student_id_number, student_name, student_course, student_yr_level, student_school_year, student_email, student_contact, display_name, first_name, last_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [student_id_number, student_name, student_course || null, student_yr_level || null, student_school_year || null, student_email || null, student_contact || null, display_name || null, first_name || null, last_name || null]
       );
 
       const [rows] = await pool.query(`
@@ -116,6 +117,7 @@ const StudentModel = {
         student_name,
         student_course,
         student_yr_level,
+        student_school_year,
         student_email,
         student_contact,
         display_name,
@@ -126,11 +128,11 @@ const StudentModel = {
 
       await pool.query(
         `UPDATE students 
-         SET student_id_number = ?, student_name = ?, student_course = ?, student_yr_level = ?, 
-             student_email = ?, student_contact = ?, display_name = ?, first_name = ?, last_name = ?,
-             is_active = ?, updated_at = NOW()
+         SET student_id_number = ?, student_name = ?, student_course = ?, student_yr_level = ?,
+             student_school_year = ?, student_email = ?, student_contact = ?, display_name = ?,
+             first_name = ?, last_name = ?, is_active = ?, updated_at = NOW()
          WHERE id = ?`,
-        [student_id_number, student_name, student_course || null, student_yr_level || null, student_email || null, student_contact || null, display_name || null, first_name || null, last_name || null, is_active, id]
+        [student_id_number, student_name, student_course || null, student_yr_level || null, student_school_year || null, student_email || null, student_contact || null, display_name || null, first_name || null, last_name || null, is_active, id]
       );
 
       const [rows] = await pool.query(`
@@ -230,13 +232,20 @@ const StudentModel = {
         GROUP BY student_yr_level
         ORDER BY count DESC
       `);
+      const [bySchoolYear] = await pool.query(`
+        SELECT student_school_year, COUNT(*) as count FROM students 
+        WHERE is_active = true AND student_school_year IS NOT NULL
+        GROUP BY student_school_year
+        ORDER BY student_school_year DESC
+      `);
 
       return { 
         success: true, 
         data: {
           total: total[0].count,
           byCourse: byCourse,
-          byYearLevel: byYearLevel
+          byYearLevel: byYearLevel,
+          bySchoolYear: bySchoolYear
         }
       };
     } catch (error) {

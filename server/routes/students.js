@@ -58,18 +58,18 @@ router.get("/:id", StudentsController.getStudentById);
 // ─────────────────────────────────────────────────────────
 
 /**
- * @route   POST /api/students
- * @desc    Create a new student
- * @access  Public
- */
-router.post("/", StudentsController.createStudent);
-
-/**
  * @route   POST /api/students/bulk-import
  * @desc    Bulk import students from Excel
  * @access  Public
  */
 router.post("/bulk-import", StudentsController.bulkImportStudents);
+
+/**
+ * @route   POST /api/students
+ * @desc    Create a new student
+ * @access  Public
+ */
+router.post("/", StudentsController.createStudent);
 
 // ─────────────────────────────────────────────────────────
 //  PUT Routes

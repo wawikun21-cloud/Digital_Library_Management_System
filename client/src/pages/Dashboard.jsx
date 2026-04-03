@@ -577,7 +577,7 @@ export default function Dashboard() {
         change:     "Live",
         accent:     "#32667F",
         percentage: pctOf(returned, nemcoTotal),
-        onClick:    () => navigate("/dashboard/books?status=Returned"),
+        onClick:    () => navigate("/dashboard/borrowed?status=Returned"),
       },
     ];
   }, [kpiStats, loading.kpiStats, navigate]);

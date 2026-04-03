@@ -209,23 +209,59 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
 
   const runImport = async (booksToImport) => {
     setStepAndNotify(3);
-    setProgress({ current:0, total:booksToImport.length, title:"" });
 
-    try {
-      const res  = await fetch(`${API_BASE}/books/lexora-import`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ books: booksToImport }),
-      });
-      const data = await res.json();
-      setProgress({ current: booksToImport.length, total: booksToImport.length, title: "Done" });
-      setResults(data);
-      setStepAndNotify(4);
-      if (data.success && data.data?.length > 0) onImportComplete?.(data.data);
-    } catch (err) {
-      setResults({ success: false, error: err.message, imported: 0, updated: 0, errors: 0 });
-      setStepAndNotify(4);
+    const CHUNK_SIZE = 10;
+    const total      = booksToImport.length;
+    setProgress({ current: 0, total, title: "" });
+
+    let importedCount = 0;
+    let updatedCount  = 0;
+    const allFailed   = [];
+    const allImported = [];
+
+    for (let offset = 0; offset < total; offset += CHUNK_SIZE) {
+      const chunk    = booksToImport.slice(offset, offset + CHUNK_SIZE);
+      const chunkEnd = Math.min(offset + CHUNK_SIZE, total);
+
+      // Show first title of this chunk while in-flight
+      setProgress({ current: offset, total, title: chunk[0]?.title || "" });
+
+      try {
+        const res  = await fetch(`${API_BASE}/books/lexora-import`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ books: chunk }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          allImported.push(...(data.data ?? []));
+          importedCount += data.imported ?? 0;
+          updatedCount  += data.updated  ?? 0;
+          if (data.errorsDetail?.length) allFailed.push(...data.errorsDetail);
+        } else {
+          chunk.forEach(b => allFailed.push({ title: b.title, error: data.error || "Unknown error" }));
+        }
+      } catch (err) {
+        chunk.forEach(b => allFailed.push({ title: b.title, error: err.message }));
+      }
+
+      // Tick progress after chunk completes
+      setProgress({ current: chunkEnd, total, title: chunk[chunk.length - 1]?.title || "" });
     }
+
+    const summary = {
+      success:      true,
+      imported:     importedCount,
+      updated:      updatedCount,
+      errors:       allFailed.length,
+      errorsDetail: allFailed,
+      data:         allImported,
+    };
+
+    setResults(summary);
+    setStepAndNotify(4);
+    if (allImported.length > 0) onImportComplete?.(allImported);
   };
 
   const reset = () => {

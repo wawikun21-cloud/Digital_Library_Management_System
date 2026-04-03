@@ -20,6 +20,7 @@ const transactionRoutes  = require("./routes/transactions");
 const attendanceRoutes   = require("./routes/attendance");
 const studentsRoutes     = require("./routes/students");
 const analyticsRoutes    = require("./routes/analytics");
+const searchRoutes       = require("./routes/search");
 
 // ── Analytics controller (for the /api/books/stats shortcut) ──
 const AnalyticsController = require("./controllers/AnalyticsController");
@@ -59,6 +60,8 @@ app.use("/api/transactions", transactionRoutes);
 app.use("/api/attendance",   attendanceRoutes);
 app.use("/api/students",     studentsRoutes);
 app.use("/api/analytics",    analyticsRoutes);
+app.use("/api/search",      searchRoutes);
+app.use("/api/suggestions", searchRoutes); // convenience alias
 
 // KPI stats shortcut — keeps existing Dashboard fetch URL working
 // GET /api/books/stats  (must be registered BEFORE the wildcard /:id route in books router)

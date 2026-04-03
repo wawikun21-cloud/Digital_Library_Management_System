@@ -1,4 +1,5 @@
 import { useState } from "react";
+import AutocompleteField from "../AutocompleteField.jsx";
 
 const inputCls = "w-full px-3 py-2.5 rounded-lg text-[13px] border-[1.5px] outline-none transition-all duration-150 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10";
 const inputStyle = (err = false) => ({
@@ -12,9 +13,9 @@ export default function BookForm({ form, setForm, errors, setErrors }) {
     {
       title: "Title Information",
       fields: [
-        { label: "Title", fkey: "title" },
+        { label: "Title", fkey: "title", isAutocomplete: true },
         { label: "Subtitle", fkey: "subtitle" },
-        { label: "Authors", fkey: "authors" },
+        { label: "Authors", fkey: "authors", isAutocomplete: true },
         { label: "Edition", fkey: "edition" },
         { label: "Call No.", fkey: "callNumber" },
         { label: "Accession No.", fkey: "accessionNumber" },
@@ -98,9 +99,42 @@ export default function BookForm({ form, setForm, errors, setErrors }) {
   );
 }
 
-function Field({ label, fkey, type = "text", placeholder = "", form, setForm, errors, setErrors }) {
+function Field({ label, fkey, type = "text", placeholder = "", form, setForm, errors, setErrors, isAutocomplete = false }) {
   const err = errors[fkey];
   const id = `field-${fkey}`;
+
+  if (isAutocomplete) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <label
+          htmlFor={id}
+          className="text-[11px] font-bold uppercase tracking-wider pl-0.5"
+          style={{ color:"var(--text-secondary)" }}
+        >
+          {label}
+        </label>
+        <AutocompleteField
+          field={fkey}
+          value={form[fkey] ?? ""}
+          onChange={(newValue) => {
+            setForm(prev => ({ ...prev, [fkey]: newValue }));
+            const newErrors = { ...errors };
+            delete newErrors[fkey];
+            setErrors(newErrors);
+          }}
+          placeholder={placeholder || label}
+          style={inputStyle(err)}
+          hasError={!!err}
+        />
+        {err && (
+          <span id={`${id}-error`} className="text-[10px] font-semibold text-red-600 pl-1">
+            {err}
+          </span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-1.5">
       <label
@@ -125,7 +159,11 @@ function Field({ label, fkey, type = "text", placeholder = "", form, setForm, er
         value={form[fkey] ?? ""}
         onChange={e => {
           setForm(f => ({ ...f, [fkey]: e.target.value }));
-          if (err) setErrors(v => { const n = { ...v }; delete n[fkey]; return n; });
+          if (err) {
+            const newErrors = { ...errors };
+            delete newErrors[fkey];
+            setErrors(newErrors);
+          }
         }}
         aria-invalid={!!err}
         aria-describedby={err ? `${id}-error` : undefined}

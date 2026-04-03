@@ -1,15 +1,14 @@
-# Digital Library Management System - Badge/Quantity Fix TODO
+# Digital Library Improvements: Autocomplete + Scrollbars
 
-## Approved Plan Status: ✅ Confirmed (LandingPage.jsx only)
+## Progress
+- [x] 1. Create this TODO.md ✅
+- [x] 2. landingpage.jsx scrollbar added ✅
+- [x] 3. AutocompleteField.jsx created ✅
 
-**Current Progress:**
-- [x] Analyzed all relevant files (BookTable.jsx ✅ correct, Landingpage.jsx ❌ wrong badge)
-- [x] Confirmed backend TransactionModel correctly syncs quantity
-- [x] Plan approved: Fix statusColor() in landingpage.jsx to check quantity first
+## Remaining Steps
+- [ ] 4. Integrate AutocompleteField into BookForm.jsx (title/authors fields)
+- [ ] 5. Update server/controllers/searchController.js for field=author support
+- [ ] 6. Test: cd client && npm run dev
+- [ ] 7. attempt_completion
 
-**Remaining Steps:**
-1. [ ] Edit `client/src/landing/landingpage.jsx` - Update statusColor(book) to prioritize quantity===0 → red "Out of Stock"
-2. [ ] Test: Borrow book → Landing search → Verify red badge when qty=0  
-3. [ ] `attempt_completion`
-
-**Next Action:** Apply the single-line statusColor fix to landingpage.jsx
+**Next:** Update BookForm.jsx
