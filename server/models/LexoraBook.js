@@ -135,6 +135,96 @@ const LexoraBookModel = {
   },
 
   /**
+   * Create a single Lexora book manually.
+   */
+  async create(bookData) {
+    try {
+      const {
+        title, author = null, source = null, year = null,
+        resource_type = null, format = null,
+        subject_course = null, program = null, collection = null,
+      } = bookData;
+
+      if (!title?.trim()) return { success: false, error: "Title is required" };
+
+      const titleVal  = sanitize(title);
+      const authorVal = sanitize(author);
+      const programVal = program || collection || null;
+
+      const [result] = await pool.query(
+        `INSERT INTO lexora_books
+           (title, author, source, year, resource_type, format, subject_course, program, collection)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [titleVal, authorVal, source || null, year || null, resource_type || null,
+         format || null, subject_course || null, programVal, programVal]
+      );
+
+      const [rows] = await pool.query("SELECT * FROM lexora_books WHERE id = ?", [result.insertId]);
+      console.log(`✅ Lexora INSERT: "${titleVal}" (ID: ${result.insertId})`);
+      return { success: true, data: rows[0] };
+    } catch (error) {
+      console.error("[LexoraBookModel.create]", error.message);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * Update an existing Lexora book by ID.
+   */
+  async update(id, bookData) {
+    try {
+      const [existing] = await pool.query("SELECT id FROM lexora_books WHERE id = ?", [id]);
+      if (!existing.length) return { success: false, error: "Book not found" };
+
+      const {
+        title, author = null, source = null, year = null,
+        resource_type = null, format = null,
+        subject_course = null, program = null, collection = null,
+      } = bookData;
+
+      if (!title?.trim()) return { success: false, error: "Title is required" };
+
+      const titleVal   = sanitize(title);
+      const authorVal  = sanitize(author);
+      const programVal = program || collection || null;
+
+      await pool.query(
+        `UPDATE lexora_books
+            SET title = ?, author = ?, source = ?, year = ?,
+                resource_type = ?, format = ?, subject_course = ?,
+                program = ?, collection = ?
+          WHERE id = ?`,
+        [titleVal, authorVal, source || null, year || null, resource_type || null,
+         format || null, subject_course || null, programVal, programVal, id]
+      );
+
+      const [rows] = await pool.query("SELECT * FROM lexora_books WHERE id = ?", [id]);
+      console.log(`✅ Lexora UPDATE: "${titleVal}" (ID: ${id})`);
+      return { success: true, data: rows[0] };
+    } catch (error) {
+      console.error("[LexoraBookModel.update]", error.message);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * Delete a Lexora book by ID.
+   */
+  async delete(id) {
+    try {
+      const [existing] = await pool.query("SELECT * FROM lexora_books WHERE id = ?", [id]);
+      if (!existing.length) return { success: false, error: "Book not found" };
+
+      await pool.query("DELETE FROM lexora_books WHERE id = ?", [id]);
+      console.log(`✅ Lexora DELETE: ID ${id}`);
+      return { success: true, data: existing[0] };
+    } catch (error) {
+      console.error("[LexoraBookModel.delete]", error.message);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
    * Get all Lexora books with optional filters.
    * @param {Object} filters
    * @param {string} [filters.program]      - Filter by program/category

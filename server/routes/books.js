@@ -154,6 +154,15 @@ router.get("/stats", async (req, res) => {
 // GET  /api/books/lexora
 router.get("/lexora", lexoraController.getLexoraBooks);
 
+// POST /api/books/lexora — create single Lexora book
+router.post("/lexora", lexoraController.createLexoraBook);
+
+// PUT  /api/books/lexora/:id — update Lexora book
+router.put("/lexora/:id", lexoraController.updateLexoraBook);
+
+// DELETE /api/books/lexora/:id — delete Lexora book
+router.delete("/lexora/:id", lexoraController.deleteLexoraBook);
+
 // POST /api/books/lexora-import
 router.post("/lexora-import", lexoraController.bulkLexoraImport);
 

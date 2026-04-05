@@ -18,6 +18,35 @@ import useDebounce from '../hooks/useDebounce';
 //  Main page for tracking student attendance in the library
 // ─────────────────────────────────────────────────────────
 
+// ── Live duration display that ticks every second ────────
+function LiveDuration({ checkInTime }) {
+  const [elapsed, setElapsed] = useState(() =>
+    Math.floor((Date.now() - new Date(checkInTime).getTime()) / 1000)
+  );
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - new Date(checkInTime).getTime()) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [checkInTime]);
+
+  const hours   = Math.floor(elapsed / 3600);
+  const minutes = Math.floor((elapsed % 3600) / 60);
+  const seconds = elapsed % 60;
+
+  const pad = (n) => String(n).padStart(2, '0');
+
+  return (
+    <span className="inline-flex items-center gap-1.5 font-mono text-sm font-medium text-amber-600 dark:text-amber-400">
+      <Clock className="w-3.5 h-3.5 animate-pulse" />
+      {hours > 0
+        ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+        : `${pad(minutes)}:${pad(seconds)}`}
+    </span>
+  );
+}
+
 export default function Attendance() {
   // ── State management ──────────────────────────────────
   const [attendanceRecords, setAttendanceRecords] = useState([]);
@@ -72,17 +101,13 @@ export default function Attendance() {
 
   // ── Show toast notification ───────────────────────────
   const showToast = (message, type = 'success') => {
-    setToast({
-      show: true,
-      message,
-      type
-    });
+    setToast({ show: true, message, type });
   };
 
   // ── Handle check-in ───────────────────────────────────
   const handleCheckIn = async (e) => {
     e.preventDefault();
-    
+
     if (!checkInForm.student_id_number) {
       showToast('Please enter student ID number', 'error');
       return;
@@ -97,9 +122,7 @@ export default function Attendance() {
       const response = await checkIn(checkInForm);
       if (response.success) {
         showToast('Student checked in successfully');
-        setCheckInForm({
-          student_id_number: ''
-        });
+        setCheckInForm({ student_id_number: '' });
         setStudentDetails(null);
         fetchAttendanceData();
       } else {
@@ -145,32 +168,27 @@ export default function Attendance() {
   };
 
   // ── Filter attendance records ─────────────────────────
-  const filteredRecords = attendanceRecords.filter(record => 
+  const filteredRecords = attendanceRecords.filter(record =>
     record.student_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     record.student_id_number.includes(searchTerm) ||
     (record.student_course && record.student_course.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  // ── Format duration ───────────────────────────────────
+  // ── Format duration (for completed history records) ───
   const formatDuration = (minutes) => {
     if (!minutes) return 'N/A';
-    
     const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    
-    if (hours > 0) {
-      return `${hours}h ${mins}m`;
-    }
-    return `${mins}m`;
+    const mins  = minutes % 60;
+    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
   };
 
   // ── Format date/time ──────────────────────────────────
   const formatDateTime = (dateTime) => {
     return new Date(dateTime).toLocaleString('en-US', {
-      month: '2-digit',
-      day: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
+      month:  '2-digit',
+      day:    '2-digit',
+      year:   'numeric',
+      hour:   '2-digit',
       minute: '2-digit'
     });
   };
@@ -288,8 +306,8 @@ export default function Attendance() {
                   )}
                   {studentDetails.student_yr_level && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                      {studentDetails.student_yr_level.toLowerCase().includes('year') 
-                        ? studentDetails.student_yr_level 
+                      {studentDetails.student_yr_level.toLowerCase().includes('year')
+                        ? studentDetails.student_yr_level
                         : `Year ${studentDetails.student_yr_level}`}
                     </span>
                   )}
@@ -311,8 +329,8 @@ export default function Attendance() {
               disabled={!studentDetails}
               className={`w-full px-6 py-2 font-semibold rounded-md transition-colors duration-200 flex items-center gap-2 ${
                 studentDetails
-                  ? 'bg-amber-500 hover:bg-amber-600 text-white'
-                  : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                  ? 'bg-amber-500 hover:bg-amber-600 text-gray-900 dark:text-white'
+                  : 'bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-400 cursor-not-allowed'
               }`}
             >
               <ArrowRight className="w-4 h-4" />
@@ -353,40 +371,35 @@ export default function Attendance() {
                 </tr>
               </thead>
               <tbody>
-                {activeStudents.map((student) => {
-                  const checkInTime = new Date(student.check_in_time);
-                  const now = new Date();
-                  const duration = Math.floor((now - checkInTime) / 1000 / 60);
-
-                  return (
-                    <tr key={student.id} className="border-b border-gray-100 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="py-3 px-3 text-sm text-gray-800 dark:text-white">
-                        {student.student_name}
-                      </td>
-                      <td className="py-3 px-3 text-sm text-gray-800 dark:text-white">
-                        {student.student_id_number}
-                      </td>
-                      <td className="py-3 px-3 text-sm text-gray-800 dark:text-white">
-                        {student.student_course || 'N/A'}
-                      </td>
-                      <td className="py-3 px-3 text-sm text-gray-800 dark:text-white">
-                        {formatDateTime(student.check_in_time)}
-                      </td>
-                      <td className="py-3 px-3 text-sm text-gray-800 dark:text-white">
-                        {formatDuration(duration)}
-                      </td>
-                      <td className="py-3 px-3">
-                        <button
-                          onClick={() => handleCheckOut(student.student_id_number)}
-                          className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-md transition-colors duration-200 flex items-center gap-1"
-                        >
-                          <ArrowLeft className="w-3 h-3" />
-                          Check Out
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {activeStudents.map((student) => (
+                  <tr key={student.id} className="border-b border-gray-100 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td className="py-3 px-3 text-sm text-gray-800 dark:text-white">
+                      {student.student_name}
+                    </td>
+                    <td className="py-3 px-3 text-sm text-gray-800 dark:text-white">
+                      {student.student_id_number}
+                    </td>
+                    <td className="py-3 px-3 text-sm text-gray-800 dark:text-white">
+                      {student.student_course || 'N/A'}
+                    </td>
+                    <td className="py-3 px-3 text-sm text-gray-800 dark:text-white">
+                      {formatDateTime(student.check_in_time)}
+                    </td>
+                    <td className="py-3 px-3">
+                      {/* Live ticking counter per student */}
+                      <LiveDuration checkInTime={student.check_in_time} />
+                    </td>
+                    <td className="py-3 px-3">
+                      <button
+                        onClick={() => handleCheckOut(student.student_id_number)}
+                        className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-md transition-colors duration-200 flex items-center gap-1"
+                      >
+                        <ArrowLeft className="w-3 h-3" />
+                        Check Out
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -466,12 +479,15 @@ export default function Attendance() {
                       {record.check_out_time ? formatDateTime(record.check_out_time) : 'N/A'}
                     </td>
                     <td className="py-3 px-3 text-sm text-gray-800 dark:text-white">
-                      {formatDuration(record.duration)}
+                      {/* Live counter for still-active records, static for completed ones */}
+                      {record.status === 'checked_in'
+                        ? <LiveDuration checkInTime={record.check_in_time} />
+                        : formatDuration(record.duration)}
                     </td>
                     <td className="py-3 px-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        record.status === 'checked_in' 
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+                        record.status === 'checked_in'
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                           : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
                       }`}>
                         {record.status === 'checked_in' ? 'Checked In' : 'Checked Out'}

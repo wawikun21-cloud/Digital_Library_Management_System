@@ -62,7 +62,55 @@ const getLexoraBooks = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/books/lexora
+ * Create a single Lexora book manually.
+ */
+const createLexoraBook = async (req, res) => {
+  try {
+    const result = await LexoraBookModel.create(req.body);
+    if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
+    res.status(201).json(successResponse(result.data, "Lexora book created successfully", 201));
+  } catch (error) {
+    console.error("[LexoraController.create]", error.message);
+    res.status(500).json(errorResponse("Failed to create Lexora book", 500));
+  }
+};
+
+/**
+ * PUT /api/books/lexora/:id
+ * Update an existing Lexora book.
+ */
+const updateLexoraBook = async (req, res) => {
+  try {
+    const result = await LexoraBookModel.update(req.params.id, req.body);
+    if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
+    res.json(successResponse(result.data, "Lexora book updated successfully"));
+  } catch (error) {
+    console.error("[LexoraController.update]", error.message);
+    res.status(500).json(errorResponse("Failed to update Lexora book", 500));
+  }
+};
+
+/**
+ * DELETE /api/books/lexora/:id
+ * Delete a Lexora book.
+ */
+const deleteLexoraBook = async (req, res) => {
+  try {
+    const result = await LexoraBookModel.delete(req.params.id);
+    if (!result.success) return res.status(404).json(errorResponse(result.error, 404));
+    res.json(successResponse(result.data, "Lexora book deleted successfully"));
+  } catch (error) {
+    console.error("[LexoraController.delete]", error.message);
+    res.status(500).json(errorResponse("Failed to delete Lexora book", 500));
+  }
+};
+
 module.exports = {
   bulkLexoraImport,
   getLexoraBooks,
+  createLexoraBook,
+  updateLexoraBook,
+  deleteLexoraBook,
 };
