@@ -419,9 +419,9 @@ body: JSON.stringify({
       if (result.success) {
         setTxns(p => p.map(t => t.id === editTxn.id ? sanitizeTxns([result.data])[0] : t));
         closeModal();
-        showToast(`Due date extended by ${extendDays} day(s)`, "success");
+        showToast(`Due date renewed by ${extendDays} day(s)`, "success");
       } else {
-        showToast(result.error || "Failed to extend", "error");
+        showToast(result.error || "Failed to renew", "error");
       }
     } catch { showToast("Failed to connect to server", "error"); }
   }
@@ -932,7 +932,7 @@ body: JSON.stringify({
           EXTEND MODAL
       ══════════════════════════════════════════════════ */}
       {modal === "extend" && editTxn && (
-        <ModalShell title="Extend Due Date" onClose={closeModal}>
+        <ModalShell title="Renew Due Date" onClose={closeModal}>
           <div className="p-3 rounded-lg"
             style={{ background: "var(--bg-main)", border: "1px solid var(--border)" }}>
             <p className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>{editTxn.book_title}</p>
@@ -942,7 +942,7 @@ body: JSON.stringify({
           </div>
 
           <div className="flex flex-col gap-1">
-            <FieldLabel label="Extend by (days)" required />
+            <FieldLabel label="Renew by (days)" required />
             <div className="flex items-center gap-3">
               <button onClick={() => setExtendDays(d => Math.max(1, d - 1))}
                 className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-lg border"
@@ -961,7 +961,7 @@ body: JSON.stringify({
             </p>
           </div>
 
-          <ModalFooter onCancel={closeModal} onConfirm={handleExtend} confirmLabel={`Extend ${extendDays} Day${extendDays > 1 ? "s" : ""}`} />
+          <ModalFooter onCancel={closeModal} onConfirm={handleExtend} confirmLabel={`Renew ${extendDays} Day${extendDays > 1 ? "s" : ""}`} />
         </ModalShell>
       )}
 
@@ -1117,7 +1117,7 @@ body: JSON.stringify({
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[12px] font-semibold border-[1.5px] transition-colors"
                     style={{ background: "rgba(238,162,58,0.08)", borderColor: "rgba(238,162,58,0.3)", color: "#EEA23A" }}
                   >
-                    <RefreshCw size={13} /> Extend
+                    <RefreshCw size={13} /> Renew
                   </button>
                 )}
                 <button

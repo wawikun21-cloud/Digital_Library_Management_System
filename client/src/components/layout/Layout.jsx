@@ -2,14 +2,19 @@ import { useState, useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Topbar  from "./Topbar";
+import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { STORAGE_KEYS } from "../../constants/index.js";
 
 const W_EXPANDED  = 220;
 const W_COLLAPSED = 58;
 
 export default function Layout() {
-  const [collapsed,   setCollapsed]   = useState(true);
-  const [darkMode,    setDarkMode]    = useState(false);
-  const [mobileOpen,  setMobileOpen]  = useState(false);
+  const [collapsed,  setCollapsed]  = useState(true);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // ✅ FIX: replaced useState(false) with useLocalStorage so the chosen
+  //    theme survives page refreshes, tab closes, and logouts.
+  const [darkMode, setDarkMode] = useLocalStorage(STORAGE_KEYS.THEME, false);
 
   /* Apply data-theme to <html> so CSS vars + Tailwind dark-mode both work */
   useEffect(() => {
@@ -50,12 +55,10 @@ export default function Layout() {
       {/* ── Main body ── */}
       <div
         className="flex flex-1 flex-col min-h-screen ml-transition"
-        /* On mobile the sidebar is a drawer (off-canvas), so no margin needed */
         style={{
           marginLeft: "0px",
           background: "var(--bg-page)",
         }}
-        /* On desktop apply margin equal to sidebar width */
         ref={el => {
           if (!el) return;
           const apply = () => {
@@ -67,7 +70,6 @@ export default function Layout() {
           };
           apply();
           window.addEventListener("resize", apply);
-          /* Store cleanup on element so React doesn't need to manage it */
           el._cleanup = () => window.removeEventListener("resize", apply);
         }}
       >
