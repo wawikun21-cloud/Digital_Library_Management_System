@@ -50,10 +50,18 @@ export default function LandingPage() {
   const [history,        setHistory]        = useState(getHistory);
 
   // ── UI state ──────────────────────────────────────────
-  const [scrolled,  setScrolled]  = useState(false);
+  const [scrolled,   setScrolled]  = useState(false);
+  const [searchError, setSearchError] = useState(null);
   const resultsRef  = useRef(null);
   const inputRef    = useRef(null);
   const dropdownRef = useRef(null);
+  // Always holds the latest query value — avoids stale closure in doSearch
+  const queryRef    = useRef(query);
+  // Holds the AbortController for the current in-flight search fetch
+  const abortRef    = useRef(null);
+
+  // Keep queryRef in sync with query state on every render
+  useEffect(() => { queryRef.current = query; }, [query]);
 
   // Debounce the typed query for suggestions only
   const debouncedQuery = useDebounce(query, DEBOUNCE_MS);
@@ -102,26 +110,44 @@ export default function LandingPage() {
 
   // ── Full search ───────────────────────────────────────
   const doSearch = useCallback(async (term) => {
-    const q = (term || query).trim();
+    // Use the explicit term arg, or fall back to the ref (always current — no stale closure)
+    const q = (term ?? queryRef.current).trim();
     if (!q) return;
+
+    // Cancel any previous in-flight request so a slow old response
+    // can never overwrite a fast new one
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+
     setLoading(true);
     setSearched(true);
     setShowDropdown(false);
+    setSearchError(null);
     addHistory(q);
     setHistory(getHistory());
+
     try {
-      const res  = await fetch(`${API_BASE}/search?q=${encodeURIComponent(q)}`);
+      const res  = await fetch(`${API_BASE}/search?q=${encodeURIComponent(q)}`, {
+        signal: abortRef.current.signal,
+      });
       const data = await res.json();
       const rows = data.data || [];
       setResults(rows);
       setSelectedBook(rows[0] || null);
-    } catch {
-      setResults([]);
+    } catch (err) {
+      // AbortError is intentional (user started a new search) — ignore it silently
+      if (err.name !== "AbortError") {
+        setResults([]);
+        setSearchError("Search failed. Please check your connection and try again.");
+      }
     } finally {
-      setLoading(false);
-      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+      // Only clear loading if this controller wasn't already replaced by a newer search
+      if (!abortRef.current?.signal.aborted) {
+        setLoading(false);
+        setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+      }
     }
-  }, [query]);
+  }, []); // no dependencies needed — queryRef always holds the latest value
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -753,6 +779,12 @@ export default function LandingPage() {
             <div className="state-box">
               <div className="spinner" />
               <div className="state-box-title">Searching the collection…</div>
+            </div>
+          ) : searchError ? (
+            <div className="state-box">
+              <div className="state-box-icon">⚠️</div>
+              <div className="state-box-title">Something went wrong</div>
+              <div className="state-box-text">{searchError}</div>
             </div>
           ) : results.length === 0 ? (
             <div className="state-box">
