@@ -91,8 +91,9 @@ export default function BookTable({
                   <span 
                     className="text-[10px] font-bold px-2 py-1 rounded-md"
                     style={{ 
-                      background: "rgba(153,101,0,0.1)", 
-                      color: "var(--accent-amber)", 
+                      background: "var(--bg-subtle)", 
+                      color: "var(--text-secondary)",
+                      border: "1px solid var(--border-light)",
                     }}
                   >
                     {book.genre || book.category || "—"}

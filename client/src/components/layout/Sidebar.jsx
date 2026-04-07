@@ -156,7 +156,7 @@ function NavItem({ item, collapsed }) {
       {({ isActive }) => (
         <>
           <span className="shrink-0 flex items-center justify-center" style={{ width: 18, minWidth: 18 }}>
-            <Icon size={18} style={{ color: isActive ? "#F3B940" : undefined }} />
+            <Icon size={18} style={{ color: isActive ? "#f0d807" : undefined }} />
           </span>
           {!collapsed && <span className="ml-3 truncate">{label}</span>}
         </>
@@ -193,7 +193,7 @@ function StudentsMenu({ item, collapsed, open, onToggle }) {
           {({ isActive }) => (
             <>
               <span className="shrink-0 flex items-center justify-center" style={{ width: 18, minWidth: 18 }}>
-                <Icon size={18} style={{ color: isActive || anyChildActive ? "#F3B940" : undefined }} />
+                <Icon size={18} style={{ color: isActive || anyChildActive ? "#f0d807" : undefined }} />
               </span>
               {!collapsed && <span className="ml-3 truncate">{label}</span>}
             </>
@@ -242,7 +242,7 @@ function StudentsMenu({ item, collapsed, open, onToggle }) {
               {({ isActive }) => (
                 <>
                   <span className="shrink-0 mr-2 flex items-center justify-center" style={{ width: 14, minWidth: 14 }}>
-                    <CIcon size={13} style={{ color: isActive ? "#F3B940" : undefined, opacity: isActive ? 1 : 0.7 }} />
+                    <CIcon size={13} style={{ color: isActive ? "#f7e013" : undefined, opacity: isActive ? 1 : 0.7 }} />
                   </span>
                   <span className="truncate">{cLabel}</span>
                 </>

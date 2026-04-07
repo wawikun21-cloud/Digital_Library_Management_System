@@ -48,7 +48,7 @@ function ProgramBadge({ program }) {
   if (!program) return null;
   return (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold"
-      style={{ background: "rgba(153,101,0,0.1)", color: "var(--accent-amber)" }}>
+      style={{ background: "rgba(153,101,0,0.1)", color: "var(--accent-gold)" }}>
       <GraduationCap size={11} /> {program}
     </span>
   );
@@ -91,9 +91,9 @@ function Field({ label, required, error, children }) {
 
 const inputCls = "w-full px-3 py-2.5 rounded-lg text-[13px] border outline-none";
 const inputStyle = (err) => ({
-  background:   "var(--bg-main)",
+  background:   "var(--bg-page)",
   borderColor:  err ? "#EA8B33" : "var(--border)",
-  color:        "var(--text-primary)",
+  color:        "var(--text-secondary)",
   fontFamily:   "inherit",
 });
 

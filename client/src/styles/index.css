@@ -28,8 +28,8 @@
   --text-on-sidebar:#a0c4d8;
 
   --accent-danger:   #cc1f1f;
-  --accent-amber:    #8a5b00;
-  --accent-orange:   #d97706;
+  --accent-amber:    #1D3067;
+  --accent-orange:   #1D3067;
   --accent-gold:     #d9a300;
   --status-green:    #205733;
   --status-red:      #cc1f1f;
@@ -63,8 +63,8 @@
   --text-muted:     #3d6880;
   --text-on-sidebar:#5a8fa8;
 
-  --accent-amber:   #EEA23A;
-  --accent-orange:  #EA8B33;
+  --accent-amber:   #1D3067;
+  --accent-orange:  #fffd18;
   --accent-gold:    #F3B940;
 
   --shadow-sm:  0 1px 3px rgba(0,0,0,0.3);

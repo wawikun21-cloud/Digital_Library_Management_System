@@ -292,7 +292,7 @@ export default function LandingPage() {
           font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 500;
           cursor: pointer; text-decoration: none; transition: all 0.2s ease;
         }
-        .login-btn:hover { background: rgb(243,185,64); color: var(--ink); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(243,185,64,0.35); }
+        .login-btn:hover { background: #fffd18; color: var(--ink); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(243,185,64,0.35); }
         .login-btn svg { width: 15px; height: 15px; }
 
         /* ── HERO ───────────────────────────────────────── */
@@ -429,7 +429,7 @@ export default function LandingPage() {
           font-family: 'DM Sans', sans-serif; font-size: 0.9rem; font-weight: 500;
           cursor: pointer; transition: all 0.2s ease; letter-spacing: 0.02em;
         }
-        .btn-search:hover { background: rgb(243,185,64); color: var(--ink); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(243,185,64,0.3); }
+        .btn-search:hover { background: #fff017; color: var(--ink); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(243,185,64,0.3); }
         .btn-search:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
         .btn-search svg { width: 16px; height: 16px; }
         .btn-clear {

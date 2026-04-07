@@ -17,6 +17,7 @@ export default function BookForm({ form, setForm, errors, setErrors }) {
         { label: "Subtitle", fkey: "subtitle" },
         { label: "Authors", fkey: "authors", isAutocomplete: true },
         { label: "Edition", fkey: "edition" },
+        { label: "Genre", fkey: "genre", placeholder: "e.g. Fiction, Science, History" },
         { label: "Call No.", fkey: "callNumber" },
         { label: "Accession No.", fkey: "accessionNumber" },
         { label: "No. of Copies", fkey: "quantity", type: "number", placeholder: "e.g. 5" },

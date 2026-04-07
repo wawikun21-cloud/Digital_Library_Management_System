@@ -69,6 +69,9 @@ function BookViewPanel({ book, onEdit, onDelete }) {
           {effectiveStatus || "Available"}
         </div>
 
+        {book.genre && (
+          <DetailChip icon={Tag} label="Genre" value={book.genre} />
+        )}
         {book.shelf && (
           <DetailChip icon={Library} label="Shelf" value={book.shelf} />
         )}

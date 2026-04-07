@@ -187,7 +187,7 @@ function BookRow({ book, idx, onView }) {
         {book.program ? (
           <span
             className="text-[10px] font-bold px-2 py-1 rounded-md whitespace-nowrap"
-            style={{ background: "rgba(153,101,0,0.1)", color: "var(--accent-amber)" }}
+            style={{ background: "rgba(153,101,0,0.1)", color: "var(--accent-orange)" }}
           >
             {book.program}
           </span>

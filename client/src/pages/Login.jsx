@@ -62,7 +62,7 @@ export default function Login() {
           --ink:        #1a1410;
           --parchment:  #faf7f2;
           --cream:      #f3ede3;
-          --gold:       #c9a84c;
+          --gold:       #fdfa21;
           --gold-light: #e8d5a3;
           --rust:       #8b3a2a;
           --warm-gray:  #9e9189;
@@ -313,7 +313,7 @@ export default function Login() {
           transition: all 0.2s ease;
         }
         .login-btn-submit:hover:not(:disabled) {
-          background: rgb(243,185,64);
+          background: #fffd18;
           color: var(--ink);
           transform: translateY(-1px);
           box-shadow: 0 6px 20px rgba(243,185,64,0.30);
