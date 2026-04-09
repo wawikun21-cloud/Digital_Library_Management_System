@@ -23,10 +23,15 @@ export default function AutocompleteField({ field, value, onChange, placeholder 
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+
+  // ── FIX 1: Declare missing state ──
   const [activeIdx, setActiveIdx] = useState(-1);
 
+  // ── FIX 2: Declare missing refs ──
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
+
+  // ── FIX 3: Declare debouncedQuery by actually calling the hook ──
   const debouncedQuery = useDebounce(query, DEBOUNCE_MS);
 
   // ── History helpers ──
@@ -237,4 +242,3 @@ export default function AutocompleteField({ field, value, onChange, placeholder 
     </div>
   );
 }
-

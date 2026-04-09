@@ -1,14 +1,14 @@
-# Digital Library Improvements: Autocomplete + Scrollbars
+# Soft-Delete Fix for Books
+## Status: [ ] In Progress
 
-## Progress
-- [x] 1. Create this TODO.md ✅
-- [x] 2. landingpage.jsx scrollbar added ✅
-- [x] 3. AutocompleteField.jsx created ✅
+### Steps:
+- [x] Step 1: Implement TrashModel import and softDelete in BookModel.delete()
+- [x] Step 2: Add `AND deleted_at IS NULL` to getAll(), filter(), search()
+- [x] Step 1: Implement TrashModel import and softDelete in BookModel.delete()
+- [x] Step 2: Add `AND deleted_at IS NULL` to getAll(), filter(), search()
+- [x] Step 3: Add filter to getById(), getCount(), getStats()
+- [x] Step 4: Update bulk/import methods with deleted_at check
+- [ ] Step 5: Test delete → RecentlyDeleted → restore
+- [ ] Step 6: Server restart & full verification
 
-## Remaining Steps
-- [ ] 4. Integrate AutocompleteField into BookForm.jsx (title/authors fields)
-- [ ] 5. Update server/controllers/searchController.js for field=author support
-- [ ] 6. Test: cd client && npm run dev
-- [ ] 7. attempt_completion
-
-**Next:** Update BookForm.jsx
+**Next**: Step 5 - Testing in progress

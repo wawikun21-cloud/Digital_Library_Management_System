@@ -27,9 +27,10 @@ async function safeFetch(url) {
   }
 }
 
-/** GET /api/books/stats — KPI numbers */
-export async function fetchBookStats() {
-  return safeFetch(`${API_BASE}/books/stats`);
+/** GET /api/books/stats — KPI numbers, filtered by semester/month/schoolYear */
+export async function fetchBookStats(filters = {}) {
+  const qs = buildParams(filters);
+  return safeFetch(`${API_BASE}/books/stats${qs ? `?${qs}` : ""}`);
 }
 
 /** GET /api/analytics/most-borrowed */
@@ -56,10 +57,21 @@ export async function fetchOverdue(filters = {}) {
   return safeFetch(`${API_BASE}/analytics/overdue${qs ? `?${qs}` : ""}`);
 }
 
+/**
+ * GET /api/analytics/holdings-breakdown
+ * Returns per-category NEMCO vs Lexora book counts,
+ * filtered by semester/month/schoolYear (books.created_at).
+ */
+export async function fetchHoldingsBreakdown(filters = {}) {
+  const qs = buildParams(filters);
+  return safeFetch(`${API_BASE}/analytics/holdings-breakdown${qs ? `?${qs}` : ""}`);
+}
+
 export default {
   fetchBookStats,
   fetchMostBorrowed,
   fetchAttendance,
   fetchFines,
   fetchOverdue,
+  fetchHoldingsBreakdown,
 };

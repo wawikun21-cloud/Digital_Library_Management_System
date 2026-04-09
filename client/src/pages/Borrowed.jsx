@@ -9,6 +9,7 @@ import BorrowedTable from "../components/BorrowedTable";
 import ConfirmationModal from "../components/ConfirmationModal";
 import Toast from "../components/Toast";
 import useDebounce from "../hooks/useDebounce";
+import CopiesList from "../components/books/CopiesList";
 
 // ── Constants ─────────────────────────────────────────────
 const MAX_BOOKS   = 2;
@@ -195,9 +196,12 @@ export default function Borrowed() {
       try {
         const res  = await fetch(`/api/transactions/search/books?q=${encodeURIComponent(debouncedBook)}`);
         const data = await res.json();
-        // Exclude already-selected books
-        const selectedIds = form.books.map(b => b.id);
-        setBookResults(data.success ? data.data.filter(b => !selectedIds.includes(b.id)) : []);
+        // Exclude already-selected ACCESSIONS (unique per copy)
+        const selectedAccessions = form.books.map(b => b.accessionNumber).filter(Boolean);
+        setBookResults(data.success ? data.data.filter(b => {
+          const acc = b.first_available_accession || b.accessionNumber;
+          return !selectedAccessions.includes(acc);
+        }) : []);
       } catch { setBookResults([]); }
       finally  { setBookLoading(false); }
     };
@@ -312,12 +316,23 @@ export default function Borrowed() {
   }
 
   // ── Add book to list ──────────────────────────────────
+  // accessionNumber starts null — user picks the specific copy via CopiesList below.
   function addBook(book) {
     if (form.books.length >= MAX_BOOKS) return;
-    setForm(f => ({ ...f, books: [...f.books, book] }));
+    if (form.books.some(b => b.id === book.id)) return;
+    setForm(f => ({ ...f, books: [...f.books, { ...book, accessionNumber: null }] }));
     setBookQuery("");
     setBookResults([]);
-    setErrors(e => { const n = {...e}; delete n.books; return n; });
+    setErrors(e => { const n = { ...e }; delete n.books; return n; });
+  }
+
+  // ── Update which copy accession is selected for a book ──
+  function setBookAccession(bookId, accession) {
+    setForm(f => ({
+      ...f,
+      books: f.books.map(b => b.id === bookId ? { ...b, accessionNumber: accession } : b),
+    }));
+    setErrors(e => { const n = { ...e }; delete n.books; return n; });
   }
 
   function removeBook(id) {
@@ -325,16 +340,16 @@ export default function Borrowed() {
   }
 
   // ── Validate borrow form ──────────────────────────────
-function validate() {
+  function validate() {
     const e = {};
     if (!form.borrower_name.trim()) e.borrower = "Please select a borrower";
     if (form.books.length === 0)    e.books    = "Please add at least 1 book";
     if (!form.due_date)             e.due_date = "Due date is required";
-    
-    // Check all books have accession numbers
+
+    // ✅ FIX: every added book must have a copy selected from CopiesList
     const missingAcc = form.books.find(b => !b.accessionNumber);
-    if (missingAcc) e.books = "Selected book missing accession number. Please choose another.";
-    
+    if (missingAcc) e.books = `Please select a copy for "${missingAcc.title}"`;
+
     return e;
   }
 
@@ -833,20 +848,41 @@ body: JSON.stringify({
           )}
           {errors.books && <p className="text-[11px] text-orange-500 -mt-2">{errors.books}</p>}
 
-          {/* Selected books */}
+          {/* Selected books — with inline copy picker */}
           {form.books.length > 0 && (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               {form.books.map(b => (
-                <div key={b.id} className="flex items-center gap-3 px-3 py-2 rounded-lg"
+                <div key={b.id} className="flex flex-col rounded-lg overflow-hidden"
                   style={{ background: "var(--bg-main)", border: "1px solid var(--border)" }}>
-                  <BookOpen size={14} style={{ color: "#32667F" }} className="shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-medium truncate" style={{ color: "var(--text-primary)" }}>{b.title}</p>
-                    {b.accessionNumber && <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>Acc: {b.accessionNumber}</p>}
+
+                  {/* Book header row */}
+                  <div className="flex items-center gap-3 px-3 py-2.5">
+                    <BookOpen size={14} style={{ color: "#32667F" }} className="shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-medium truncate" style={{ color: "var(--text-primary)" }}>{b.title}</p>
+                      {b.accessionNumber ? (
+                        <p className="text-[11px]" style={{ color: "#2d7a4f" }}>
+                          ✓ Copy selected: <strong>{b.accessionNumber}</strong>
+                        </p>
+                      ) : (
+                        <p className="text-[11px]" style={{ color: "#c05a0a" }}>
+                          ⚠ Select a copy below
+                        </p>
+                      )}
+                    </div>
+                    <button onClick={() => removeBook(b.id)} style={{ color: "var(--text-muted)" }} title="Remove book">
+                      <X size={14} />
+                    </button>
                   </div>
-                  <button onClick={() => removeBook(b.id)} style={{ color: "var(--text-muted)" }}>
-                    <X size={14} />
-                  </button>
+
+                  {/* ✅ CopiesList — user picks the specific copy here */}
+                  <div className="px-3 pb-3">
+                    <CopiesList
+                      bookId={b.id}
+                      selectedAccession={b.accessionNumber}
+                      onSelectCopy={(accession) => setBookAccession(b.id, accession)}
+                    />
+                  </div>
                 </div>
               ))}
             </div>

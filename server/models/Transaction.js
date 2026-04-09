@@ -32,6 +32,7 @@ const SELECT_FULL = `
          ${FINE_SQL}
   FROM borrowed_books t
   LEFT JOIN books b ON t.book_id = b.id
+  WHERE t.deleted_at IS NULL
 `;
 
 const TransactionModel = {
@@ -51,7 +52,7 @@ const TransactionModel = {
   async getById(id) {
     try {
       const [rows] = await pool.query(
-        `${SELECT_FULL} WHERE t.id = ?`, [id]
+        `${SELECT_FULL} AND t.id = ?`, [id]
       );
       if (!rows.length) return { success: false, error: "Transaction not found" };
       return { success: true, data: rows[0] };
@@ -329,7 +330,7 @@ const TransactionModel = {
       await conn.commit();
 
       const [rows] = await pool.query(
-        `${SELECT_FULL} WHERE t.id = ?`, [result.insertId]
+        `${SELECT_FULL} AND t.id = ?`, [result.insertId]
       );
 
       console.log(`✅ Borrowed: "${book[0].title}" (${useAccession}) by ${borrower_name}`);
@@ -370,7 +371,7 @@ const TransactionModel = {
         ]
       );
 
-      const [rows] = await pool.query(`${SELECT_FULL} WHERE t.id = ?`, [id]);
+      const [rows] = await pool.query(`${SELECT_FULL} AND t.id = ?`, [id]);
       return { success: true, data: rows[0] };
     } catch (error) {
       console.error("[TransactionModel.update]", error.message);
@@ -394,7 +395,7 @@ const TransactionModel = {
         [days, id]
       );
 
-      const [updated] = await pool.query(`${SELECT_FULL} WHERE t.id = ?`, [id]);
+      const [updated] = await pool.query(`${SELECT_FULL} AND t.id = ?`, [id]);
       console.log(`✅ Extended transaction ${id} by ${days} day(s)`);
       return { success: true, data: updated[0] };
     } catch (error) {
@@ -448,7 +449,7 @@ const TransactionModel = {
       await conn.commit();
 
       // 4. Re-fetch with full FINE_SQL so computed_fine is populated
-      const [rows] = await pool.query(`${SELECT_FULL} WHERE t.id = ?`, [id]);
+      const [rows] = await pool.query(`${SELECT_FULL} AND t.id = ?`, [id]);
 
       console.log(`✅ Returned: ${rows[0].book_title} (${rows[0].accession_number})`);
       return { success: true, data: rows[0] };
@@ -462,8 +463,7 @@ const TransactionModel = {
   },
 
   // ── Delete transaction ────────────────────────────────
-  // FIX: original restored books.quantity but never reset book_copies.status.
-  // The copy would remain 'Borrowed' in the copies table forever.
+  // Restores book stock (if still borrowed) then soft-deletes via TrashModel.
   async delete(id) {
     const conn = await pool.getConnection();
     try {
@@ -479,9 +479,8 @@ const TransactionModel = {
 
       const txn = transaction[0];
 
-      // If still borrowed, restore stock atomically
+      // If still borrowed, restore stock atomically before soft-deleting
       if (txn.status === "Borrowed") {
-        // Reset the copy status
         if (txn.accession_number) {
           await conn.query(
             `UPDATE book_copies SET status = 'Available'
@@ -489,23 +488,25 @@ const TransactionModel = {
             [txn.book_id, txn.accession_number]
           );
         }
-        // Restore quantity
         await conn.query(
           "UPDATE books SET quantity = quantity + 1 WHERE id = ?",
           [txn.book_id]
         );
       }
 
-      await conn.query("DELETE FROM borrowed_books WHERE id = ?", [id]);
       await conn.commit();
+      conn.release();
 
-      return { success: true, data: txn };
+      // Soft-delete via TrashModel
+      const TrashModel = require("./Trash");
+      return TrashModel.softDelete("transaction", Number(id));
     } catch (error) {
       await conn.rollback();
       console.error("[TransactionModel.delete]", error.message);
       return { success: false, error: error.message };
     } finally {
-      conn.release();
+      // Only release if not already released above
+      try { conn.release(); } catch (_) {}
     }
   },
 
@@ -543,7 +544,7 @@ const TransactionModel = {
         [fineAmount, id]
       );
 
-      const [updated] = await pool.query(`${SELECT_FULL} WHERE t.id = ?`, [id]);
+      const [updated] = await pool.query(`${SELECT_FULL} AND t.id = ?`, [id]);
       console.log(`✅ Fine paid: transaction ${id} — ₱${fineAmount}`);
       return { success: true, data: updated[0] };
     } catch (error) {

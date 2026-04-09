@@ -13,7 +13,7 @@ const StudentModel = {
     try {
       const [rows] = await pool.query(`
         SELECT * FROM students 
-        WHERE is_active = true
+        WHERE is_active = true AND deleted_at IS NULL
         ORDER BY student_name ASC
       `);
       return { success: true, data: rows };
@@ -30,7 +30,7 @@ const StudentModel = {
     try {
       const [rows] = await pool.query(`
         SELECT * FROM students 
-        WHERE id = ? AND is_active = true
+        WHERE id = ? AND is_active = true AND deleted_at IS NULL
       `, [id]);
       if (rows.length === 0) {
         return { success: false, error: "Student not found" };
@@ -152,19 +152,12 @@ const StudentModel = {
    */
   async delete(id) {
     try {
-      // Soft delete (mark as inactive)
+      const TrashModel = require("./Trash");
       const [student] = await pool.query("SELECT * FROM students WHERE id = ?", [id]);
       if (student.length === 0) {
         return { success: false, error: "Student not found" };
       }
-
-      await pool.query(
-        `UPDATE students SET is_active = false, updated_at = NOW() WHERE id = ?`,
-        [id]
-      );
-
-      console.log(`✅ Student deleted: ID ${id}`);
-      return { success: true, data: student[0] };
+      return TrashModel.softDelete("student", Number(id));
     } catch (error) {
       console.error("[StudentModel.delete] Error:", error.message);
       return { success: false, error: error.message };

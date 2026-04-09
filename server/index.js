@@ -21,6 +21,7 @@ const attendanceRoutes   = require("./routes/attendance");
 const studentsRoutes     = require("./routes/students");
 const analyticsRoutes    = require("./routes/analytics");
 const searchRoutes       = require("./routes/search");
+const trashRoutes         = require("./routes/trash");
 
 // ── Analytics controller (for the /api/books/stats shortcut) ──
 const AnalyticsController = require("./controllers/AnalyticsController");
@@ -62,6 +63,9 @@ app.use("/api/students",     studentsRoutes);
 app.use("/api/analytics",    analyticsRoutes);
 app.use("/api/search",      searchRoutes);
 app.use("/api/suggestions", searchRoutes); // convenience alias
+
+// Trash routes
+app.use("/api/trash", trashRoutes);
 
 // KPI stats shortcut — keeps existing Dashboard fetch URL working
 // GET /api/books/stats  (must be registered BEFORE the wildcard /:id route in books router)

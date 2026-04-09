@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import BookView from "./BookView";
 import BookForm from "./BookForm";
 import BookAddImport from "./BookAddImport";
+import CopiesList from "./CopiesList";
 
 // ── Inline detail field used in the updated View header ──
 function DetailChip({ icon: Icon, label, value }) {
@@ -149,6 +150,9 @@ function BookViewPanel({ book, onEdit, onDelete }) {
         </div>
       )}
 
+      {/* ── Copies List ── */}
+      <CopiesList bookId={book.id} />
+
       {/* ── Description ── */}
       {book.description && (
         <div className="flex flex-col gap-3">
@@ -161,6 +165,7 @@ function BookViewPanel({ book, onEdit, onDelete }) {
           </p>
         </div>
       )}
+
 
     </div>
   );

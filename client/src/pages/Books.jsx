@@ -10,6 +10,7 @@ import BookToolbar      from "../components/books/BookToolbar";
 import BookStatusFilter from "../components/books/BookStatusFilter";
 import Pagination       from "../components/books/Pagination";
 import BookModal        from "../components/books/BookModal";
+import booksApi         from "../services/api/booksApi";
 
 function isOutOfStock(book) {
   const effectiveStatus = book.display_status || book.status;
@@ -20,7 +21,6 @@ function isOutOfStock(book) {
 }
 
 // Fields that only exist in the form state and must never be sent to the server.
-// Sending them causes validateBookData() to return errors → 400 Bad Request.
 const FORM_ONLY_FIELDS = ["_mode", "cover"];
 
 const EMPTY_FORM = {
@@ -34,7 +34,7 @@ const EMPTY_FORM = {
   cover:null, quantity:1,
   accessionNumber:"", callNumber:"", volume:"",
   shelf:"", pages:"", collection:"",
-  sublocation:"",                                  // ✅ FIX: added
+  sublocation:"",
   _mode:"manual",
 };
 
@@ -78,8 +78,7 @@ export default function Books() {
   const fetchBooks = async () => {
     try {
       setLoading(true);
-      const res  = await fetch(`/api/books`);
-      const data = await res.json();
+      const data = await booksApi.fetchBooks();
       if (data.success) setBooks(data.data || []);
       else showToast("Failed to load books from database", "error");
     } catch {
@@ -144,24 +143,20 @@ export default function Books() {
     return e;
   }
 
-  const handleSubmit = useCallback(async () => {
+const handleSubmit = useCallback(async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     try {
-      const quantity = form.quantity !== "" ? Number(form.quantity) : null;
-      const year     = form.date || form.year ? Number(form.date || form.year) || null : null;
-      const author   = form.authors || form.author || "";
+      const quantity = Number(form.quantity) || null;
+      const year     = (form.date || form.year) ? Number(form.date || form.year) || null : null;
+      const rawAuthor = form.authors || form.author || "";
+      const author    = rawAuthor.trim() || null;
 
-      const res = await fetch(`/api/books`, {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({
-          ...toApiPayload(form),
-          author, year, quantity,
-          sublocation: form.sublocation?.trim() || null,   // ✅ FIX: explicit pass-through
-        }),
+      const result = await booksApi.createBook({
+        ...toApiPayload(form),
+        author, year, quantity,
+        sublocation: form.sublocation?.trim() || null,
       });
-      const result = await res.json();
       if (result.success) {
         setBooks(p => [result.data, ...p]);
         setModal(false);
@@ -205,16 +200,17 @@ export default function Books() {
     setDeleteModal({ open:true, bookId:book.id, bookTitle:book.title });
   }
 
+  // ── SOFT DELETE: sets deleted_at on the server, logs to trash_log ──
   async function confirmDelete() {
     if (!deleteModal.bookId) return;
     try {
-      const res    = await fetch(`/api/books/${deleteModal.bookId}`, { method:"DELETE" });
-      const result = await res.json();
+      const result = await booksApi.deleteBook(deleteModal.bookId);
       if (result.success) {
-        setBooks(books.filter(b => b.id !== deleteModal.bookId));
+        // Remove from local list — soft-deleted books won't appear in /api/books
+        setBooks(prev => prev.filter(b => b.id !== deleteModal.bookId));
         setModal(false);
         setDeleteModal({ open:false, bookId:null, bookTitle:"" });
-        showToast("Book deleted successfully!", "success");
+        showToast("Book moved to Recently Deleted.", "success");
       } else {
         showToast(result.error || "Failed to delete book", "error");
       }
@@ -243,16 +239,11 @@ export default function Books() {
       const year     = form.date || form.year ? Number(form.date || form.year) || null : null;
       const author   = form.authors || form.author || "";
 
-      const res = await fetch(`/api/books/${selectedBook.id}`, {
-        method:"PUT",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({
-          ...toApiPayload(form),
-          author, year, quantity,
-          sublocation: form.sublocation?.trim() || null,   // ✅ FIX: explicit pass-through
-        }),
+      const result = await booksApi.updateBook(selectedBook.id, {
+        ...toApiPayload(form),
+        author, year, quantity,
+        sublocation: form.sublocation?.trim() || null,
       });
-      const result = await res.json();
       if (result.success) {
         setBooks(books.map(b => b.id === selectedBook.id ? result.data : b));
         setModal(false);
@@ -321,12 +312,16 @@ export default function Books() {
         importProps={importProps}
       />
 
+      {/* ── Soft-delete confirmation ── */}
       <ConfirmationModal
         isOpen={deleteModal.open}
-        title="Delete Book"
-        message={`Are you sure you want to delete "${deleteModal.bookTitle}"? This action cannot be undone.`}
-        confirmText="Delete" cancelText="Cancel" type="danger"
-        onConfirm={confirmDelete} onCancel={cancelDelete}
+        title="Move to Trash"
+        message={`Move "${deleteModal.bookTitle}" to Recently Deleted? It can be restored within 30 days.`}
+        confirmText="Move to Trash"
+        cancelText="Cancel"
+        type="danger"
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
       />
 
       <Toast

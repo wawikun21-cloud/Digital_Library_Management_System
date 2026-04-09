@@ -12,7 +12,7 @@ const FacultyModel = {
   async getAll() {
     try {
       const [rows] = await pool.query(
-        "SELECT * FROM faculty WHERE is_active = 1 ORDER BY faculty_name ASC"
+        "SELECT * FROM faculty WHERE is_active = 1 AND deleted_at IS NULL ORDER BY faculty_name ASC"
       );
       return { success: true, data: rows };
     } catch (error) {
@@ -59,12 +59,10 @@ const FacultyModel = {
 
   async delete(id) {
     try {
+      const TrashModel = require("./Trash");
       const [existing] = await pool.query("SELECT * FROM faculty WHERE id = ?", [id]);
       if (!existing.length) return { success: false, error: "Faculty not found" };
-
-      await pool.query("UPDATE faculty SET is_active = 0, updated_at = NOW() WHERE id = ?", [id]);
-      console.log(`✅ Faculty deleted: ID ${id}`);
-      return { success: true, data: existing[0] };
+      return TrashModel.softDelete("faculty", Number(id));
     } catch (error) {
       console.error("[FacultyModel.delete]", error.message);
       return { success: false, error: error.message };

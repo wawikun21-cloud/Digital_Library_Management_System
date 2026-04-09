@@ -13,6 +13,7 @@ const AttendanceModel = {
     try {
       const [rows] = await pool.query(`
         SELECT * FROM attendance 
+        WHERE deleted_at IS NULL
         ORDER BY check_in_time DESC
       `);
       return { success: true, data: rows };
@@ -203,15 +204,12 @@ const AttendanceModel = {
    */
   async delete(id) {
     try {
+      const TrashModel = require("./Trash");
       const [attendance] = await pool.query("SELECT * FROM attendance WHERE id = ?", [id]);
       if (attendance.length === 0) {
         return { success: false, error: "Attendance record not found" };
       }
-
-      await pool.query("DELETE FROM attendance WHERE id = ?", [id]);
-      
-      console.log(`✅ Attendance record deleted: ID ${id}`);
-      return { success: true, data: attendance[0] };
+      return TrashModel.softDelete("attendance", Number(id));
     } catch (error) {
       console.error("[AttendanceModel.delete] Error:", error.message);
       return { success: false, error: error.message };

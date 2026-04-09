@@ -212,12 +212,10 @@ const LexoraBookModel = {
    */
   async delete(id) {
     try {
+      const TrashModel = require("./Trash");
       const [existing] = await pool.query("SELECT * FROM lexora_books WHERE id = ?", [id]);
       if (!existing.length) return { success: false, error: "Book not found" };
-
-      await pool.query("DELETE FROM lexora_books WHERE id = ?", [id]);
-      console.log(`✅ Lexora DELETE: ID ${id}`);
-      return { success: true, data: existing[0] };
+      return TrashModel.softDelete("lexora_book", Number(id));
     } catch (error) {
       console.error("[LexoraBookModel.delete]", error.message);
       return { success: false, error: error.message };
@@ -233,7 +231,7 @@ const LexoraBookModel = {
    */
   async getAll(filters = {}) {
     try {
-      const conditions = [];
+      const conditions = ["deleted_at IS NULL"];
       const params     = [];
 
       if (filters.program) {

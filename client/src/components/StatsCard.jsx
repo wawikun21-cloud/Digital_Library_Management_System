@@ -1,6 +1,6 @@
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 
-export default function StatsCard({ label, value, change, accent, percentage, onClick }) {
+export default function StatsCard({ label, value, change, accent, percentage, description, onClick }) {
   const up   = change?.startsWith("+");
   const down = change?.startsWith("-");
 
@@ -78,6 +78,15 @@ export default function StatsCard({ label, value, change, accent, percentage, on
                 {change}
               </p>
             </div>
+
+            {description && (
+              <p
+                className="text-[9px] sm:text-[10px] mt-1.5 leading-snug"
+                style={{ color: "var(--text-muted)", opacity: 0.75 }}
+              >
+                {description}
+              </p>
+            )}
           </div>
 
           {/* ── Donut Chart ── */}

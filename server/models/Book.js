@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────
 
 const { pool } = require("../config/db");
+const TrashModel = require("./Trash");
 
 // Reusable SELECT fragment with live copy counts
 const BOOK_SELECT = `
@@ -38,7 +39,7 @@ const BookModel = {
   async getAll() {
     try {
       const [rows] = await pool.query(
-        `${BOOK_SELECT} ORDER BY b.created_at DESC`
+        `${BOOK_SELECT} WHERE b.deleted_at IS NULL ORDER BY b.created_at DESC`
       );
       return { success: true, data: rows };
     } catch (error) {
@@ -51,7 +52,7 @@ const BookModel = {
   async getById(id) {
     try {
       const [rows] = await pool.query(
-        `${BOOK_SELECT} WHERE b.id = ?`, [id]
+        `${BOOK_SELECT} WHERE b.id = ? AND b.deleted_at IS NULL`, [id]
       );
       if (!rows.length) return { success: false, error: "Book not found" };
 
@@ -89,8 +90,8 @@ const BookModel = {
       const t = `%${query}%`;
       const [rows] = await pool.query(
         `${BOOK_SELECT}
-         WHERE b.title LIKE ? OR b.author LIKE ? OR b.genre LIKE ?
-            OR b.isbn LIKE ? OR b.accessionNumber LIKE ? OR cc.accession_list LIKE ?
+         WHERE b.deleted_at IS NULL AND (b.title LIKE ? OR b.author LIKE ? OR b.genre LIKE ?
+            OR b.isbn LIKE ? OR b.accessionNumber LIKE ? OR cc.accession_list LIKE ?)
          ORDER BY b.title ASC`,
         [t, t, t, t, t, t]
       );
@@ -106,7 +107,7 @@ const BookModel = {
   // instead of filtering on the raw books.status column, which is often stale.
   async filter(status, genre) {
     try {
-      let q = `${BOOK_SELECT} WHERE 1=1`;
+      let q = `${BOOK_SELECT} WHERE b.deleted_at IS NULL AND 1=1`;
       const params = [];
 
       if (status && status !== "All") {
@@ -220,7 +221,7 @@ const BookModel = {
 
       if (isbn) {
         const [existing] = await conn.query(
-          "SELECT id FROM books WHERE isbn = ? LIMIT 1", [isbn]
+          "SELECT id FROM books WHERE isbn = ? AND deleted_at IS NULL LIMIT 1", [isbn]
         );
         if (existing.length) bookId = existing[0].id;
       }
@@ -417,15 +418,11 @@ const BookModel = {
     }
   },
 
-  // ── DELETE ────────────────────────────────────────────
+  // ── DELETE (Soft-Delete) ────────────────────────────────
   async delete(id) {
     try {
-      const [book] = await pool.query("SELECT * FROM books WHERE id = ?", [id]);
-      if (!book.length) return { success: false, error: "Book not found" };
-
-      await pool.query("DELETE FROM books WHERE id = ?", [id]);
-      console.log(`✅ Book deleted: "${book[0].title}" (ID: ${id})`);
-      return { success: true, data: book[0] };
+      const result = await TrashModel.softDelete("book", id);
+      return result;
     } catch (error) {
       console.error("[BookModel.delete]", error.message);
       return { success: false, error: error.message };
@@ -435,7 +432,7 @@ const BookModel = {
   // ── GET COUNT ─────────────────────────────────────────
   async getCount() {
     try {
-      const [rows] = await pool.query("SELECT COUNT(*) as count FROM books");
+      const [rows] = await pool.query("SELECT COUNT(*) as count FROM books WHERE deleted_at IS NULL");
       return { success: true, count: rows[0].count };
     } catch (error) {
       console.error("[BookModel.getCount]", error.message);
@@ -446,9 +443,9 @@ const BookModel = {
   // ── GET DASHBOARD STATS ───────────────────────────────
   async getStats() {
     try {
-      const [[{ total }]]      = await pool.query("SELECT COUNT(*) AS total FROM books");
+      const [[{ total }]]      = await pool.query("SELECT COUNT(*) AS total FROM books WHERE deleted_at IS NULL");
       const [[{ outOfStock }]] = await pool.query(
-        "SELECT COUNT(*) AS outOfStock FROM books WHERE status = 'OutOfStock' OR quantity = 0"
+        "SELECT COUNT(*) AS outOfStock FROM books WHERE deleted_at IS NULL AND (status = 'OutOfStock' OR quantity = 0)"
       );
       const [[{ returned }]]   = await pool.query(
         "SELECT COUNT(*) AS returned FROM borrowed_books WHERE status = 'Returned'"

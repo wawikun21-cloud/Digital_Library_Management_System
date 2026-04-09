@@ -25,7 +25,8 @@ const AnalyticsController = {
    */
   getBookStats: async (req, res) => {
     try {
-      const result = await analyticsService.getBookStats();
+      const filters = parseFilters(req.query);
+      const result  = await analyticsService.getBookStats(filters);
       if (!result.success) return res.status(500).json(errorResponse(result.error, 500));
       res.json(successResponse(result.data));
     } catch (err) {
@@ -95,6 +96,27 @@ const AnalyticsController = {
     } catch (err) {
       console.error("[AnalyticsController.getOverdue]", err.message);
       res.status(500).json(errorResponse("Failed to get overdue data", 500));
+    }
+  },
+
+  /**
+   * GET /api/analytics/holdings-breakdown
+   * Returns per-program/category book counts for NEMCO and Lexora.
+   * No filter params — always returns total holdings (not time-scoped).
+   */
+  getHoldingsBreakdown: async (req, res) => {
+    try {
+      const filters = parseFilters(req.query);
+      const result  = await analyticsService.getHoldingsBreakdown(filters);
+      if (!result.success) return res.status(500).json(errorResponse(result.error, 500));
+      res.json(successResponse({
+        data:      result.data,
+        maxNemco:  result.maxNemco,
+        maxLexora: result.maxLexora,
+      }));
+    } catch (err) {
+      console.error("[AnalyticsController.getHoldingsBreakdown]", err.message);
+      res.status(500).json(errorResponse("Failed to get holdings breakdown", 500));
     }
   },
 };

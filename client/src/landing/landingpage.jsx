@@ -229,20 +229,116 @@ export default function LandingPage() {
     return String(val);
   };
 
-  const statusColor = (book) => {
-    const eff  = book.display_status || book.status;
-    const avail = book.available_copies;
-    if (
-      eff === "OutOfStock" ||
-      (avail !== undefined && avail !== null && Number(avail) === 0) ||
-      (avail === undefined && book.quantity === 0)
-    ) return { bg: "#fee2e2", text: "#dc2626", label: "Out of Stock" };
-    if (!eff || eff.toLowerCase() === "available")
-      return { bg: "#e8f5e9", text: "#2e7d32", label: "Available" };
-    if (eff.toLowerCase() === "borrowed")
-      return { bg: "#fff3e0", text: "#e65100", label: "Borrowed" };
-    return { bg: "#f3e5f5", text: "#6a1b9a", label: eff };
-  };
+      // Status pill for copies (same as BookView.jsx)
+      function StatusPill({ status }) {
+        const cfg = {
+          Available: { bg:"rgba(34,197,94,0.12)",  color:"#15803d", dot:"#22c55e" },
+          Borrowed:  { bg:"rgba(239,68,68,0.12)",  color:"#b91c1c", dot:"#ef4444" },
+          Reserved:  { bg:"rgba(234,179,8,0.12)",  color:"#92400e", dot:"#f59e0b" },
+          Lost:      { bg:"rgba(107,114,128,0.12)",color:"#374151", dot:"#6b7280" },
+          Damaged:   { bg:"rgba(239,68,68,0.12)",  color:"#b91c1c", dot:"#ef4444" },
+          OutOfStock:{ bg:"rgba(239,68,68,0.12)",  color:"#dc2626", dot:"#ef4444" },
+        };
+        const c = cfg[status] || cfg.Available;
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider"
+                style={{ background:c.bg, color:c.color, border:`1px solid ${c.dot}40` }}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background:c.dot }} />
+            {status || "Available"}
+          </span>
+        );
+      }
+
+      // Copies block for detail panel (adapted from BookView.jsx)
+      function CopiesBlock({ bookId }) {
+        const [copies, setCopies] = useState([]);
+        const [loading, setLoading] = useState(true);
+
+        useEffect(() => {
+          if (!bookId) {
+            setCopies([]);
+            setLoading(false);
+            return;
+          }
+          setLoading(true);
+          fetch(`/api/books/${bookId}/copies`)
+            .then(r => r.json())
+            .then(d => { 
+              if (d.success) {
+                setCopies(d.data || []);
+              } else {
+                console.warn('Failed to load copies:', d.error);
+                setCopies([]);
+              }
+            })
+            .catch(() => setCopies([]))
+            .finally(() => setLoading(false));
+        }, [bookId]);
+
+        if (loading) {
+          return (
+            <div className="col-span-2 flex items-center justify-center py-6 text-[13px]" style={{ color: "var(--warm-gray)" }}>
+              Loading copies…
+            </div>
+          );
+        }
+
+        if (copies.length === 0) {
+          return (
+            <div className="col-span-2 flex items-center justify-center py-6 text-[13px]" style={{ color: "var(--warm-gray)" }}>
+              No physical copies recorded
+            </div>
+          );
+        }
+
+        // Sort: Available first, then alphabetical
+        const statusOrder = { Available:0, Reserved:1, Borrowed:2, Damaged:3, Lost:4, OutOfStock:5 };
+        const sortedCopies = [...copies].sort((a,b) => 
+          (statusOrder[a.status ?? ''] ?? 5) - (statusOrder[b.status ?? ''] ?? 5) ||
+          (a.accession_number || '').localeCompare(b.accession_number || '')
+        );
+
+        return (
+          <div className="col-span-2 flex flex-col gap-2 p-4 rounded-xl border" style={{ background: "var(--white)", borderColor: "#e8e0d5" }}>
+            <div className="flex items-center gap-2 text-[12px] font-semibold" style={{ color: "var(--navyblue)" }}>
+              <span>📚</span> Physical Copies ({copies.length})
+            </div>
+            <div className="space-y-1.5 max-h-40 overflow-y-auto">
+              {sortedCopies.map(copy => (
+                <div key={copy.id || copy.accession_number} className="flex items-center justify-between px-3 py-2 rounded-lg text-[13px]" 
+                     style={{ background: "rgba(248,250,252,0.7)", border: "1px solid #e2e8f0" }}>
+                  <div className="flex items-center gap-2 font-mono font-semibold" style={{ color: "var(--navyblue)" }}>
+                    <span style={{ color: "#d97706", fontSize: "0.85em" }}>🏷️</span>
+                    {copy.accession_number}
+                    {copy.date_acquired && (
+                      <span style={{ color: "var(--warm-gray)", fontSize: "0.8em" }}>
+                        · {new Date(copy.date_acquired).getFullYear()}
+                      </span>
+                    )}
+                  </div>
+                  <StatusPill status={copy.status} />
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+
+      const statusColor = (book) => {
+        const eff  = book.display_status || book.status;
+        const avail = book.available_copies;
+        if (
+          eff === "OutOfStock" ||
+          (avail !== undefined && avail !== null && Number(avail) === 0) ||
+          (avail === undefined && book.quantity === 0)
+        ) return { bg: "#fee2e2", text: "#dc2626", label: "Out of Stock" };
+        if (!eff || eff.toLowerCase() === "available")
+          return { bg: "#e8f5e9", text: "#2e7d32", label: "Available" };
+        if (eff.toLowerCase() === "borrowed")
+          return { bg: "#fff3e0", text: "#e65100", label: "Borrowed" };
+        return { bg: "#f3e5f5", text: "#6a1b9a", label: eff };
+      };
+
 
   return (
     <>
@@ -901,8 +997,11 @@ export default function LandingPage() {
 
                       <hr className="detail-divider" />
 
-                      <div className="detail-fields">
-                        {isNemco && b.accessionNumber && (
+                       
+
+                        <div className="detail-fields " style={{ marginBottom:"0.75rem" }}>
+                          {isNemco && b.accessionNumber && (
+
                           <div>
                             <div className="detail-field-label">Accession No.</div>
                             <div className="detail-field-value">{b.accessionNumber}</div>
@@ -992,6 +1091,11 @@ export default function LandingPage() {
                           </div>
                         )}
                       </div>
+
+                       {/* Physical Copies section */}
+                        {isNemco && (
+                          <CopiesBlock bookId={b.id} />
+                        )}
 
                       {isLexora && (
                         <a href={b.source_url || "https://lexoradigital.io/library/"} target="_blank" rel="noopener noreferrer" className="detail-lexora-btn">
