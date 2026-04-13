@@ -1,14 +1,20 @@
-# Soft-Delete Fix for Books
-## Status: [ ] In Progress
+# Digital Library Email Reminder Implementation
 
-### Steps:
-- [x] Step 1: Implement TrashModel import and softDelete in BookModel.delete()
-- [x] Step 2: Add `AND deleted_at IS NULL` to getAll(), filter(), search()
-- [x] Step 1: Implement TrashModel import and softDelete in BookModel.delete()
-- [x] Step 2: Add `AND deleted_at IS NULL` to getAll(), filter(), search()
-- [x] Step 3: Add filter to getById(), getCount(), getStats()
-- [x] Step 4: Update bulk/import methods with deleted_at check
-- [ ] Step 5: Test delete → RecentlyDeleted → restore
-- [ ] Step 6: Server restart & full verification
+**Status:** In progress
 
-**Next**: Step 5 - Testing in progress
+## Steps:
+
+- [x] Understand borrowing flow (Borrowed.jsx → transactionsController.create → TransactionModel.create)
+- [x] Install `nodemailer` (`npm install nodemailer`)
+- [x] Create `server/config/email.js`
+- [x] Create `server/services/emailService.js`
+- [x] Edit `server/controllers/transactionsController.js` (add email after create)
+- [ ] Add to `.env`: GMAIL_USER=yourgmail@gmail.com, GMAIL_APP_PASSWORD=kjvi hgfw nhba uthw
+- [ ] Restart server (`npm run dev` or Ctrl+C + npm start)
+- [ ] Test: Borrow book with valid email → check inbox for reminder
+
+**Notes:**
+- Gmail: Use provided App Password
+- Email sent post-confirmation (after DB insert)
+- Graceful failure: Transaction succeeds even if email fails (log error only)
+- Message: "Thank you for borrowing our book &#39;{title}&#39;. Must return by {dueDate}."

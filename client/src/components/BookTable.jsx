@@ -4,14 +4,11 @@ export default function BookTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-[var(--border)] shadow-sm">
-      <table className="w-full text-left border-collapse min-w-[800px]">
+      <table className="w-full text-left border-collapse min-w-[900px]">
         <caption className="sr-only">List of books in the library with details like accession number, title, author, and status</caption>
         <thead>
           <tr style={{ background: "var(--bg-subtle)", borderBottom: "1.5px solid var(--border)" }}>
-            <th scope="col" className="px-3 py-3 text-[11px] font-bold uppercase tracking-wider" style={{ 
-              color: "var(--text-muted)", 
-              minWidth: "60px"
-            }}>Accession No.</th>
+           
             <th scope="col" className="px-3 py-3 text-[11px] font-bold uppercase tracking-wider" style={{ 
               color: "var(--text-muted)", 
               minWidth: "180px"
@@ -19,8 +16,18 @@ export default function BookTable({
             <th scope="col" className="px-3 py-3 text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--text-muted)", minWidth: "100px" }}>Author</th>
             <th scope="col" className="px-3 py-3 text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--text-muted)", minWidth: "100px" }}>ISBN</th>
             <th scope="col" className="px-3 py-3 text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--text-muted)", minWidth: "60px" }}>Year</th>
-            <th scope="col" className="px-3 py-3 text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--text-muted)", minWidth: "80px" }}>Genre</th>
-            <th scope="col" className="px-3 py-3 text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--text-muted)", minWidth: "60px" }}>Qty</th>
+            <th scope="col" className="px-3 py-3 text-[11px] font-bold uppercase tracking-wider" style={{ 
+              color: "var(--text-muted)", 
+              minWidth: "80px"
+            }}>Genre</th>
+            <th scope="col" className="px-3 py-3 text-[11px] font-bold uppercase tracking-wider" style={{ 
+              color: "var(--text-muted)", 
+              minWidth: "80px"
+            }}>Collection</th>
+            <th scope="col" className="px-3 py-3 text-[11px] font-bold uppercase tracking-wider" style={{ 
+              color: "var(--text-muted)", 
+              minWidth: "60px"
+            }}>Qty</th>
             <th scope="col" className="px-3 py-3 text-[11px] font-bold uppercase tracking-wider" style={{ 
               color: "var(--text-muted)", 
               minWidth: "80px"
@@ -55,11 +62,6 @@ export default function BookTable({
                 onKeyDown={(e) => e.key === 'Enter' && onView(book)}
                 aria-label={`View details for ${book.title}`}
               >
-                <td className="px-3 py-3.5">
-                  <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>
-                    {book.accessionNumber || book.accession_no || "—"}
-                  </span>
-                </td>
                 <td className="px-3 py-3.5">
                   <p className="text-[13px] font-semibold truncate max-w-[180px] group-hover:text-[var(--accent-amber)] transition-colors" style={{ color: "var(--text-primary)" }}>
                     {book.title || "—"}
@@ -97,6 +99,18 @@ export default function BookTable({
                     }}
                   >
                     {book.genre || book.category || "—"}
+                  </span>
+                </td>
+                <td className="px-3 py-3.5">
+                  <span 
+                    className="text-[10px] font-bold px-2 py-1 rounded-md"
+                    style={{ 
+                      background: "var(--bg-subtle)", 
+                      color: "var(--text-secondary)",
+                      border: "1px solid var(--border-light)",
+                    }}
+                  >
+                    {book.collection || "—"}
                   </span>
                 </td>
                 <td className="px-3 py-3.5">

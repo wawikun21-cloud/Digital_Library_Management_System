@@ -237,7 +237,7 @@ export default function Borrowed() {
   }), [txns]);
 
   // ── Open borrow modal ─────────────────────────────────
-  function openBorrowModal() {
+  const openBorrowModal = () => {
     setForm({ ...EMPTY_FORM, borrow_date: today(), due_date: tomorrow() });
     setBorrowerQuery("");
     setBorrowerSelected(false);
@@ -247,10 +247,11 @@ export default function Borrowed() {
     setErrors({});
     setEditTxn(null);
     setModal("borrow");
-  }
+  };
 
   // ── Open edit modal ───────────────────────────────────
-  function openEditModal(txn) {
+  const openEditModal = (txn) => {
+
     setForm({
       borrower_type:     txn.borrower_type     || "student",
       borrower_name:     txn.borrower_name     || "",
@@ -269,13 +270,13 @@ export default function Borrowed() {
   }
 
   // ── Open extend modal ─────────────────────────────────
-  function openExtendModal(txn) {
+  const openExtendModal = useCallback((txn) => {
     setEditTxn(txn);
     setExtendDays(1);
     setModal("extend");
-  }
+  }, []);
 
-  function closeModal() {
+  const closeModal = useCallback(() => {
     setModal(false);
     setEditTxn(null);
     setBorrowerQuery("");
@@ -283,10 +284,9 @@ export default function Borrowed() {
     setBorrowerResults([]);
     setBookQuery("");
     setBookResults([]);
-  }
+  }, []);
 
-  // ── Select borrower from dropdown ────────────────────
-  function selectBorrower(person) {
+  const selectBorrower = useCallback((person) => {
     if (form.borrower_type === "student") {
       const fullName = (person.first_name && person.last_name)
         ? `${person.first_name} ${person.last_name}`.trim()
@@ -313,12 +313,12 @@ export default function Borrowed() {
     setBorrowerSelected(true);
     setBorrowerResults([]);
     setErrors(e => { const n = {...e}; delete n.borrower; return n; });
-  }
+  }, [form.borrower_type]);
 
   // ── Add book to list ──────────────────────────────────
   // accessionNumber starts null — user picks the specific copy via CopiesList below.
   function addBook(book) {
-    if (form.books.length >= MAX_BOOKS) return;
+    if (form.borrower_type !== "faculty" && form.books.length >= MAX_BOOKS) return;
     if (form.books.some(b => b.id === book.id)) return;
     setForm(f => ({ ...f, books: [...f.books, { ...book, accessionNumber: null }] }));
     setBookQuery("");
@@ -1057,9 +1057,13 @@ body: JSON.stringify({
                 </div>
                 {detailTxn.borrower_course && (
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Course</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>
+                      {detailTxn.borrower_type === "faculty" ? "Department" : "Course"}
+                    </p>
                     <p className="text-[12px]" style={{ color: "var(--text-primary)" }}>
-                      {detailTxn.borrower_course}{detailTxn.borrower_yr_level && ` · ${detailTxn.borrower_yr_level}`}
+                      {detailTxn.borrower_type === "faculty"
+                        ? `${detailTxn.borrower_course} — Faculty`
+                        : `${detailTxn.borrower_course}${detailTxn.borrower_yr_level ? ` · ${detailTxn.borrower_yr_level}` : ""}`}
                     </p>
                   </div>
                 )}

@@ -21,16 +21,16 @@ const attendanceRoutes   = require("./routes/attendance");
 const studentsRoutes     = require("./routes/students");
 const analyticsRoutes    = require("./routes/analytics");
 const searchRoutes       = require("./routes/search");
-const trashRoutes         = require("./routes/trash");
+const trashRoutes        = require("./routes/trash");
 
 // ── Analytics controller (for the /api/books/stats shortcut) ──
-const AnalyticsController = require("./controllers/AnalyticsController");
+const AnalyticsController = require("./controllers/analyticsController");
+
 const app    = express();
 const server = http.createServer(app);
 
 // ── Middleware ────────────────────────────────────────────
 app.use(cors({
-  // .env uses CLIENT_ORIGIN — fall back to CLIENT_URL for backwards compat
   origin: process.env.CLIENT_ORIGIN || process.env.CLIENT_URL || "http://localhost:5173",
   credentials: true,
 }));
@@ -61,14 +61,11 @@ app.use("/api/transactions", transactionRoutes);
 app.use("/api/attendance",   attendanceRoutes);
 app.use("/api/students",     studentsRoutes);
 app.use("/api/analytics",    analyticsRoutes);
-app.use("/api/search",      searchRoutes);
-app.use("/api/suggestions", searchRoutes); // convenience alias
-
-// Trash routes
-app.use("/api/trash", trashRoutes);
+app.use("/api/search",       searchRoutes);
+app.use("/api/suggestions",  searchRoutes); // convenience alias
+app.use("/api/trash",        trashRoutes);
 
 // KPI stats shortcut — keeps existing Dashboard fetch URL working
-// GET /api/books/stats  (must be registered BEFORE the wildcard /:id route in books router)
 app.get("/api/books/stats", AnalyticsController.getBookStats);
 
 // ── Health check ──────────────────────────────────────────
@@ -96,6 +93,11 @@ async function start() {
 
   // Attach Socket.io AFTER http.createServer
   initSocket(server);
+
+  // Start email scheduler — runs after DB is confirmed ready
+  // • 08:00 daily → due-date reminders (books due tomorrow)
+  // • 08:05 daily → overdue notices    (days 1, 3, 7, 14, 30)
+  require("./services/schedulerService").start();
 
   server.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);

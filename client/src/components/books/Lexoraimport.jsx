@@ -3,7 +3,7 @@ import {
   FileSpreadsheet, Upload, AlertCircle,
   CheckCircle2, XCircle, Loader2, ChevronRight, X,
 } from "lucide-react";
-import * as XLSX from "xlsx";
+// xlsx loaded on-demand via dynamic import inside parseLexoraExcel()
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
@@ -14,7 +14,8 @@ const API_BASE = import.meta.env.VITE_API_URL || "/api";
                    Author | Year of Publication | Resource Type | Format
    - Section rows (e.g. "First Year First Sem") have no Title of Book
 ──────────────────────────────────────────────────────────────── */
-function parseLexoraExcel(buffer) {
+async function parseLexoraExcel(buffer) {
+  const XLSX = await import("xlsx");
   const wb       = XLSX.read(buffer, { type:"array", cellDates:true });
   const seen     = new Map(); // title+author → global dedup
   const sheets   = [];        // [{ name, books }]
@@ -171,9 +172,9 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
     setFileName(file.name);
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
-        const result = parseLexoraExcel(new Uint8Array(e.target.result));
+        const result = await parseLexoraExcel(new Uint8Array(e.target.result));
         if (result.books.length === 0) {
           setParseError("No book records found. Check that the file matches the Lexora format.");
           return;

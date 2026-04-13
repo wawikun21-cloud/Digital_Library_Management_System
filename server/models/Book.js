@@ -1,572 +1,729 @@
 // ─────────────────────────────────────────────────────────
 //  models/Book.js
-//  Book Model — MySQL CRUD + Copies support
 // ─────────────────────────────────────────────────────────
 
 const { pool } = require("../config/db");
-const TrashModel = require("./Trash");
 
-// Reusable SELECT fragment with live copy counts
-const BOOK_SELECT = `
-  SELECT
-    b.*,
-    COALESCE(cc.total_copies,    b.quantity) AS quantity,
-    COALESCE(cc.total_copies,    b.quantity) AS total_copies,
-    COALESCE(cc.avail_copies,    b.quantity) AS available_copies,
-    COALESCE(cc.borrowed_copies, 0)          AS borrowed_copies,
-    cc.accession_list,
-    CASE
-      WHEN cc.total_copies IS NULL THEN b.status
-      WHEN cc.avail_copies = 0     THEN 'OutOfStock'
-      ELSE 'Available'
-    END AS display_status
-  FROM books b
-  LEFT JOIN (
-    SELECT
-      book_id,
-      COUNT(*)                                        AS total_copies,
-      SUM(status = 'Available')                       AS avail_copies,
-      SUM(status = 'Borrowed')                        AS borrowed_copies,
-      GROUP_CONCAT(accession_number ORDER BY accession_number SEPARATOR ', ') AS accession_list
-    FROM book_copies
-    GROUP BY book_id
-  ) cc ON cc.book_id = b.id
-`;
+// ── column whitelist for books INSERT / UPDATE ──────────────────────────────
+const BOOK_COLUMNS = [
+  "title", "subtitle", "author", "authors", "genre",
+  "isbn", "issn", "lccn",
+  "accessionNumber", "callNumber",
+  "year", "date",
+  "publisher", "edition",
+  "materialType", "subtype",
+  "extent", "size", "volume",
+  "authorName", "authorDates",
+  "place", "description", "otherDetails",
+  "shelf", "pages", "sublocation", "collection",
+  "status", "quantity",
+];
 
-const BookModel = {
-
-  // ── GET ALL ───────────────────────────────────────────
-  async getAll() {
-    try {
-      const [rows] = await pool.query(
-        `${BOOK_SELECT} WHERE b.deleted_at IS NULL ORDER BY b.created_at DESC`
-      );
-      return { success: true, data: rows };
-    } catch (error) {
-      console.error("[BookModel.getAll]", error.message);
-      return { success: false, error: error.message };
+// ─────────────────────────────────────────────────────────────────────────────
+//  pickBookFields — strip unknown keys before DB writes
+// ─────────────────────────────────────────────────────────────────────────────
+function pickBookFields(data) {
+  const out = {};
+  for (const col of BOOK_COLUMNS) {
+    if (Object.prototype.hasOwnProperty.call(data, col)) {
+      out[col] = data[col] ?? null;
     }
-  },
+  }
+  return out;
+}
 
-  // ── GET BY ID ─────────────────────────────────────────
-  async getById(id) {
-    try {
-      const [rows] = await pool.query(
-        `${BOOK_SELECT} WHERE b.id = ? AND b.deleted_at IS NULL`, [id]
-      );
-      if (!rows.length) return { success: false, error: "Book not found" };
+// ─────────────────────────────────────────────────────────────────────────────
+//  normaliseCopiesFromImport
+//
+//  THE ROOT CAUSE OF THE OUTOFSTOCK BUG:
+//  The Excel parser (BookImport.jsx) attaches copies as:
+//    accessionNumbers: ["ACC1", "ACC2", ...]   ← plain string array
+//
+//  But importWithCopies was reading:
+//    bookData.copies || []                     ← always undefined for Excel
+//
+//  So zero rows were ever inserted into book_copies, making every imported
+//  book appear OutOfStock.
+//
+//  This helper normalises all three shapes into one canonical format:
+//    [{ accession_number, date_acquired, condition_notes }]
+//
+//  Shape 1 — manual BookForm:
+//    copies: [{ accession_number, date_acquired?, condition_notes? }]
+//
+//  Shape 2 — Excel / bulk import (BookImport.jsx):
+//    accessionNumbers: ["ACC1", "ACC2", ...]
+//
+//  Shape 3 — legacy single string:
+//    accessionNumber: "ACC1"
+// ─────────────────────────────────────────────────────────────────────────────
+function normaliseCopiesFromImport(bookData) {
+  // Shape 1 — manual form copies[]
+  if (Array.isArray(bookData.copies) && bookData.copies.length > 0) {
+    return bookData.copies
+      .filter((c) => c && String(c.accession_number ?? "").trim())
+      .map((c) => ({
+        accession_number: String(c.accession_number).trim(),
+        date_acquired:    c.date_acquired   || null,
+        condition_notes:  c.condition_notes || null,
+      }));
+  }
 
-      const [copies] = await pool.query(
-        `SELECT id, accession_number, status, date_acquired, condition_notes
-         FROM book_copies WHERE book_id = ? ORDER BY accession_number`,
-        [id]
-      );
+  // Shape 2 — Excel parser: accessionNumbers[] plain string array
+  // Also pick up the book-level dateAcquired that the Excel parser stores.
+  if (Array.isArray(bookData.accessionNumbers) && bookData.accessionNumbers.length > 0) {
+    const sharedDate = bookData.dateAcquired || null;
+    return bookData.accessionNumbers
+      .filter((a) => String(a ?? "").trim())
+      .map((a) => ({
+        accession_number: String(a).trim(),
+        date_acquired:    sharedDate,
+        condition_notes:  null,
+      }));
+  }
 
-      return { success: true, data: { ...rows[0], copies } };
-    } catch (error) {
-      console.error("[BookModel.getById]", error.message);
-      return { success: false, error: error.message };
+  // Shape 3 — legacy single accessionNumber string
+  const single = String(bookData.accessionNumber ?? "").trim();
+  if (single) {
+    return [{ accession_number: single, date_acquired: null, condition_notes: null }];
+  }
+
+  return [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  getAll
+// ─────────────────────────────────────────────────────────────────────────────
+async function getAll() {
+  try {
+    const [rows] = await pool.query(
+      `SELECT b.*,
+              COALESCE(cc.total_copies,  b.quantity) AS total_copies,
+              COALESCE(cc.avail_copies,  b.quantity) AS available_copies,
+              CASE
+                WHEN cc.total_copies IS NULL THEN b.status
+                WHEN cc.avail_copies = 0     THEN 'OutOfStock'
+                ELSE 'Available'
+              END AS display_status
+       FROM   books b
+       LEFT JOIN (
+         SELECT book_id,
+                COUNT(*)                    AS total_copies,
+                SUM(status = 'Available')   AS avail_copies
+         FROM   book_copies
+         WHERE  is_deleted = 0
+         GROUP  BY book_id
+       ) cc ON cc.book_id = b.id
+       WHERE  b.is_deleted = 0
+       ORDER  BY b.created_at DESC LIMIT 1000`
+    );
+    return { success: true, data: rows };
+  } catch (err) {
+    console.error("[BookModel] getAll:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  getById
+// ─────────────────────────────────────────────────────────────────────────────
+async function getById(id) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT b.*,
+              COALESCE(cc.total_copies,  b.quantity) AS total_copies,
+              COALESCE(cc.avail_copies,  b.quantity) AS available_copies,
+              CASE
+                WHEN cc.total_copies IS NULL THEN b.status
+                WHEN cc.avail_copies = 0     THEN 'OutOfStock'
+                ELSE 'Available'
+              END AS display_status
+       FROM   books b
+       LEFT JOIN (
+         SELECT book_id,
+                COUNT(*)                    AS total_copies,
+                SUM(status = 'Available')   AS avail_copies
+         FROM   book_copies
+         WHERE  is_deleted = 0
+         GROUP  BY book_id
+       ) cc ON cc.book_id = b.id
+       WHERE  b.id = ? AND b.is_deleted = 0`,
+      [id]
+    );
+    if (!rows.length) return { success: false, error: "Book not found" };
+    return { success: true, data: rows[0] };
+  } catch (err) {
+    console.error("[BookModel] getById:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  filter
+// ─────────────────────────────────────────────────────────────────────────────
+async function filter(status, genre) {
+  try {
+    const conditions = ["b.is_deleted = 0"];
+    const params     = [];
+    if (genre === "__NULL__") {
+      conditions.push("b.collection IS NULL OR b.collection = ''");
+    } else if (genre) {
+      conditions.push("b.collection = ?"); 
+      params.push(genre);
     }
-  },
-
-  // ── GET COPIES FOR A BOOK ─────────────────────────────
-  async getCopies(bookId) {
-    try {
-      const [rows] = await pool.query(
-        `SELECT id, accession_number, status, date_acquired, condition_notes
-         FROM book_copies WHERE book_id = ? ORDER BY accession_number`,
-        [bookId]
-      );
-      return { success: true, data: rows };
-    } catch (error) {
-      console.error("[BookModel.getCopies]", error.message);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // ── SEARCH ────────────────────────────────────────────
-  async search(query) {
-    try {
-      const t = `%${query}%`;
-      const [rows] = await pool.query(
-        `${BOOK_SELECT}
-         WHERE b.deleted_at IS NULL AND (b.title LIKE ? OR b.author LIKE ? OR b.genre LIKE ?
-            OR b.isbn LIKE ? OR b.accessionNumber LIKE ? OR cc.accession_list LIKE ?)
-         ORDER BY b.title ASC`,
-        [t, t, t, t, t, t]
-      );
-      return { success: true, data: rows };
-    } catch (error) {
-      console.error("[BookModel.search]", error.message);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // ── FILTER ────────────────────────────────────────────
-  // FIX: OutOfStock filter now uses the derived display_status (from copy counts)
-  // instead of filtering on the raw books.status column, which is often stale.
-  async filter(status, genre) {
-    try {
-      let q = `${BOOK_SELECT} WHERE b.deleted_at IS NULL AND 1=1`;
-      const params = [];
-
-      if (status && status !== "All") {
-        if (status === "OutOfStock") {
-          // Match books where all copies are borrowed OR quantity is 0
-          q += ` AND (
-            (cc.total_copies IS NOT NULL AND cc.avail_copies = 0)
-            OR (cc.total_copies IS NULL AND (b.quantity = 0 OR b.status = 'OutOfStock'))
-          )`;
-        } else if (status === "Available") {
-          q += ` AND (
-            (cc.total_copies IS NOT NULL AND cc.avail_copies > 0)
-            OR (cc.total_copies IS NULL AND b.quantity > 0 AND b.status = 'Available')
-          )`;
-        } else {
-          q += " AND b.status = ?";
-          params.push(status);
-        }
-      }
-
-      if (genre) {
-        q += " AND b.genre = ?";
-        params.push(genre);
-      }
-
-      q += " ORDER BY b.created_at DESC";
-
-      const [rows] = await pool.query(q, params);
-      return { success: true, data: rows };
-    } catch (error) {
-      console.error("[BookModel.filter]", error.message);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // ── CREATE (single book, no copies) ──────────────────
-  async create(bookData) {
-    try {
-      const {
-        title, subtitle = null, author = null, authors = null,
-        genre = null, isbn = null, issn = null, lccn = null,
-        accessionNumber = null, callNumber = null,
-        year = null, date = null, publisher = null,
-        edition = null, materialType = "Book", subtype = null,
-        extent = null, size = null, volume = null,
-        authorName = null, authorDates = null, place = null,
-        description = null, otherDetails = null,
-        shelf = null, pages = null, collection = null,
-        status = "Available", cover = null,
-        quantity = null,
-        sublocation = null,
-      } = bookData;
-
-      const qty = quantity != null ? Number(quantity) : null;
-      const finalStatus = qty === 0 ? "OutOfStock" : status;
-
-      const [result] = await pool.query(
-        `INSERT INTO books (
-          title, subtitle, author, authors, genre, isbn, issn, lccn,
-          accessionNumber, callNumber, year, date, publisher, edition,
-          materialType, subtype, extent, size, volume, authorName, authorDates,
-          place, description, otherDetails, shelf, pages, collection,
-          status, cover, quantity, sublocation
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [
-          title, subtitle, author || authors, authors,
-          genre, isbn, issn, lccn,
-          accessionNumber, callNumber, year || date, date,
-          publisher, edition, materialType, subtype,
-          extent, size, volume, authorName, authorDates,
-          place, description, otherDetails,
-          shelf, pages, collection,
-          finalStatus, cover, qty,
-          sublocation,
-        ]
-      );
-
-      const [rows] = await pool.query("SELECT * FROM books WHERE id = ?", [result.insertId]);
-      console.log(`✅ Book added: "${title}" (ID: ${result.insertId})`);
-      return { success: true, data: rows[0] };
-    } catch (error) {
-      console.error("[BookModel.create]", error.message);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // ── IMPORT WITH COPIES (bulk import) ─────────────────
-  async importWithCopies(bookData) {
-    const conn = await pool.getConnection();
-    try {
-      await conn.beginTransaction();
-
-      const {
-        title, subtitle = null, author = null, authors = null,
-        genre = null, isbn = null, issn = null, lccn = null,
-        callNumber = null, year = null, date = null,
-        publisher = null, edition = null,
-        materialType = "Book", subtype = null,
-        extent = null, size = null, volume = null,
-        authorName = null, authorDates = null, place = null,
-        description = null, otherDetails = null,
-        shelf = null, pages = null, collection = null,
-        cover = null,
-        accessionNumbers = [],
-        dateAcquired = null,
-        sublocation = null,
-      } = bookData;
-
-      // 1. Find existing book by ISBN → title+author → title only
-      let bookId = null;
-
-      if (isbn) {
-        const [existing] = await conn.query(
-          "SELECT id FROM books WHERE isbn = ? AND deleted_at IS NULL LIMIT 1", [isbn]
-        );
-        if (existing.length) bookId = existing[0].id;
-      }
-
-      if (!bookId) {
-        const authorVal = (author || authors || "").trim();
-        if (authorVal) {
-          const [existing] = await conn.query(
-            `SELECT id FROM books
-             WHERE LOWER(TRIM(title)) = LOWER(TRIM(?))
-               AND LOWER(TRIM(COALESCE(author,''))) = LOWER(?) LIMIT 1`,
-            [title, authorVal]
-          );
-          if (existing.length) bookId = existing[0].id;
-        }
-      }
-
-      if (!bookId) {
-        const [existing] = await conn.query(
-          "SELECT id FROM books WHERE LOWER(TRIM(title)) = LOWER(TRIM(?)) LIMIT 1",
-          [title]
-        );
-        if (existing.length) bookId = existing[0].id;
-      }
-
-      // 2. Insert book if new
-      const isNewBook = !bookId;
-      if (isNewBook) {
-        const authorVal = author || authors || null;
-        const [result] = await conn.query(
-          `INSERT INTO books (
-            title, subtitle, author, authors, genre, isbn, issn, lccn,
-            accessionNumber, callNumber, year, date, publisher, edition,
-            materialType, subtype, extent, size, volume, authorName, authorDates,
-            place, description, otherDetails, shelf, pages, collection,
-            status, cover, quantity, sublocation
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-          [
-            title, subtitle, authorVal, authorVal,
-            genre, isbn, issn, lccn,
-            accessionNumbers[0] || null,
-            callNumber, year || date, date,
-            publisher, edition, materialType, subtype,
-            extent, size, volume, authorName, authorDates,
-            place, description, otherDetails,
-            shelf, pages, collection,
-            "Available", cover,
-            accessionNumbers.length || null,
-            sublocation,
-          ]
-        );
-        bookId = result.insertId;
-      }
-
-      // 3. Insert each copy, skip duplicates
-      const insertedCopies = [];
-      const skippedCopies  = [];
-
-      for (const accNo of accessionNumbers) {
-        if (!accNo || !accNo.trim()) continue;
-        const acc = accNo.trim();
-
-        const [dup] = await conn.query(
-          "SELECT id FROM book_copies WHERE accession_number = ? LIMIT 1", [acc]
-        );
-        if (dup.length) {
-          skippedCopies.push({ accession: acc, reason: "Duplicate accession number" });
-          continue;
-        }
-
-        let da = null;
-        if (dateAcquired) {
-          try { da = new Date(dateAcquired).toISOString().split("T")[0]; } catch (_) {}
-        }
-
-        await conn.query(
-          `INSERT INTO book_copies (book_id, accession_number, status, date_acquired)
-           VALUES (?, ?, 'Available', ?)`,
-          [bookId, acc, da]
-        );
-        insertedCopies.push(acc);
-      }
-
-      // 4. Sync quantity to actual copy count
-      await conn.query(
-        `UPDATE books
-         SET quantity       = (SELECT COUNT(*) FROM book_copies WHERE book_id = ?),
-             accessionNumber = (SELECT accession_number FROM book_copies
-                                WHERE book_id = ? ORDER BY accession_number LIMIT 1)
-         WHERE id = ?`,
-        [bookId, bookId, bookId]
-      );
-
-      await conn.commit();
-
-      const [bookRows] = await conn.query("SELECT * FROM books WHERE id = ?", [bookId]);
-      const [copies]   = await conn.query(
-        `SELECT id, accession_number, status, date_acquired
-         FROM book_copies WHERE book_id = ? ORDER BY accession_number`,
-        [bookId]
-      );
-
-      console.log(`✅ Imported: "${title}" — ${insertedCopies.length} copies (book_id: ${bookId})`);
-      if (skippedCopies.length) {
-        console.log(`  ⏭️  Skipped ${skippedCopies.length} duplicate accessions`);
-      }
-
-      return {
-        success: true,
-        isNewBook,
-        data:          { ...bookRows[0], copies },
-        insertedCopies,
-        skippedCopies,
-      };
-    } catch (error) {
-      await conn.rollback();
-      console.error("[BookModel.importWithCopies]", error.message);
-      return { success: false, error: error.message };
-    } finally {
-      conn.release();
-    }
-  },
-
-  // ── UPDATE ────────────────────────────────────────────
-  // FIX: no longer blindly overwrites quantity from form data when copies exist.
-  // If book_copies rows exist for this book, quantity is re-derived from them.
-  async update(id, bookData) {
-    try {
-      const {
-        title, subtitle = null, author = null, authors = null,
-        genre = null, isbn = null, issn = null, lccn = null,
-        accessionNumber = null, callNumber = null,
-        year = null, date = null, publisher = null,
-        edition = null, materialType = null, subtype = null,
-        extent = null, size = null, volume = null,
-        authorName = null, authorDates = null, place = null,
-        description = null, otherDetails = null,
-        shelf = null, pages = null, collection = null,
-        status = "Available", cover = null, quantity = null,
-        sublocation = null,
-      } = bookData;
-
-      const [current] = await pool.query("SELECT * FROM books WHERE id = ?", [id]);
-      if (!current.length) return { success: false, error: "Book not found" };
-
-      // Check whether this book has copy rows; if so, use the live count
-      const [[{ copyCount }]] = await pool.query(
-        "SELECT COUNT(*) AS copyCount FROM book_copies WHERE book_id = ?", [id]
-      );
-
-      let qty;
-      if (copyCount > 0) {
-        // Copies table is the source of truth — recount available copies
-        const [[{ availCount }]] = await pool.query(
-          "SELECT SUM(status = 'Available') AS availCount FROM book_copies WHERE book_id = ?",
-          [id]
-        );
-        qty = Number(availCount);
+    if (status && status !== "All") {
+      if (status === "OutOfStock") {
+        conditions.push("cc.avail_copies = 0");
+      } else if (status === "Available") {
+        conditions.push("cc.avail_copies > 0");
       } else {
-        // No copies table — use form value or keep existing
-        qty = quantity != null ? Number(quantity) : current[0].quantity;
+        conditions.push("b.status = ?");
+        params.push(status);
       }
-
-      const finalStatus = qty === 0 ? "OutOfStock" : (status || current[0].status);
-
-      await pool.query(
-        `UPDATE books SET
-          title=?, subtitle=?, author=?, authors=?, genre=?, isbn=?, issn=?, lccn=?,
-          accessionNumber=?, callNumber=?, year=?, date=?, publisher=?, edition=?,
-          materialType=?, subtype=?, extent=?, size=?, volume=?,
-          authorName=?, authorDates=?, place=?, description=?, otherDetails=?,
-          shelf=?, pages=?, collection=?, status=?, cover=?, quantity=?,
-          sublocation=?
-         WHERE id=?`,
-        [
-          title, subtitle, author || authors, authors,
-          genre, isbn, issn, lccn,
-          accessionNumber, callNumber, year || date, date,
-          publisher, edition, materialType, subtype,
-          extent, size, volume, authorName, authorDates,
-          place, description, otherDetails,
-          shelf, pages, collection, finalStatus, cover, qty,
-          sublocation,
-          id,
-        ]
-      );
-
-      const [rows] = await pool.query("SELECT * FROM books WHERE id = ?", [id]);
-      console.log(`✅ Book updated: "${title}" (ID: ${id})`);
-      return { success: true, data: rows[0] };
-    } catch (error) {
-      console.error("[BookModel.update]", error.message);
-      return { success: false, error: error.message };
     }
-  },
 
-  // ── DELETE (Soft-Delete) ────────────────────────────────
-  async delete(id) {
-    try {
-      const result = await TrashModel.softDelete("book", id);
-      return result;
-    } catch (error) {
-      console.error("[BookModel.delete]", error.message);
-      return { success: false, error: error.message };
+    const [rows] = await pool.query(
+      `SELECT b.*,
+              COALESCE(cc.total_copies,  b.quantity) AS total_copies,
+              COALESCE(cc.avail_copies,  b.quantity) AS available_copies
+       FROM   books b
+       LEFT JOIN (
+         SELECT book_id,
+                COUNT(*)                    AS total_copies,
+                SUM(status = 'Available')   AS avail_copies
+         FROM   book_copies WHERE is_deleted = 0 GROUP BY book_copies
+       ) cc ON cc.book_id = b.id
+       WHERE  ${conditions.join(" AND ")}
+       ORDER  BY b.created_at DESC`,
+      params
+    );
+    return { success: true, data: rows };
+  } catch (err) {
+    console.error("[BookModel] filter:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  search
+// ─────────────────────────────────────────────────────────────────────────────
+async function search(query) {
+  try {
+    const like = `%${query}%`;
+    const [rows] = await pool.query(
+      `SELECT b.*,
+              COALESCE(cc.total_copies,  b.quantity) AS total_copies,
+              COALESCE(cc.avail_copies,  b.quantity) AS available_copies
+       FROM   books b
+       LEFT JOIN (
+         SELECT book_id,
+                COUNT(*)                    AS total_copies,
+                SUM(status = 'Available')   AS avail_copies
+         FROM   book_copies WHERE is_deleted = 0 GROUP BY book_id
+       ) cc ON cc.book_id = b.id
+       WHERE  b.is_deleted = 0
+         AND (b.title LIKE ? OR b.author LIKE ? OR b.authors LIKE ?
+              OR b.isbn  LIKE ? OR b.genre LIKE ?
+              OR b.accessionNumber LIKE ? OR b.callNumber LIKE ?)
+       ORDER  BY b.created_at DESC`,
+      [like, like, like, like, like, like, like]
+    );
+    return { success: true, data: rows };
+  } catch (err) {
+    console.error("[BookModel] search:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  create  (legacy — metadata only, no copies)
+// ─────────────────────────────────────────────────────────────────────────────
+async function create(data) {
+  try {
+    const fields = pickBookFields(data);
+    const cols   = Object.keys(fields);
+    const vals   = Object.values(fields);
+    const [result] = await pool.query(
+      `INSERT INTO books (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`,
+      vals
+    );
+    return { success: true, data: { id: result.insertId, ...fields } };
+  } catch (err) {
+    console.error("[BookModel] create:", err.message);
+    if (err.code === "ER_DUP_ENTRY") {
+      return { success: false, error: "A book with this title and author already exists." };
     }
-  },
+    return { success: false, error: err.message };
+  }
+}
 
-  // ── GET COUNT ─────────────────────────────────────────
-  async getCount() {
-    try {
-      const [rows] = await pool.query("SELECT COUNT(*) as count FROM books WHERE deleted_at IS NULL");
-      return { success: true, count: rows[0].count };
-    } catch (error) {
-      console.error("[BookModel.getCount]", error.message);
-      return { success: false, error: error.message };
-    }
-  },
+// ─────────────────────────────────────────────────────────────────────────────
+//  createWithCopies  — manual BookForm via POST /api/books
+// ─────────────────────────────────────────────────────────────────────────────
+async function createWithCopies(bookData, copies) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
 
-  // ── GET DASHBOARD STATS ───────────────────────────────
-  async getStats() {
-    try {
-      const [[{ total }]]      = await pool.query("SELECT COUNT(*) AS total FROM books WHERE deleted_at IS NULL");
-      const [[{ outOfStock }]] = await pool.query(
-        "SELECT COUNT(*) AS outOfStock FROM books WHERE deleted_at IS NULL AND (status = 'OutOfStock' OR quantity = 0)"
-      );
-      const [[{ returned }]]   = await pool.query(
-        "SELECT COUNT(*) AS returned FROM borrowed_books WHERE status = 'Returned'"
-      );
-      return {
-        success: true,
-        data: {
-          nemco: { total: Number(total), outOfStock: Number(outOfStock), returned: Number(returned) },
-        },
-      };
-    } catch (error) {
-      console.error("[BookModel.getStats]", error.message);
-      return { success: false, error: error.message };
-    }
-  },
+    const fields = pickBookFields(bookData);
+    const cols   = Object.keys(fields);
+    const vals   = Object.values(fields);
+    const [bookResult] = await conn.query(
+      `INSERT INTO books (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`,
+      vals
+    );
+    const bookId = bookResult.insertId;
 
-  // ── GET BY STATUS ─────────────────────────────────────
-  async getByStatus(status) {
-    try {
-      const [rows] = await pool.query(
-        "SELECT * FROM books WHERE status = ? ORDER BY title ASC", [status]
-      );
-      return { success: true, data: rows };
-    } catch (error) {
-      console.error("[BookModel.getByStatus]", error.message);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // ── BATCH DUPLICATE CHECK ─────────────────────────────
-  async checkDuplicatesBatch(books) {
-    try {
-      if (!Array.isArray(books) || books.length === 0) {
-        return { success: true, duplicateTitles: [], duplicateAccessions: [] };
-      }
-
-      const titles       = books.map(b => b.title).filter(Boolean);
-      const allAccessions = books.flatMap(b => (b.accessionNumbers || [])).filter(Boolean);
-
-      const duplicateTitles     = [];
-      const duplicateAccessions = [];
-
-      if (titles.length > 0) {
-        const placeholders = titles.map(() => "?").join(",");
-        const [titleMatches] = await pool.query(
-          `SELECT id, title FROM books WHERE LOWER(TRIM(title)) IN (${placeholders})`,
-          titles.map(t => t.toLowerCase().trim())
+    const copyErrors = [];
+    for (const copy of copies) {
+      try {
+        await conn.query(
+          `INSERT INTO book_copies (book_id, accession_number, date_acquired, condition_notes)
+           VALUES (?, ?, ?, ?)`,
+          [bookId, copy.accession_number.trim(), copy.date_acquired || null, copy.condition_notes || null]
         );
-        for (const match of titleMatches) {
-          const book = books.find(
-            b => b.title.toLowerCase().trim() === match.title.toLowerCase().trim()
-          );
-          if (book) duplicateTitles.push({ title: book.title, existingId: match.id });
-        }
-      }
-
-      if (allAccessions.length > 0) {
-        const placeholders = allAccessions.map(() => "?").join(",");
-        const [accMatches] = await pool.query(
-          `SELECT accession_number, book_id FROM book_copies
-           WHERE accession_number IN (${placeholders})`,
-          allAccessions
-        );
-        for (const match of accMatches) {
-          const book = books.find(
-            b => (b.accessionNumbers || []).includes(match.accession_number)
-          );
-          if (book) {
-            duplicateAccessions.push({
-              accession:     match.accession_number,
-              book:          book.title,
-              existingBookId: match.book_id,
-            });
-          }
-        }
-      }
-
-      return {
-        success: true,
-        hasDuplicates: duplicateTitles.length > 0 || duplicateAccessions.length > 0,
-        duplicateTitles,
-        duplicateAccessions,
-      };
-    } catch (error) {
-      console.error("[BookModel.checkDuplicatesBatch]", error.message);
-      return { success: false, error: error.message };
-    }
-  },
-
-  // ── BULK IMPORT ───────────────────────────────────────
-  // FIX: removed the outer getConnection/beginTransaction wrapper.
-  // importWithCopies() manages its own transaction per book — wrapping it in
-  // another outer transaction on a different connection had no effect and
-  // wasted a connection.
-  async bulkImport(books) {
-    try {
-      const results = [];
-      const errors  = [];
-
-      for (const bookData of books) {
-        const result = await this.importWithCopies(bookData);
-        if (result.success) {
-          results.push(result);
+      } catch (copyErr) {
+        if (copyErr.code === "ER_DUP_ENTRY") {
+          copyErrors.push(`Accession "${copy.accession_number}" is already used by another copy.`);
         } else {
-          errors.push({ title: bookData.title || "Unknown", error: result.error });
+          throw copyErr;
         }
       }
+    }
 
+    if (copyErrors.length > 0) {
+      await conn.rollback();
+      return { success: false, error: copyErrors.join(" | ") };
+    }
+
+    await conn.query("UPDATE books SET quantity = ? WHERE id = ?", [copies.length, bookId]);
+    await conn.commit();
+    return { success: true, data: { id: bookId, ...fields, quantity: copies.length } };
+  } catch (err) {
+    await conn.rollback();
+    console.error("[BookModel] createWithCopies:", err.message);
+    if (err.code === "ER_DUP_ENTRY") {
+      return { success: false, error: "A book with this title and author already exists." };
+    }
+    return { success: false, error: err.message };
+  } finally {
+    conn.release();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  update  (metadata only)
+// ─────────────────────────────────────────────────────────────────────────────
+async function update(id, data) {
+  try {
+    const fields = pickBookFields(data);
+    const cols   = Object.keys(fields);
+    const vals   = Object.values(fields);
+    if (!cols.length) return { success: false, error: "No fields to update" };
+    await pool.query(
+      `UPDATE books SET ${cols.map((c) => `\`${c}\` = ?`).join(", ")} WHERE id = ? AND is_deleted = 0`,
+      [...vals, id]
+    );
+    return { success: true, data: { id, ...fields } };
+  } catch (err) {
+    console.error("[BookModel] update:", err.message);
+    if (err.code === "ER_DUP_ENTRY") {
+      return { success: false, error: "A book with this title and author already exists." };
+    }
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  updateWithCopies  — manual BookForm via PUT /api/books/:id
+// ─────────────────────────────────────────────────────────────────────────────
+async function updateWithCopies(id, bookData, copies) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const fields = pickBookFields(bookData);
+    const cols   = Object.keys(fields);
+    const vals   = Object.values(fields);
+    if (cols.length) {
+      await conn.query(
+        `UPDATE books SET ${cols.map((c) => `\`${c}\` = ?`).join(", ")} WHERE id = ? AND is_deleted = 0`,
+        [...vals, id]
+      );
+    }
+
+    const [existingRows] = await conn.query(
+      "SELECT id, accession_number FROM book_copies WHERE book_id = ? AND is_deleted = 0",
+      [id]
+    );
+    const existingMap        = new Map(existingRows.map((r) => [r.accession_number, r.id]));
+    const incomingAccessions = new Set(copies.map((c) => c.accession_number.trim()));
+
+    // Soft-delete removed copies
+    for (const [acc, copyId] of existingMap.entries()) {
+      if (!incomingAccessions.has(acc)) {
+        await conn.query(
+          "UPDATE book_copies SET is_deleted = 1, deleted_at = NOW() WHERE id = ?",
+          [copyId]
+        );
+      }
+    }
+
+    // Insert new copies
+    const copyErrors = [];
+    for (const copy of copies) {
+      const acc = copy.accession_number.trim();
+      if (existingMap.has(acc)) continue;
+      try {
+        await conn.query(
+          `INSERT INTO book_copies (book_id, accession_number, date_acquired, condition_notes)
+           VALUES (?, ?, ?, ?)`,
+          [id, acc, copy.date_acquired || null, copy.condition_notes || null]
+        );
+      } catch (copyErr) {
+        if (copyErr.code === "ER_DUP_ENTRY") {
+          copyErrors.push(`Accession "${acc}" is already used by another book's copy.`);
+        } else {
+          throw copyErr;
+        }
+      }
+    }
+
+    if (copyErrors.length > 0) {
+      await conn.rollback();
+      return { success: false, error: copyErrors.join(" | ") };
+    }
+
+    const [[{ cnt }]] = await conn.query(
+      "SELECT COUNT(*) AS cnt FROM book_copies WHERE book_id = ? AND is_deleted = 0",
+      [id]
+    );
+    await conn.query("UPDATE books SET quantity = ? WHERE id = ?", [cnt, id]);
+
+    await conn.commit();
+    return { success: true, data: { id, ...fields, quantity: cnt } };
+  } catch (err) {
+    await conn.rollback();
+    console.error("[BookModel] updateWithCopies:", err.message);
+    if (err.code === "ER_DUP_ENTRY") {
+      return { success: false, error: "A book with this title and author already exists." };
+    }
+    return { success: false, error: err.message };
+  } finally {
+    conn.release();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  delete (soft) — also soft-deletes all book_copies
+// ─────────────────────────────────────────────────────────────────────────────
+async function deleteBook(id) {
+  try {
+    const TrashModel = require("./Trash");
+    const [book] = await pool.query("SELECT * FROM books WHERE id = ? AND is_deleted = 0", [id]);
+    if (book.length === 0) {
+      return { success: false, error: "Book not found" };
+    }
+
+    // Soft-delete all copies first
+    await pool.query(
+      "UPDATE book_copies SET is_deleted = 1, deleted_at = NOW() WHERE book_id = ? AND is_deleted = 0",
+      [id]
+    );
+
+    // Then move book to trash
+    const result = await TrashModel.softDelete("book", Number(id));
+    return result;
+  } catch (error) {
+    console.error("[BookModel.deleteBook]", error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  getCopies
+// ─────────────────────────────────────────────────────────────────────────────
+async function getCopies(bookId) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, book_id, accession_number, status, date_acquired, condition_notes, created_at
+       FROM   book_copies
+       WHERE  book_id = ? AND is_deleted = 0
+       ORDER  BY id ASC`,
+      [bookId]
+    );
+    return { success: true, data: rows };
+  } catch (err) {
+    console.error("[BookModel] getCopies:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  getCount
+// ─────────────────────────────────────────────────────────────────────────────
+async function getCount() {
+  try {
+    const [[row]] = await pool.query("SELECT COUNT(*) AS count FROM books WHERE is_deleted = 0");
+    return { success: true, count: row.count };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  getStats
+// ─────────────────────────────────────────────────────────────────────────────
+async function getStats() {
+  try {
+    const [[stats]] = await pool.query(
+      `SELECT
+         COUNT(*) AS total,
+         SUM(CASE WHEN (
+           SELECT COUNT(*) FROM book_copies
+           WHERE book_id = b.id AND is_deleted = 0 AND status = 'Available'
+         ) = 0 THEN 1 ELSE 0 END) AS outOfStock,
+         0 AS returned
+       FROM books b
+       WHERE b.is_deleted = 0`
+    );
+    return {
+      success: true,
+      data: {
+        nemco: {
+          total:      Number(stats.total),
+          outOfStock: Number(stats.outOfStock),
+          returned:   Number(stats.returned),
+        },
+      },
+    };
+  } catch (err) {
+    console.error("[BookModel] getStats:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  checkDuplicatesBatch
+//
+//  We only warn about duplicate ACCESSION NUMBERS now.
+//  Duplicate titles are intentionally allowed — two books can share a title
+//  and author but have different accession numbers (different physical copies
+//  catalogued as separate book records).
+// ─────────────────────────────────────────────────────────────────────────────
+async function checkDuplicatesBatch(books) {
+  try {
+    if (!Array.isArray(books) || !books.length) {
+      return { success: false, error: "No books provided" };
+    }
+
+    // normaliseCopiesFromImport handles all three accession shapes
+    const accessions = books.flatMap((b) =>
+      normaliseCopiesFromImport(b).map((c) => c.accession_number)
+    );
+
+    const duplicateAccessions = [];
+
+    if (accessions.length) {
+      const [aRows] = await pool.query(
+        `SELECT accession_number FROM book_copies WHERE accession_number IN (${accessions.map(() => "?").join(",")}) AND is_deleted = 0`,
+        accessions
+      );
+      duplicateAccessions.push(...aRows.map((r) => r.accession_number));
+    }
+
+    return {
+      success:             true,
+      hasDuplicates:       duplicateAccessions.length > 0,
+      duplicateTitles:     [],   // no longer flagged — titles may repeat
+      duplicateAccessions,
+    };
+  } catch (err) {
+    console.error("[BookModel] checkDuplicatesBatch:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  importWithCopies
+//
+//  Each call represents ONE distinct book record from the Excel sheet.
+//  We NEVER merge by title+author because two rows with the same title/author
+//  but different accession numbers are genuinely different physical items.
+//
+//  Duplicate-accession detection strategy:
+//    1. Check which of this record's accession numbers already exist in
+//       book_copies across ANY book (globally unique constraint).
+//    2. If ALL copies for this record already exist → treat as fully existing
+//       (isNewBook = false, no new book row, no new copy rows).
+//    3. If SOME copies are new → always create a fresh book row and insert
+//       only the new copies.  The already-used accessions are skipped.
+//    4. If the book row INSERT itself hits a UNIQUE constraint (title+author
+//       unique index) we fall back to attaching new copies to the existing
+//       book row for that title+author — this preserves the old behaviour for
+//       the manual-add flow while still being safe for imports.
+// ─────────────────────────────────────────────────────────────────────────────
+async function importWithCopies(bookData) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const fields = pickBookFields(bookData);
+    const cols   = Object.keys(fields);
+    const vals   = Object.values(fields);
+
+    // Normalise copies — handles accessionNumbers[], copies[], accessionNumber
+    const copies = normaliseCopiesFromImport(bookData);
+
+    // ── Step 1: find which accession numbers already exist in the DB ─────────
+    const skippedCopies    = [];
+    const copiesToInsert   = [];
+
+    if (copies.length > 0) {
+      const accNums = copies.map((c) => c.accession_number);
+      const [existingCopyRows] = await conn.query(
+        `SELECT accession_number FROM book_copies
+         WHERE  accession_number IN (${accNums.map(() => "?").join(",")})
+           AND  is_deleted = 0`,
+        accNums
+      );
+      const existingAccSet = new Set(existingCopyRows.map((r) => r.accession_number));
+
+      for (const copy of copies) {
+        if (existingAccSet.has(copy.accession_number)) {
+          skippedCopies.push({ accession_number: copy.accession_number, reason: "duplicate" });
+        } else {
+          copiesToInsert.push(copy);
+        }
+      }
+    }
+
+    // ── Step 2: if every copy already existed, nothing new to do ─────────────
+    if (copies.length > 0 && copiesToInsert.length === 0) {
+      // All accessions were duplicates — find the existing book to return its id
+      const firstAcc = copies[0].accession_number;
+      const [[existingCopy]] = await conn.query(
+        "SELECT book_id FROM book_copies WHERE accession_number = ? AND is_deleted = 0 LIMIT 1",
+        [firstAcc]
+      );
+      const bookId = existingCopy?.book_id ?? null;
+      await conn.commit();
       return {
         success:      true,
-        imported:     results.filter(r =>  r.isNewBook).length,
-        updated:      results.filter(r => !r.isNewBook).length,
-        errors:       errors.length,
-        data:         results.map(r => r.data),
-        errorsDetail: errors,
+        isNewBook:    false,
+        data:         { id: bookId, ...fields },
+        skippedCopies,
       };
-    } catch (error) {
-      console.error("[BookModel.bulkImport]", error.message);
-      return { success: false, error: error.message };
     }
-  },
-};
 
-module.exports = BookModel;
+    // ── Step 3: insert a new book row for this import record ──────────────────
+    let bookId;
+    let isNewBook = false;
+
+    try {
+      const [res] = await conn.query(
+        `INSERT INTO books (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`,
+        vals
+      );
+      bookId    = res.insertId;
+      isNewBook = true;
+    } catch (insertErr) {
+      if (insertErr.code === "ER_DUP_ENTRY") {
+        // title+author unique constraint hit — attach to the existing book row
+        const [existing] = await conn.query(
+          "SELECT id FROM books WHERE title = ? AND author = ? AND is_deleted = 0 LIMIT 1",
+          [bookData.title, bookData.author || bookData.authors]
+        );
+        if (!existing.length) throw insertErr; // unexpected — rethrow
+        bookId    = existing[0].id;
+        isNewBook = false;
+      } else {
+        throw insertErr;
+      }
+    }
+
+    // ── Step 4: insert the new copies ────────────────────────────────────────
+    for (const copy of copiesToInsert) {
+      try {
+        await conn.query(
+          `INSERT INTO book_copies (book_id, accession_number, date_acquired, condition_notes)
+           VALUES (?, ?, ?, ?)`,
+          [bookId, copy.accession_number, copy.date_acquired, copy.condition_notes]
+        );
+      } catch (e) {
+        if (e.code === "ER_DUP_ENTRY") {
+          // Race condition — another request inserted it between our check and insert
+          skippedCopies.push({ accession_number: copy.accession_number, reason: "duplicate" });
+        } else {
+          throw e;
+        }
+      }
+    }
+
+    // ── Step 5: sync quantity = actual live copy count ────────────────────────
+    const [[{ cnt }]] = await conn.query(
+      "SELECT COUNT(*) AS cnt FROM book_copies WHERE book_id = ? AND is_deleted = 0",
+      [bookId]
+    );
+    await conn.query("UPDATE books SET quantity = ? WHERE id = ?", [cnt, bookId]);
+
+    await conn.commit();
+    return {
+      success:      true,
+      isNewBook,
+      data:         { id: bookId, ...fields, quantity: cnt },
+      skippedCopies,
+    };
+  } catch (err) {
+    await conn.rollback();
+    console.error("[BookModel] importWithCopies:", err.message);
+    return { success: false, error: err.message };
+  } finally {
+    conn.release();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  bulkImport
+// ─────────────────────────────────────────────────────────────────────────────
+async function bulkImport(books) {
+  try {
+    let imported = 0, updated = 0, errors = 0;
+    const data         = [];
+    const errorsDetail = [];
+
+    for (const bookData of books) {
+      const result = await importWithCopies(bookData);
+      if (result.success) {
+        result.isNewBook ? imported++ : updated++;
+        data.push(result.data);
+      } else {
+        errors++;
+        errorsDetail.push({ title: bookData.title, error: result.error });
+      }
+    }
+    return { success: true, imported, updated, errors, data, errorsDetail };
+  } catch (err) {
+    console.error("[BookModel] bulkImport:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+module.exports = {
+  getAll,
+  getById,
+  filter,
+  search,
+  create,
+  createWithCopies,
+  update,
+  updateWithCopies,
+  delete:              deleteBook,
+  getCopies,
+  getCount,
+  getStats,
+  checkDuplicatesBatch,
+  importWithCopies,
+  bulkImport,
+};

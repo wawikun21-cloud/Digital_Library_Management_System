@@ -1,6 +1,5 @@
 // ─────────────────────────────────────────────────────────
 //  routes/books.js
-//  Books CRUD API Routes
 // ─────────────────────────────────────────────────────────
 
 const express          = require("express");
@@ -12,10 +11,14 @@ const lexoraController = require("../controllers/lexoraController");
 // ── GET /api/books ────────────────────────────────────────
 router.get("/", booksController.getBooks);
 
+// ── POST /api/books ───────────────────────────────────────
+// Now handled by booksController.createBook which inserts
+// the book row + all book_copies rows in one transaction.
+router.post("/", booksController.createBook);
+
 // ── STATIC routes — MUST be before /:id ──────────────────
 
 // GET /api/books/public-search?title=...&author=...
-// Public endpoint — no auth required — searches NEMCO + Lexora collections
 router.get("/public-search", async (req, res) => {
   try {
     const { title, author } = req.query;
@@ -25,7 +28,7 @@ router.get("/public-search", async (req, res) => {
     }
 
     const conditions = [];
-    const params = [];
+    const params     = [];
 
     if (title) {
       conditions.push("(LOWER(b.title) LIKE ?)");
@@ -38,7 +41,6 @@ router.get("/public-search", async (req, res) => {
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
-    // Search NEMCO library books — includes sublocation
     const [nemcoRows] = await require("../config/db").pool.query(
       `SELECT
          b.id, b.title, b.author, b.genre, b.year, b.publisher,
@@ -58,7 +60,7 @@ router.get("/public-search", async (req, res) => {
          SELECT book_id,
            COUNT(*)                  AS total_copies,
            SUM(status = 'Available') AS avail_copies
-         FROM book_copies GROUP BY book_id
+         FROM book_copies WHERE is_deleted = 0 GROUP BY book_id
        ) cc ON cc.book_id = b.id
        ${whereClause}
        ORDER BY b.title ASC
@@ -66,9 +68,8 @@ router.get("/public-search", async (req, res) => {
       params
     );
 
-    // Build lexora conditions separately (same logic, different table alias)
     const lexConditions = [];
-    const lexParams = [];
+    const lexParams     = [];
     if (title) {
       lexConditions.push("LOWER(REPLACE(REPLACE(title, '\\n', ' '), '\\r', ' ')) LIKE ?");
       lexParams.push(`%${title.toLowerCase()}%`);
@@ -79,7 +80,6 @@ router.get("/public-search", async (req, res) => {
     }
     const lexWhere = lexConditions.length ? `WHERE ${lexConditions.join(" AND ")}` : "";
 
-    // Search Lexora digital books
     const [lexoraRows] = await require("../config/db").pool.query(
       `SELECT
          id, title, author, year,
@@ -111,20 +111,19 @@ router.get("/public-search", async (req, res) => {
 router.get("/count/all", async (req, res) => {
   try {
     const result = await BookModel.getCount();
-    if (!result.success) return res.status(400).json({ success:false, error:result.error });
-    res.json({ success:true, count:result.count });
+    if (!result.success) return res.status(400).json({ success: false, error: result.error });
+    res.json({ success: true, count: result.count });
   } catch (err) {
     console.error("[GET /api/books/count/all]", err.message);
-    res.status(500).json({ success:false, error:"Internal server error" });
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
-// GET /api/books/stats  — dashboard KPI counts for Nemco + Lexora
+// GET /api/books/stats
 router.get("/stats", async (req, res) => {
   try {
     const nemcoResult  = await BookModel.getStats();
     const { pool }     = require("../config/db");
-
     const [[{ lexoraTotal }]] = await pool.query("SELECT COUNT(*) AS lexoraTotal FROM lexora_books");
 
     if (!nemcoResult.success) {
@@ -132,16 +131,12 @@ router.get("/stats", async (req, res) => {
     }
 
     const { nemco } = nemcoResult.data;
-
     res.json({
       success: true,
       data: {
-        // Nemco
         nemcoTotal:      nemco.total,
         nemcoOutOfStock: nemco.outOfStock,
-        // Lexora
         lexoraTotal:     Number(lexoraTotal),
-        // Shared
         returned:        nemco.returned,
       },
     });
@@ -154,13 +149,13 @@ router.get("/stats", async (req, res) => {
 // GET  /api/books/lexora
 router.get("/lexora", lexoraController.getLexoraBooks);
 
-// POST /api/books/lexora — create single Lexora book
+// POST /api/books/lexora
 router.post("/lexora", lexoraController.createLexoraBook);
 
-// PUT  /api/books/lexora/:id — update Lexora book
+// PUT  /api/books/lexora/:id
 router.put("/lexora/:id", lexoraController.updateLexoraBook);
 
-// DELETE /api/books/lexora/:id — delete Lexora book
+// DELETE /api/books/lexora/:id
 router.delete("/lexora/:id", lexoraController.deleteLexoraBook);
 
 // POST /api/books/lexora-import
@@ -173,13 +168,10 @@ router.post("/check-duplicates", async (req, res) => {
     if (!Array.isArray(books) || !books.length) {
       return res.status(400).json({ success: false, error: "No books provided" });
     }
-
     const result = await BookModel.checkDuplicatesBatch(books);
-
     if (!result.success) {
       return res.status(400).json({ success: false, error: result.error });
     }
-
     res.json({
       success:             true,
       hasDuplicates:       result.hasDuplicates       || false,
@@ -196,9 +188,8 @@ router.post("/check-duplicates", async (req, res) => {
 router.post("/bulk-import", async (req, res) => {
   try {
     const { books } = req.body;
-
     if (!Array.isArray(books) || books.length === 0) {
-      return res.status(400).json({ success:false, error:"No books provided" });
+      return res.status(400).json({ success: false, error: "No books provided" });
     }
 
     const imported      = [];
@@ -210,15 +201,9 @@ router.post("/bulk-import", async (req, res) => {
       const result = await BookModel.importWithCopies(bookData);
 
       if (result.success) {
-        if (result.isNewBook) {
-          imported.push(result.data);
-        } else {
-          existingBooks.push(result.data);
-        }
+        result.isNewBook ? imported.push(result.data) : existingBooks.push(result.data);
         if (result.skippedCopies?.length) {
-          skippedCopies.push(...result.skippedCopies.map(s => ({
-            book: bookData.title, ...s
-          })));
+          skippedCopies.push(...result.skippedCopies.map((s) => ({ book: bookData.title, ...s })));
         }
       } else {
         skippedBooks.push({ title: bookData.title, error: result.error });
@@ -249,11 +234,11 @@ router.post("/bulk-import", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const result = await BookModel.getById(req.params.id);
-    if (!result.success) return res.status(404).json({ success:false, error:result.error });
-    res.json({ success:true, data:result.data });
+    if (!result.success) return res.status(404).json({ success: false, error: result.error });
+    res.json({ success: true, data: result.data });
   } catch (err) {
     console.error("[GET /api/books/:id]", err.message);
-    res.status(500).json({ success:false, error:"Internal server error" });
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
@@ -261,15 +246,15 @@ router.get("/:id", async (req, res) => {
 router.get("/:id/copies", async (req, res) => {
   try {
     const result = await BookModel.getCopies(req.params.id);
-    if (!result.success) return res.status(400).json({ success:false, error:result.error });
-    res.json({ success:true, data:result.data });
+    if (!result.success) return res.status(400).json({ success: false, error: result.error });
+    res.json({ success: true, data: result.data });
   } catch (err) {
     console.error("[GET /api/books/:id/copies]", err.message);
-    res.status(500).json({ success:false, error:"Internal server error" });
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
-// PUT  /api/books/:id
+// PUT /api/books/:id
 router.put("/:id", booksController.updateBook);
 
 // DELETE /api/books/:id

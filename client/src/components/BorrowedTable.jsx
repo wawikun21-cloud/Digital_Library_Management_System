@@ -162,7 +162,9 @@ export default function BorrowedTable({ transactions, onRowClick }) {
                     {t.borrower_name}
                   </p>
                   <p className="text-[10px] truncate max-w-[120px]" style={{ color: "var(--text-secondary)" }}>
-                    {t.borrower_course} {t.borrower_yr_level}
+                    {t.borrower_type === "faculty"
+                      ? `${t.borrower_course ? `${t.borrower_course} — ` : ""}Faculty`
+                      : [t.borrower_course, t.borrower_yr_level].filter(Boolean).join(" ")}
                   </p>
                 </td>
 

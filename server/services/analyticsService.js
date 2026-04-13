@@ -388,10 +388,9 @@ async function getHoldingsBreakdown(filters = {}) {
     const ncAnd = ncCl.length ? `AND ${ncCl.join(" AND ")}` : "";
 
     const [nemcoRows] = await pool.query(
-      `SELECT TRIM(UPPER(COALESCE(b.collection,'UNCATEGORIZED'))) AS category, COUNT(*) AS total
+      `SELECT TRIM(UPPER(COALESCE(NULLIF(TRIM(b.collection),''),'UNCATEGORIZED'))) AS category, COUNT(*) AS total
        FROM books b
        WHERE b.deleted_at IS NULL
-         AND b.collection IS NOT NULL AND TRIM(b.collection) != ''
          ${ncAnd}
        GROUP BY category ORDER BY category ASC`,
       ncPr
@@ -402,10 +401,9 @@ async function getHoldingsBreakdown(filters = {}) {
     const lxAnd = lxCl.length ? `AND ${lxCl.join(" AND ")}` : "";
 
     const [lexoraRows] = await pool.query(
-      `SELECT TRIM(UPPER(COALESCE(lb.program,'UNCATEGORIZED'))) AS category, COUNT(*) AS total
+      `SELECT TRIM(UPPER(COALESCE(NULLIF(TRIM(lb.program),''),'UNCATEGORIZED'))) AS category, COUNT(*) AS total
        FROM lexora_books lb
        WHERE lb.deleted_at IS NULL
-         AND lb.program IS NOT NULL AND TRIM(lb.program) != ''
          ${lxAnd}
        GROUP BY category ORDER BY category ASC`,
       lxPr

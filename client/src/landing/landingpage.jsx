@@ -1000,13 +1000,13 @@ export default function LandingPage() {
                        
 
                         <div className="detail-fields " style={{ marginBottom:"0.75rem" }}>
-                          {isNemco && b.accessionNumber && (
+                          {/* {isNemco && b.accessionNumber && (
 
                           <div>
                             <div className="detail-field-label">Accession No.</div>
                             <div className="detail-field-value">{b.accessionNumber}</div>
                           </div>
-                        )}
+                        )} */}
                         {isNemco && b.callNumber && (
                           <div>
                             <div className="detail-field-label">Call No.</div>

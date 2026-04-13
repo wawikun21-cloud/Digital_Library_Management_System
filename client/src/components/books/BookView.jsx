@@ -233,6 +233,7 @@ export default function BookView({ book }) {
         <Block icon={Building2} title="Publication Information" cols={2}>
           <Cell icon={MapPin}    label="Place"     value={book?.place} />
           <Cell icon={Calendar}  label="Date"      value={book?.date||book?.year} />
+          <Cell icon={Tag}       label="Collection" value={book?.collection} />
           <Cell icon={Building2} label="Publisher" value={book?.publisher} span2 />
         </Block>
 

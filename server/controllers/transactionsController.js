@@ -1,14 +1,12 @@
 // ─────────────────────────────────────────────────────────
-//  controllers/transactionsController.js  (updated)
-//  After create / return / delete mutations, broadcasts a
-//  "stats:update" event via Socket.io so the dashboard
-//  refreshes automatically on every connected client.
+//  controllers/transactionsController.js
 // ─────────────────────────────────────────────────────────
 
 const TransactionModel    = require("../models/Transaction");
 const analyticsService    = require("../services/analyticsService");
 const { broadcast }       = require("../utils/websocket");
 const { successResponse, errorResponse } = require("../utils/responseFormatter");
+const { sendBorrowConfirmation } = require("../services/emailService");
 
 /**
  * After any mutation that changes stock/borrow counts,
@@ -43,11 +41,33 @@ const TransactionsController = {
       const result = await TransactionModel.create(req.body);
       if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
 
+      const txn = result.data;
+
+      console.log(
+        "[DEBUG] Borrow email check:",
+        txn.borrower_email || "NULL",
+        "by",
+        txn.borrower_name
+      );
+
+      // Send borrow confirmation email if borrower_email was provided.
+      // Fire-and-forget — a failed email must never roll back the transaction.
+      if (txn.borrower_email) {
+        sendBorrowConfirmation(
+          txn.borrower_email,
+          txn.book_title,
+          txn.due_date,
+          txn.borrower_name
+        ).catch(err => {
+          console.error("[Email] Borrow confirmation failed:", err.message);
+        });
+      }
+
       // Broadcast new transaction event + updated KPI stats
-      broadcast("transaction:new", result.data);
+      broadcast("transaction:new", txn);
       await pushStatsUpdate();
 
-      res.status(201).json(successResponse(result.data, "Transaction created successfully", 201));
+      res.status(201).json(successResponse(txn, "Transaction created successfully", 201));
     } catch (error) {
       console.error("[TransactionsController] POST", error.message);
       res.status(500).json(errorResponse("Failed to create transaction", 500));
@@ -72,7 +92,6 @@ const TransactionsController = {
       const result = await TransactionModel.returnBook(req.params.id);
       if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
 
-      // Broadcast return event + updated KPI stats
       broadcast("transaction:returned", result.data);
       await pushStatsUpdate();
 

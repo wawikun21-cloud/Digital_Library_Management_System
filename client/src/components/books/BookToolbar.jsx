@@ -67,8 +67,8 @@ export default function BookToolbar({
             style={{ color:"var(--text-secondary)" }}
             aria-hidden="true"
           />
-          <select
-            id="genre-filter"
+          <select 
+            id="collection-filter"
             value={genreFilter}
             onChange={e => setGenreFilter(e.target.value)}
             className="pl-7 pr-3 py-2 rounded-lg text-[12.5px] font-medium border outline-none appearance-none cursor-pointer transition-colors duration-150"
@@ -80,7 +80,8 @@ export default function BookToolbar({
               fontFamily:  "inherit",
             }}
           >
-            <option value="">All Genre/   Program</option>
+            <option value="">All Collections</option>
+            <option value="__NULL__">Uncategorized</option>
             {genres.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
         </div>  

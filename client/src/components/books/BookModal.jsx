@@ -70,8 +70,11 @@ function BookViewPanel({ book, onEdit, onDelete }) {
           {effectiveStatus || "Available"}
         </div>
 
-        {book.genre && (
+{book.genre && (
           <DetailChip icon={Tag} label="Genre" value={book.genre} />
+        )}
+        {book.collection && (
+          <DetailChip icon={Tag} label="Collection" value={book.collection} />
         )}
         {book.shelf && (
           <DetailChip icon={Library} label="Shelf" value={book.shelf} />
@@ -98,7 +101,6 @@ function BookViewPanel({ book, onEdit, onDelete }) {
         </div>
         <div className="grid grid-cols-2 gap-x-6 gap-y-3">
           <InfoRow label="Call No."      value={book.callNumber} />
-          <InfoRow label="Accession No." value={book.accessionNumber || book.accession_list} />
           <InfoRow label="Edition"       value={book.edition} />
           <InfoRow label="Volume"        value={book.volume} />
         </div>
@@ -176,6 +178,7 @@ export default function BookModal({
   mode,       // "view" | "edit" | "add"
   addMode,    // "manual" | "import"
   book,
+  bookId,
   form, setForm,
   errors, setErrors,
   onSave, onUpdate, onDelete, onEdit,
@@ -306,14 +309,14 @@ export default function BookModal({
 
           {/* Edit mode */}
           {isEdit && (
-            <BookForm form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
+            <BookForm form={form} setForm={setForm} errors={errors} setErrors={setErrors} bookId={bookId} />
           )}
 
           {/* Add mode */}
           {isAdd && (
             <>
               {addMode === "manual" && (
-                <BookForm form={form} setForm={setForm} errors={errors} setErrors={setErrors} />
+                <BookForm form={form} setForm={setForm} errors={errors} setErrors={setErrors} bookId={bookId} />
               )}
               {(addMode === "import" || addMode === "lexora") && (
                 <BookAddImport

@@ -2,13 +2,14 @@
 //  routes/transactions.js
 // ─────────────────────────────────────────────────────────
 
-const express = require("express");
-const router  = express.Router();
-const TransactionModel = require("../models/Transaction");
+const express                = require("express");
+const router                 = express.Router();
+const TransactionModel       = require("../models/Transaction");
+const TransactionsController = require("../controllers/transactionsController"); // ← added
 
 // ── Static routes first ───────────────────────────────────
 
-router.get("/active",  async (req, res) => {
+router.get("/active", async (req, res) => {
   const result = await TransactionModel.getActiveBorrows();
   res.status(result.success ? 200 : 400).json(result);
 });
@@ -18,17 +19,13 @@ router.get("/overdue", async (req, res) => {
   res.status(result.success ? 200 : 400).json(result);
 });
 
-router.get("/stats",   async (req, res) => {
+router.get("/stats", async (req, res) => {
   const result = await TransactionModel.getStats();
   res.status(result.success ? 200 : 400).json(result);
 });
 
 // ── Borrower / book search ────────────────────────────────
 
-/**
- * GET /api/transactions/lookup/student/:idNumber
- * Look up a student by their ID number
- */
 router.get("/lookup/student/:idNumber", async (req, res) => {
   try {
     const result = await TransactionModel.lookupStudent(req.params.idNumber);
@@ -38,10 +35,6 @@ router.get("/lookup/student/:idNumber", async (req, res) => {
   }
 });
 
-/**
- * GET /api/transactions/lookup/faculty?q=name
- * Search faculty by name
- */
 router.get("/lookup/faculty", async (req, res) => {
   try {
     const { q = "" } = req.query;
@@ -52,10 +45,6 @@ router.get("/lookup/faculty", async (req, res) => {
   }
 });
 
-/**
- * GET /api/transactions/search/books?q=query
- * Search available books by accession number or title
- */
 router.get("/search/books", async (req, res) => {
   try {
     const { q = "" } = req.query;
@@ -66,7 +55,7 @@ router.get("/search/books", async (req, res) => {
   }
 });
 
-// ── CRUD ─────────────────────────────────────────────────
+// ── CRUD ──────────────────────────────────────────────────
 
 router.get("/", async (req, res) => {
   const result = await TransactionModel.getAll();
@@ -85,55 +74,25 @@ router.get("/:id", async (req, res) => {
 
 /**
  * POST /api/transactions
- * Create a new borrow transaction
+ * → controller: saves borrow + sends confirmation email + broadcasts WS
  */
-router.post("/", async (req, res) => {
-  try {
-    const { book_id, accession_number, borrower_name, due_date } = req.body;
-    const errors = [];
-    if (!book_id)                errors.push("Book ID is required");
-    if (!accession_number)       errors.push("Accession number required for availability tracking");
-    if (!borrower_name?.trim())  errors.push("Borrower name is required");
-    if (!due_date)               errors.push("Due date is required");
-    if (errors.length) return res.status(400).json({ success: false, error: errors.join(", ") });
-
-    const result = await TransactionModel.create(req.body);
-    res.status(result.success ? 201 : 400).json(result);
-  } catch (err) {
-    console.error("[POST /api/transactions]", err.message);
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
-});
+router.post("/", TransactionsController.createTransaction); // ← changed
 
 /**
  * PUT /api/transactions/:id
- * Update transaction details (edit)
+ * → controller: updates metadata + broadcasts WS
  */
-router.put("/:id", async (req, res) => {
-  try {
-    const result = await TransactionModel.update(req.params.id, req.body);
-    res.status(result.success ? 200 : 400).json(result);
-  } catch (err) {
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
-});
+router.put("/:id", TransactionsController.updateTransaction); // ← changed
 
 /**
  * PUT /api/transactions/:id/return
- * Mark a book as returned
+ * → controller: marks returned + broadcasts WS
  */
-router.put("/:id/return", async (req, res) => {
-  try {
-    const result = await TransactionModel.returnBook(req.params.id);
-    res.status(result.success ? 200 : 400).json(result);
-  } catch (err) {
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
-});
+router.put("/:id/return", TransactionsController.returnTransaction); // ← changed
 
 /**
  * PUT /api/transactions/:id/extend
- * Extend the due date by N days (default 1)
+ * Extend the due date by N days (no email side-effect needed)
  */
 router.put("/:id/extend", async (req, res) => {
   try {
@@ -147,27 +106,14 @@ router.put("/:id/extend", async (req, res) => {
 
 /**
  * PUT /api/transactions/:id/pay-fine
- * Mark the fine for a transaction as paid
+ * → controller: marks fine paid + broadcasts WS
  */
-router.put("/:id/pay-fine", async (req, res) => {
-  try {
-    const result = await TransactionModel.payFine(req.params.id);
-    res.status(result.success ? 200 : 400).json(result);
-  } catch (err) {
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
-});
+router.put("/:id/pay-fine", TransactionsController.payFine); // ← changed
 
 /**
  * DELETE /api/transactions/:id
+ * → controller: soft-deletes + broadcasts WS
  */
-router.delete("/:id", async (req, res) => {
-  try {
-    const result = await TransactionModel.delete(req.params.id);
-    res.status(result.success ? 200 : 404).json(result);
-  } catch (err) {
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
-});
+router.delete("/:id", TransactionsController.deleteTransaction); // ← changed
 
 module.exports = router;

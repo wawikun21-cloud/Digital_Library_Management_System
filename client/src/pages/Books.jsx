@@ -10,6 +10,7 @@ import BookToolbar      from "../components/books/BookToolbar";
 import BookStatusFilter from "../components/books/BookStatusFilter";
 import Pagination       from "../components/books/Pagination";
 import BookModal        from "../components/books/BookModal";
+import FilterBadge      from "../components/FilterBadge";
 import booksApi         from "../services/api/booksApi";
 
 function isOutOfStock(book) {
@@ -35,6 +36,7 @@ const EMPTY_FORM = {
   accessionNumber:"", callNumber:"", volume:"",
   shelf:"", pages:"", collection:"",
   sublocation:"",
+  copies: [],
   _mode:"manual",
 };
 
@@ -51,9 +53,14 @@ export default function Books() {
   const [query, setQuery]               = useState("");
   const debouncedQuery                  = useDebounce(query, 300);
   const [statusFilter, setStatusFilter] = useState("All");
+  const [collectionFilter, setCollectionFilter] = useState("");
   const [genreFilter, setGenreFilter]   = useState("");
   const [sortBy, setSortBy]             = useState("");
   const [ddOpen, setDdOpen]             = useState(false);
+  const collections = useMemo(
+    () => [...new Set(books.map(b => b.collection).filter(Boolean))].sort(),
+    [books]
+  );
   const [modal, setModal]               = useState(false);
   const [form, setForm]                 = useState(EMPTY_FORM);
   const [errors, setErrors]             = useState({});
@@ -91,18 +98,23 @@ export default function Books() {
   const filtered = useMemo(() => {
     const q = debouncedQuery.toLowerCase().trim();
     const result = books.filter(b => {
-      if (q && !["title","author","genre","isbn","publisher","accessionNumber","accession_list"]
+      if (q && !["title","author","genre","isbn","publisher","accessionNumber","accession_list","collection"]
           .some(k => b[k]?.toString().toLowerCase().includes(q))) return false;
       if (statusFilter !== "All" && statusFilter === "OutOfStock" && !isOutOfStock(b)) return false;
       if (statusFilter !== "All" && statusFilter !== "OutOfStock" && (b.display_status || b.status) !== statusFilter) return false;
-      if (genreFilter && b.genre !== genreFilter) return false;
-      return true;
-    });
+    if (genreFilter && b.genre !== genreFilter) return false;
+    if (collectionFilter === "__NULL__") {
+      return !b.collection || b.collection.trim() === "";
+    } else if (collectionFilter && b.collection !== collectionFilter) {
+      return false;
+    }
+    return true;
+  });
     if (sortBy === "title")  result.sort((a,b) => a.title.localeCompare(b.title));
     if (sortBy === "author") result.sort((a,b) => (a.author||"").localeCompare(b.author||""));
-    if (sortBy === "year")   result.sort((a,b) => b.id - a.id);
+    if (sortBy === "year")   result.sort((a,b) => (b.year || 0) - (a.year || 0));
     return result;
-  }, [books, debouncedQuery, statusFilter, genreFilter, sortBy]);
+}, [books, debouncedQuery, statusFilter, genreFilter, collectionFilter, sortBy]);
 
   const paginatedBooks = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -111,7 +123,7 @@ export default function Books() {
 
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
 
-  useEffect(() => { setCurrentPage(1); }, [debouncedQuery, statusFilter, genreFilter, sortBy]);
+  useEffect(() => { setCurrentPage(1); }, [debouncedQuery, statusFilter, genreFilter, collectionFilter, sortBy]);
 
   useEffect(() => {
     document.body.style.overflow = modal ? "hidden" : "";
@@ -129,17 +141,46 @@ export default function Books() {
     [books]
   );
 
-  const openModal = useCallback((mode = "manual") => {
+  const openModal = useCallback(async (mode = "manual") => {
     setDdOpen(false);
-    setForm({ ...EMPTY_FORM, _mode: mode });
+    if (modalMode === "edit" && selectedBook) {
+      try {
+        const copyResult = await booksApi.fetchBookCopies(selectedBook.id);
+        if (copyResult.success) {
+          const bookData = { ...EMPTY_FORM, ...selectedBook, _mode: mode, copies: copyResult.data || [] };
+          setForm(bookData);
+        } else {
+          setForm({ ...EMPTY_FORM, ...selectedBook, _mode: mode, copies: [] });
+        }
+      } catch {
+        setForm({ ...EMPTY_FORM, ...selectedBook, _mode: mode, copies: [] });
+      }
+    } else {
+      setForm({ ...EMPTY_FORM, _mode: mode });
+    }
     setErrors({});
     setModal(true);
-    setModalMode("add");
-  }, []);
+    setModalMode(modalMode === "edit" ? "edit" : "add");
+  }, [selectedBook, modalMode]);
 
   function validate() {
     const e = {};
     if (!form.title?.trim()) e.title = "Title is required";
+
+    // ── Accession number uniqueness (within this form) ──────────────────────
+    const copies = Array.isArray(form.copies) ? form.copies : [];
+    const seen = {};
+    copies.forEach((c, i) => {
+      const val = c.accession_number?.trim().toLowerCase();
+      if (!val) return;
+      if (seen[val] !== undefined) {
+        e[`copies[${seen[val]}].accession_number`] = "Duplicate accession number";
+        e[`copies[${i}].accession_number`]         = "Duplicate accession number";
+      } else {
+        seen[val] = i;
+      }
+    });
+
     return e;
   }
 
@@ -147,20 +188,12 @@ const handleSubmit = useCallback(async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     try {
-      const quantity = Number(form.quantity) || null;
-      const year     = (form.date || form.year) ? Number(form.date || form.year) || null : null;
-      const rawAuthor = form.authors || form.author || "";
-      const author    = rawAuthor.trim() || null;
-
-      const result = await booksApi.createBook({
-        ...toApiPayload(form),
-        author, year, quantity,
-        sublocation: form.sublocation?.trim() || null,
-      });
+      const result = await booksApi.createBook(form);
       if (result.success) {
         setBooks(p => [result.data, ...p]);
         setModal(false);
         showToast("Book added successfully!", "success");
+        fetchBooks();
       } else {
         showToast(result.error || "Failed to add book", "error");
       }
@@ -188,10 +221,19 @@ const handleSubmit = useCallback(async () => {
     setModal(true);
   }
 
-  function handleEdit(book) {
+  async function handleEdit(book) {
     setSelectedBook(book);
     setModalMode("edit");
-    setForm({ ...EMPTY_FORM, ...book, _mode:"manual" });
+    try {
+      const copyResult = await booksApi.fetchBookCopies(book.id);
+      if (copyResult.success) {
+        setForm({ ...EMPTY_FORM, ...book, _mode:"manual", copies: copyResult.data || [] });
+      } else {
+        setForm({ ...EMPTY_FORM, ...book, _mode:"manual", copies: [] });
+      }
+    } catch {
+      setForm({ ...EMPTY_FORM, ...book, _mode:"manual", copies: [] });
+    }
     setErrors({});
     setModal(true);
   }
@@ -235,19 +277,12 @@ const handleSubmit = useCallback(async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     try {
-      const quantity = form.quantity !== "" ? Number(form.quantity) : null;
-      const year     = form.date || form.year ? Number(form.date || form.year) || null : null;
-      const author   = form.authors || form.author || "";
-
-      const result = await booksApi.updateBook(selectedBook.id, {
-        ...toApiPayload(form),
-        author, year, quantity,
-        sublocation: form.sublocation?.trim() || null,
-      });
+      const result = await booksApi.updateBook(selectedBook.id, form);
       if (result.success) {
         setBooks(books.map(b => b.id === selectedBook.id ? result.data : b));
         setModal(false);
         showToast("Book updated successfully!", "success");
+        fetchBooks();
       } else {
         showToast(result.error || "Failed to update book", "error");
       }
@@ -268,18 +303,33 @@ const handleSubmit = useCallback(async () => {
     <div className="flex flex-col gap-5">
       <BookToolbar
         query={query}           setQuery={setQuery}
-        genreFilter={genreFilter} setGenreFilter={setGenreFilter}
-        genres={genres}
+        genreFilter={collectionFilter} setGenreFilter={setCollectionFilter}
+        genres={collections}
         sortBy={sortBy}         setSortBy={setSortBy}
         ddOpen={ddOpen}         setDdOpen={setDdOpen}
         openModal={openModal}
         importModes={["manual", "import"]}
       />
 
-      <BookStatusFilter
-        statusFilter={statusFilter} setStatusFilter={setStatusFilter}
-        booksCount={books.length}   filteredCount={filtered.length}
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <BookStatusFilter
+          statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+          booksCount={books.length}   filteredCount={filtered.length}
+        />
+        {collectionFilter && collectionFilter !== "__NULL__" && (
+          <FilterBadge label={collectionFilter === "__NULL__" ? "Uncategorized" : collectionFilter} onClear={() => setCollectionFilter("")} />
+        )}
+        {collectionFilter === "__NULL__" && (
+          <FilterBadge label="Uncategorized" onClear={() => setCollectionFilter("")} />
+        )}
+        {genreFilter && (
+          <FilterBadge label={genreFilter} onClear={() => setGenreFilter("")} placeholder="Genre" />
+        )}
+        <span className="ml-auto text-[12px]" style={{ color: "var(--text-muted)" }}>
+          {filtered.length} {filtered.length === 1 ? "book" : "books"}
+          { (query || statusFilter !== "All" || collectionFilter || genreFilter) ? " found" : " total"}
+        </span>
+      </div>
 
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 bg-surface rounded-2xl border border-dashed border-border">
@@ -305,6 +355,7 @@ const handleSubmit = useCallback(async () => {
         isOpen={modal}         onClose={handleCloseModal}
         mode={modalMode}       addMode={form._mode}
         book={selectedBook}
+        bookId={selectedBook?.id ?? null}
         form={form}            setForm={setForm}
         errors={errors}        setErrors={setErrors}
         onSave={handleSubmit}  onUpdate={handleUpdate}

@@ -290,11 +290,13 @@ const TransactionModel = {
         return { success: false, error: "Book is not available (out of stock)" };
       }
 
-      // 4. Enforce max 2 active borrows per borrower
-      const countResult = await this.getActiveBorrowCount(borrower_id_number, borrower_name);
-      if (countResult.success && countResult.count >= 2) {
-        await conn.rollback();
-        return { success: false, error: "Borrower already has 2 books borrowed (maximum reached)" };
+      // 4. Enforce max 2 active borrows — students only, faculty are unlimited
+      if ((borrower_type || "student") === "student") {
+        const countResult = await this.getActiveBorrowCount(borrower_id_number, borrower_name);
+        if (countResult.success && countResult.count >= 2) {
+          await conn.rollback();
+          return { success: false, error: "Borrower already has 2 books borrowed (maximum reached)" };
+        }
       }
 
       // 5. Mark specific copy as Borrowed
