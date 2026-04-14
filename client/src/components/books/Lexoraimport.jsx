@@ -2,30 +2,24 @@ import { useState, useRef, useCallback, forwardRef, useImperativeHandle } from "
 import {
   FileSpreadsheet, Upload, AlertCircle,
   CheckCircle2, XCircle, Loader2, ChevronRight, X,
+  GitMerge, BookCopy, AlertTriangle,
 } from "lucide-react";
 // xlsx loaded on-demand via dynamic import inside parseLexoraExcel()
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
-/* ── Parse Lexora multi-sheet Excel ────────────────────────────
-   - Sheet name  = program/category (e.g. "BSIT", "FICTION NOVEL")
-   - Header row  = auto-detected by searching for "Title of Book"
-   - Columns     : Subject/Course Title | Title of Book | Source |
-                   Author | Year of Publication | Resource Type | Format
-   - Section rows (e.g. "First Year First Sem") have no Title of Book
-──────────────────────────────────────────────────────────────── */
+/* ── Parse Lexora multi-sheet Excel ────────────────────────────────────── */
 async function parseLexoraExcel(buffer) {
   const XLSX = await import("xlsx");
-  const wb       = XLSX.read(buffer, { type:"array", cellDates:true });
-  const seen     = new Map(); // title+author → global dedup
-  const sheets   = [];        // [{ name, books }]
-  const allBooks = [];         // flat list
+  const wb       = XLSX.read(buffer, { type: "array", cellDates: true });
+  const seen     = new Map();
+  const sheets   = [];
+  const allBooks = [];
 
   for (const sheetName of wb.SheetNames) {
     const ws   = wb.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:null });
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 
-    // Auto-detect header row
     let headerRowIdx = -1;
     for (let i = 0; i < rows.length; i++) {
       if (rows[i]?.some(v => v?.toString().toLowerCase().includes("title of book"))) {
@@ -35,7 +29,6 @@ async function parseLexoraExcel(buffer) {
     }
     if (headerRowIdx === -1) continue;
 
-    // Map column positions
     const colIdx = {};
     rows[headerRowIdx].forEach((cell, i) => {
       if (!cell) return;
@@ -73,9 +66,7 @@ async function parseLexoraExcel(buffer) {
       if (yearRaw instanceof Date) {
         year = yearRaw.getFullYear();
       } else if (yearRaw != null && yearRaw !== "") {
-        const str = String(yearRaw).trim();
-        // Handle full date strings like "10 Feb, 2021" or "Feb 2021" — extract 4-digit year
-        const match = str.match(/\b(19|20)\d{2}\b/);
+        const match = String(yearRaw).trim().match(/\b(19|20)\d{2}\b/);
         if (match) year = parseInt(match[0]);
       }
 
@@ -91,7 +82,7 @@ async function parseLexoraExcel(buffer) {
         ? (row[colIdx.subject]?.toString().replace(/[\r\n]+/g, " ").trim() || null)
         : null;
 
-      // Global dedup: same title+author across sheets → skip
+      // Global in-file dedup: same title+author across sheets → keep first
       const key = `${title.toLowerCase()}||${(author || "").toLowerCase()}`;
       if (seen.has(key)) continue;
       seen.set(key, allBooks.length);
@@ -99,15 +90,14 @@ async function parseLexoraExcel(buffer) {
       const book = {
         title,
         author,
-        authors:          author,
+        authors:        author,
         source,
         year,
-        resource_type:    resourceType,   // snake_case matches DB column
+        resource_type:  resourceType,
         format,
-        subject_course:   subjectCourse,  // DB column: subject_course
-        program:          sheetName,
-        collection:       sheetName,
-        // Fields not in Lexora Excel — left null for DB compatibility
+        subject_course: subjectCourse,
+        program:        sheetName,
+        collection:     sheetName,
         callNumber: null, isbn: null, publisher: null, pages: null,
         volume: null, shelf: null, place: null, edition: null,
         materialType: resourceType || null, genre: null, issn: null,
@@ -126,7 +116,7 @@ async function parseLexoraExcel(buffer) {
   return { sheets, books: allBooks };
 }
 
-/* ── Step indicator ─────────────────────────────────────────── */
+/* ── Step indicator ──────────────────────────────────────────────────────── */
 function Step({ n, label, active, done }) {
   return (
     <div className="flex items-center gap-1.5"
@@ -144,18 +134,181 @@ function Step({ n, label, active, done }) {
   );
 }
 
-/* ══ LexoraImport — for LexoraBooks.jsx only ════════════════ */
+/* ══════════════════════════════════════════════════════════════════════════
+   DuplicateWarningModal
+   ──────────────────────
+   Shown when the pre-flight DB check finds existing records that match
+   books about to be imported (same title + author).
+
+   Props:
+     duplicates  – array from POST /api/books/lexora-check-duplicates
+                   [{ title, author, incomingProgram, existingProgram, existingId }]
+     totalBooks  – total books about to be imported
+     onProceed   – () => void   (merge & continue)
+     onCancel    – () => void   (abort, stay on Step 2)
+══════════════════════════════════════════════════════════════════════════ */
+function DuplicateWarningModal({ duplicates, totalBooks, onProceed, onCancel }) {
+  if (!duplicates || duplicates.length === 0) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(3px)" }}
+    >
+      <div
+        className="relative w-full max-w-lg rounded-2xl flex flex-col overflow-hidden"
+        style={{
+          background:  "var(--bg-surface, #fff)",
+          border:      "1.5px solid rgba(184,122,0,0.3)",
+          boxShadow:   "0 20px 60px rgba(0,0,0,0.18)",
+          maxHeight:   "90vh",
+        }}
+      >
+        {/* ── Header ── */}
+        <div className="flex items-start gap-3 px-5 py-4"
+             style={{ borderBottom: "1.5px solid var(--border-light, #f0e9d8)" }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+               style={{ background: "rgba(184,122,0,0.1)", border: "1.5px solid rgba(184,122,0,0.25)" }}>
+            <GitMerge size={18} style={{ color: "var(--accent-amber, #b87a00)" }} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-black" style={{ color: "var(--text-primary)" }}>
+              Duplicate Books Detected
+            </p>
+            <p className="text-[12px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
+              <strong>{duplicates.length}</strong> title{duplicates.length !== 1 ? "s" : ""} in
+              this import already exist in the database with the same{" "}
+              <span className="font-semibold">Title + Author</span>.
+              Proceeding will update those existing records.
+            </p>
+          </div>
+          <button onClick={onCancel}
+                  className="p-1.5 rounded-lg transition-colors hover:bg-red-50"
+                  style={{ color: "var(--text-muted)" }} aria-label="Cancel">
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* ── Duplicate list ── */}
+        <div className="flex flex-col overflow-y-auto px-5 py-3" style={{ maxHeight: "320px" }}>
+          {/* Column headers */}
+          <div className="grid gap-2 px-3 py-1.5 rounded-lg mb-1 text-[10px] font-black uppercase tracking-widest"
+               style={{
+                 gridTemplateColumns: "1fr 1fr 1fr",
+                 background: "var(--bg-subtle, #faf7f0)",
+                 color: "var(--text-muted)",
+               }}>
+            <span>Title</span>
+            <span>Author</span>
+            <span>Already in</span>
+          </div>
+
+          {duplicates.map((dup, i) => (
+            <div key={i}
+                 className="grid gap-2 px-3 py-2.5"
+                 style={{
+                   gridTemplateColumns: "1fr 1fr 1fr",
+                   background: i % 2 === 0 ? "transparent" : "rgba(184,122,0,0.03)",
+                   borderBottom: "1px solid var(--border-light, #f0e9d8)",
+                 }}>
+              <p className="text-[11.5px] font-semibold truncate min-w-0"
+                 style={{ color: "var(--text-primary)" }} title={dup.title}>
+                {dup.title}
+              </p>
+              <p className="text-[11px] truncate min-w-0"
+                 style={{ color: "var(--text-secondary)" }} title={dup.author || "—"}>
+                {dup.author || <span style={{ color: "var(--text-muted)" }}>—</span>}
+              </p>
+              <div className="flex items-center gap-1 min-w-0">
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold truncate"
+                      style={{
+                        background: "rgba(184,122,0,0.1)",
+                        color: "var(--accent-amber, #b87a00)",
+                        border: "1px solid rgba(184,122,0,0.2)",
+                      }}
+                      title={dup.existingProgram || "—"}>
+                  <BookCopy size={9} style={{ flexShrink: 0 }} />
+                  {dup.existingProgram || "—"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Info callout ── */}
+        <div className="px-5 pb-1 pt-2">
+          <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl text-[11px]"
+               style={{
+                 background: "rgba(50,102,127,0.06)",
+                 border: "1.5px solid rgba(50,102,127,0.18)",
+                 color: "#32667F",
+               }}>
+            <AlertTriangle size={12} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>
+              Clicking <strong>Proceed to Import</strong> will <strong>update</strong> these
+              existing records with the latest data from the Excel file.
+              All other books will be added as new entries.
+            </span>
+          </div>
+        </div>
+
+        {/* ── Action buttons ── */}
+        <div className="flex items-center justify-between gap-3 px-5 py-4"
+             style={{ borderTop: "1.5px solid var(--border-light, #f0e9d8)" }}>
+          <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg"
+                style={{
+                  background: "var(--bg-subtle, #faf7f0)",
+                  color: "var(--text-secondary)",
+                  border: "1px solid var(--border-light, #f0e9d8)",
+                }}>
+            {totalBooks} total · {duplicates.length} will be updated
+          </span>
+          <div className="flex items-center gap-2">
+            <button onClick={onCancel}
+                    className="px-4 py-2 rounded-xl text-[12px] font-bold transition-all duration-150 hover:opacity-80"
+                    style={{
+                      background: "var(--bg-subtle, #faf7f0)",
+                      border: "1.5px solid var(--border-light, #f0e9d8)",
+                      color: "var(--text-secondary)",
+                    }}>
+              Cancel
+            </button>
+            <button onClick={onProceed}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-[12px] font-bold transition-all duration-150 hover:opacity-90 active:scale-[0.98]"
+                    style={{
+                      background: "var(--accent-amber, #b87a00)",
+                      border: "1.5px solid rgba(184,122,0,0.4)",
+                      color: "#fff",
+                      boxShadow: "0 2px 8px rgba(184,122,0,0.25)",
+                    }}>
+              <GitMerge size={13} />
+              Proceed to Import
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══ LexoraImport ════════════════════════════════════════════════════════ */
 const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStepChange }, ref) {
-  const fileRef                           = useRef(null);
-  const [step, setStep]                   = useState(1);
-  const [fileName, setFileName]           = useState("");
-  const [parsed, setParsed]               = useState([]);
-  const [parsedSheets, setParsedSheets]   = useState([]);
+  const fileRef                             = useRef(null);
+  const [step, setStep]                     = useState(1);
+  const [fileName, setFileName]             = useState("");
+  const [parsed, setParsed]                 = useState([]);
+  const [parsedSheets, setParsedSheets]     = useState([]);
   const [selectedSheets, setSelectedSheets] = useState([]);
-  const [progress, setProgress]           = useState({ current:0, total:0, title:"" });
-  const [results, setResults]             = useState(null);
-  const [dragOver, setDragOver]           = useState(false);
-  const [parseError, setParseError]       = useState("");
+  const [progress, setProgress]             = useState({ current: 0, total: 0, title: "" });
+  const [results, setResults]               = useState(null);
+  const [dragOver, setDragOver]             = useState(false);
+  const [parseError, setParseError]         = useState("");
+
+  // ── Duplicate modal state ──────────────────────────────────────────────
+  const [dupModal, setDupModal]       = useState(false);
+  const [dupList, setDupList]         = useState([]);
+  const [dupChecking, setDupChecking] = useState(false); // shows spinner on the import button
+  const [pendingBooks, setPendingBooks] = useState([]);
 
   const setStepAndNotify = useCallback((s, books) => {
     setStep(s);
@@ -180,7 +333,7 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
           return;
         }
         setParsedSheets(result.sheets);
-        setSelectedSheets(result.sheets.map(s => s.name)); // select all by default
+        setSelectedSheets(result.sheets.map(s => s.name));
         setParsed(result.books);
         setStepAndNotify(2, result.books);
       } catch (err) {
@@ -195,7 +348,31 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
   const onDragOver    = (e) => { e.preventDefault(); setDragOver(true); };
   const onDragLeave   = ()  => setDragOver(false);
 
-  const startImport = async () => {
+  /**
+   * startImport
+   * ─────────────────────────────────────────────────────────────────────
+   * WHY the duplicate check must be against the DB, not in-memory:
+   *
+   * parseLexoraExcel() already deduplicates the parsed list using a `seen`
+   * Map, so by the time books land in parsedSheets[].books every entry is
+   * already unique within the file. Running detectInFileDuplicates() on
+   * selectedBooks will ALWAYS return an empty array — that was the bug in
+   * the previous version.
+   *
+   * The only way to find real duplicates is to ask the server which of
+   * these title+author pairs already exist in the `lexora_books` table.
+   *
+   * Flow:
+   *  1. Build booksToImport from selected sheets (capped at 1,000).
+   *  2. POST /api/books/lexora-check-duplicates with [{ title, author, program }].
+   *     → Server queries DB, returns matched rows.
+   *  3a. Matches found → show DuplicateWarningModal, wait for user choice.
+   *  3b. No matches   → call runImport() immediately.
+   *
+   * If the check endpoint is unreachable we fall through and import anyway
+   * so a network hiccup never blocks the user completely.
+   */
+  const startImport = useCallback(async () => {
     const booksToImport = parsedSheets
       .filter(s => selectedSheets.includes(s.name))
       .flatMap(s => s.books)
@@ -205,8 +382,62 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
       setParseError("No sheet selected. Please select at least one program to import.");
       return;
     }
-    await runImport(booksToImport);
-  };
+
+    setDupChecking(true);
+    try {
+      const res = await fetch(`${API_BASE}/books/lexora-check-duplicates`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          // Only send the fields needed for the DB check — keeps the payload small
+          books: booksToImport.map(b => ({
+            title:   b.title,
+            author:  b.author  || null,
+            program: b.program || null,
+          })),
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        // Check endpoint failed — log and fall through to import
+        console.warn("[LexoraImport] duplicate-check failed, proceeding without it:", data);
+        await runImport(booksToImport);
+        return;
+      }
+
+      const duplicates = data.duplicates ?? [];
+
+      if (duplicates.length > 0) {
+        // Let the user decide whether to proceed
+        setPendingBooks(booksToImport);
+        setDupList(duplicates);
+        setDupModal(true);
+      } else {
+        // No duplicates in the DB → import straight away
+        await runImport(booksToImport);
+      }
+    } catch (err) {
+      // Network error — fall through
+      console.warn("[LexoraImport] duplicate-check network error, proceeding:", err.message);
+      await runImport(booksToImport);
+    } finally {
+      setDupChecking(false);
+    }
+  }, [parsedSheets, selectedSheets]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** User clicks "Proceed to Import" inside the modal */
+  const handleDupProceed = useCallback(async () => {
+    setDupModal(false);
+    await runImport(pendingBooks);
+  }, [pendingBooks]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** User clicks "Cancel" inside the modal → stays on Step 2 */
+  const handleDupCancel = useCallback(() => {
+    setDupModal(false);
+    setPendingBooks([]);
+    setDupList([]);
+  }, []);
 
   const runImport = async (booksToImport) => {
     setStepAndNotify(3);
@@ -224,7 +455,6 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
       const chunk    = booksToImport.slice(offset, offset + CHUNK_SIZE);
       const chunkEnd = Math.min(offset + CHUNK_SIZE, total);
 
-      // Show first title of this chunk while in-flight
       setProgress({ current: offset, total, title: chunk[0]?.title || "" });
 
       try {
@@ -247,7 +477,6 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
         chunk.forEach(b => allFailed.push({ title: b.title, error: err.message }));
       }
 
-      // Tick progress after chunk completes
       setProgress({ current: chunkEnd, total, title: chunk[chunk.length - 1]?.title || "" });
     }
 
@@ -268,8 +497,9 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
   const reset = () => {
     setStepAndNotify(1);
     setFileName(""); setParsed([]); setParsedSheets([]); setSelectedSheets([]);
-    setProgress({ current:0, total:0, title:"" });
+    setProgress({ current: 0, total: 0, title: "" });
     setResults(null); setParseError("");
+    setDupModal(false); setPendingBooks([]); setDupList([]); setDupChecking(false);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -277,342 +507,339 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
 
   const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
 
-  // Books from currently selected sheets (for preview)
   const selectedBooks = parsedSheets
     .filter(s => selectedSheets.includes(s.name))
     .flatMap(s => s.books);
 
   return (
-    <div className="flex flex-col gap-4">
-
-      {/* Step bar */}
-      <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
-           style={{ background:"var(--bg-subtle)", border:"1px solid var(--border-light)" }}>
-        <Step n="1" label="Upload"  active={step===1} done={step>1} />
-        <ChevronRight size={11} style={{ color:"var(--text-muted)", opacity:0.4 }} />
-        <Step n="2" label="Preview" active={step===2} done={step>2} />
-        <ChevronRight size={11} style={{ color:"var(--text-muted)", opacity:0.4 }} />
-        <Step n="3" label="Import"  active={step===3} done={step>3} />
-        <ChevronRight size={11} style={{ color:"var(--text-muted)", opacity:0.4 }} />
-        <Step n="4" label="Done"    active={step===4} done={false} />
-      </div>
-
-      {/* ══ STEP 1: Upload ══ */}
-      {step === 1 && (
-        <>
-          <div className="flex items-start gap-3 p-3 rounded-xl"
-               style={{ background:"rgba(184,122,0,0.07)", border:"1.5px solid rgba(184,122,0,0.18)" }}>
-            <FileSpreadsheet size={15} style={{ color:"var(--accent-amber)", flexShrink:0, marginTop:2 }} />
-            <div>
-              <p className="text-[12px] font-semibold" style={{ color:"var(--text-primary)" }}>
-                Import Lexora E-Library Excel
-              </p>
-              <p className="text-[11px] mt-0.5" style={{ color:"var(--text-secondary)" }}>
-                Multi-sheet format — each sheet is a program (e.g. BSIT, FICTION NOVEL).
-              </p>
-              <p className="text-[11px] mt-0.5" style={{ color:"var(--text-secondary)" }}>
-                Columns:{" "}
-                <span className="font-mono text-[10px]">
-                  Subject/Course Title | Title of Book | Source | Author | Year | Resource Type | Format
-                </span>
-              </p>
-            </div>
-          </div>
-
-          <div
-            className="flex flex-col items-center justify-center gap-3 p-8 rounded-xl border-2 border-dashed transition-all duration-200 cursor-pointer"
-            style={{
-              background:  dragOver ? "rgba(184,122,0,0.05)" : "var(--bg-subtle)",
-              borderColor: dragOver ? "var(--accent-amber)"  : "var(--border)",
-            }}
-            onClick={() => fileRef.current?.click()}
-            onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave}
-          >
-            <div className="w-13 h-13 rounded-full flex items-center justify-center"
-                 style={{ background:"rgba(184,122,0,0.1)" }}>
-              <Upload size={26} style={{ color:"var(--accent-amber)" }} />
-            </div>
-            <div className="text-center">
-              <p className="text-[13px] font-semibold" style={{ color:"var(--text-primary)" }}>
-                {dragOver ? "Release to upload" : "Drop your Lexora Excel file here"}
-              </p>
-              <p className="text-[11px] mt-0.5" style={{ color:"var(--text-secondary)" }}>or click to browse</p>
-            </div>
-            <p className="text-[10px]" style={{ color:"var(--text-muted)" }}>Supported: .xlsx, .xls</p>
-          </div>
-          <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={onInputChange} />
-
-          {parseError && (
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-[12px]"
-                 style={{ background:"rgba(220,38,38,0.07)", border:"1.5px solid rgba(220,38,38,0.2)", color:"#b91c1c" }}>
-              <XCircle size={13} /> {parseError}
-            </div>
-          )}
-        </>
+    <>
+      {/* ══ Duplicate Warning Modal ══ */}
+      {dupModal && (
+        <DuplicateWarningModal
+          duplicates={dupList}
+          totalBooks={pendingBooks.length}
+          onProceed={handleDupProceed}
+          onCancel={handleDupCancel}
+        />
       )}
 
-      {/* ══ STEP 2: Preview ══ */}
-      {step === 2 && (
-        <>
-          <div className="flex items-center justify-between px-3 py-2 rounded-xl"
-               style={{ background:"rgba(34,197,94,0.07)", border:"1.5px solid rgba(34,197,94,0.2)" }}>
-            <div className="flex items-center gap-2 text-[12px] font-semibold" style={{ color:"#15803d" }}>
-              <CheckCircle2 size={13} />
-              <span className="font-mono">{fileName}</span>
-              <span style={{ color:"var(--text-muted)" }}>— {parsed.length} unique titles found</span>
-            </div>
-            <button onClick={reset} className="p-1 rounded-lg hover:bg-red-50 transition-colors">
-              <X size={13} style={{ color:"var(--text-muted)" }} />
-            </button>
-          </div>
+      <div className="flex flex-col gap-4">
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold"
-                  style={{ background:"rgba(184,122,0,0.1)", color:"var(--accent-amber)" }}>
-              {parsed.length} titles
-            </span>
-            <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold"
-                  style={{ background:"rgba(34,197,94,0.1)", color:"#15803d" }}>
-              {[...new Set(parsed.map(b => b.program))].length} programs / categories
-            </span>
-          </div>
+        {/* Step bar */}
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
+             style={{ background: "var(--bg-subtle)", border: "1px solid var(--border-light)" }}>
+          <Step n="1" label="Upload"  active={step === 1} done={step > 1} />
+          <ChevronRight size={11} style={{ color: "var(--text-muted)", opacity: 0.4 }} />
+          <Step n="2" label="Preview" active={step === 2} done={step > 2} />
+          <ChevronRight size={11} style={{ color: "var(--text-muted)", opacity: 0.4 }} />
+          <Step n="3" label="Import"  active={step === 3} done={step > 3} />
+          <ChevronRight size={11} style={{ color: "var(--text-muted)", opacity: 0.4 }} />
+          <Step n="4" label="Done"    active={step === 4} done={false} />
+        </div>
 
-          {/* Sheet selector */}
-          {parsedSheets.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-black uppercase tracking-widest" style={{ color:"var(--text-secondary)" }}>
-                  Select Programs / Sheets to Import
+        {/* ══ STEP 1: Upload ══ */}
+        {step === 1 && (
+          <>
+            <div className="flex items-start gap-3 p-3 rounded-xl"
+                 style={{ background: "rgba(184,122,0,0.07)", border: "1.5px solid rgba(184,122,0,0.18)" }}>
+              <FileSpreadsheet size={15} style={{ color: "var(--accent-amber)", flexShrink: 0, marginTop: 2 }} />
+              <div>
+                <p className="text-[12px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                  Import Lexora E-Library Excel
                 </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setSelectedSheets(parsedSheets.map(s => s.name))}
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-md"
-                    style={{ color:"var(--accent-amber)", background:"rgba(184,122,0,0.08)", border:"1px solid rgba(184,122,0,0.2)" }}
-                  >
-                    Select All
-                  </button>
-                  <button
-                    onClick={() => setSelectedSheets([])}
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-md"
-                    style={{ color:"var(--text-secondary)", background:"var(--bg-subtle)", border:"1px solid var(--border-light)" }}
-                  >
-                    Clear All
-                  </button>
+                <p className="text-[11px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                  Multi-sheet format — each sheet is a program (e.g. BSIT, FICTION NOVEL).
+                </p>
+                <p className="text-[11px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                  Columns:{" "}
+                  <span className="font-mono text-[10px]">
+                    Subject/Course Title | Title of Book | Source | Author | Year | Resource Type | Format
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div
+              className="flex flex-col items-center justify-center gap-3 p-8 rounded-xl border-2 border-dashed transition-all duration-200 cursor-pointer"
+              style={{
+                background:  dragOver ? "rgba(184,122,0,0.05)" : "var(--bg-subtle)",
+                borderColor: dragOver ? "var(--accent-amber)"  : "var(--border)",
+              }}
+              onClick={() => fileRef.current?.click()}
+              onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave}
+            >
+              <div className="w-13 h-13 rounded-full flex items-center justify-center"
+                   style={{ background: "rgba(184,122,0,0.1)" }}>
+                <Upload size={26} style={{ color: "var(--accent-amber)" }} />
+              </div>
+              <div className="text-center">
+                <p className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {dragOver ? "Release to upload" : "Drop your Lexora Excel file here"}
+                </p>
+                <p className="text-[11px] mt-0.5" style={{ color: "var(--text-secondary)" }}>or click to browse</p>
+              </div>
+              <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Supported: .xlsx, .xls</p>
+            </div>
+            <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={onInputChange} />
+
+            {parseError && (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-[12px]"
+                   style={{ background: "rgba(220,38,38,0.07)", border: "1.5px solid rgba(220,38,38,0.2)", color: "#b91c1c" }}>
+                <XCircle size={13} /> {parseError}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ══ STEP 2: Preview ══ */}
+        {step === 2 && (
+          <>
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl"
+                 style={{ background: "rgba(34,197,94,0.07)", border: "1.5px solid rgba(34,197,94,0.2)" }}>
+              <div className="flex items-center gap-2 text-[12px] font-semibold" style={{ color: "#15803d" }}>
+                <CheckCircle2 size={13} />
+                <span className="font-mono">{fileName}</span>
+                <span style={{ color: "var(--text-muted)" }}>— {parsed.length} unique titles found</span>
+              </div>
+              <button onClick={reset} className="p-1 rounded-lg hover:bg-red-50 transition-colors">
+                <X size={13} style={{ color: "var(--text-muted)" }} />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold"
+                    style={{ background: "rgba(184,122,0,0.1)", color: "var(--accent-amber)" }}>
+                {parsed.length} titles
+              </span>
+              <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold"
+                    style={{ background: "rgba(34,197,94,0.1)", color: "#15803d" }}>
+                {[...new Set(parsed.map(b => b.program))].length} programs / categories
+              </span>
+            </div>
+
+            {/* Sheet selector */}
+            {parsedSheets.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: "var(--text-secondary)" }}>
+                    Select Programs / Sheets to Import
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setSelectedSheets(parsedSheets.map(s => s.name))}
+                            className="text-[10px] font-bold px-2 py-0.5 rounded-md"
+                            style={{ color: "var(--accent-amber)", background: "rgba(184,122,0,0.08)", border: "1px solid rgba(184,122,0,0.2)" }}>
+                      Select All
+                    </button>
+                    <button onClick={() => setSelectedSheets([])}
+                            className="text-[10px] font-bold px-2 py-0.5 rounded-md"
+                            style={{ color: "var(--text-secondary)", background: "var(--bg-subtle)", border: "1px solid var(--border-light)" }}>
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 max-h-[160px] overflow-y-auto pr-1">
+                  {parsedSheets.map(sheet => {
+                    const checked = selectedSheets.includes(sheet.name);
+                    return (
+                      <label key={sheet.name}
+                             className="flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-colors"
+                             style={{
+                               background: checked ? "rgba(184,122,0,0.08)" : "var(--bg-subtle)",
+                               border: `1.5px solid ${checked ? "rgba(184,122,0,0.3)" : "var(--border-light)"}`,
+                             }}>
+                        <input type="checkbox" checked={checked}
+                               onChange={() => setSelectedSheets(prev =>
+                                 checked ? prev.filter(n => n !== sheet.name) : [...prev, sheet.name]
+                               )}
+                               className="accent-amber-500 w-3.5 h-3.5 shrink-0" />
+                        <span className="text-[11px] font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+                          {sheet.name}
+                        </span>
+                        <span className="ml-auto text-[10px] font-bold shrink-0"
+                              style={{ color: checked ? "var(--accent-amber)" : "var(--text-muted)" }}>
+                          {sheet.books.length}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                {/* Selected count */}
+                {(() => {
+                  const total  = selectedBooks.length;
+                  const capped = Math.min(total, 1000);
+                  return total > 0 ? (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px]"
+                         style={{ background: "rgba(34,197,94,0.07)", border: "1.5px solid rgba(34,197,94,0.2)", color: "#15803d" }}>
+                      <CheckCircle2 size={12} style={{ flexShrink: 0 }} />
+                      <span>
+                        <strong>{capped}</strong> title{capped !== 1 ? "s" : ""} selected for import
+                        {total > 1000 && (
+                          <span className="ml-1" style={{ color: "#b45309" }}>
+                            (capped at 1,000 — {total - 1000} will be excluded)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px]"
+                         style={{ background: "rgba(220,38,38,0.07)", border: "1.5px solid rgba(220,38,38,0.2)", color: "#b91c1c" }}>
+                      <XCircle size={12} style={{ flexShrink: 0 }} />
+                      <span>No program selected. Select at least one sheet to enable import.</span>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Preview table */}
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: "var(--text-secondary)" }}>
+                Preview — first {Math.min(8, selectedBooks.length)} of {selectedBooks.length} selected titles
+              </p>
+              <div className="rounded-xl overflow-hidden border" style={{ borderColor: "var(--border-light)", background: "var(--bg-surface)" }}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr style={{ background: "var(--bg-subtle)", borderBottom: "1.5px solid var(--border-light)" }}>
+                        {["Subject/Course", "Title", "Author", "Year", "Type", "Format", "Source"].map(h => (
+                          <th key={h} className="px-3 py-2 text-left font-bold whitespace-nowrap"
+                              style={{ color: "var(--text-secondary)" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedBooks.slice(0, 8).map((b, i) => (
+                        <tr key={i} className="border-t transition-colors hover:bg-amber-50/20"
+                            style={{ borderColor: "var(--border-light)" }}>
+                          <td className="px-3 py-2 text-[10px] max-w-[120px] truncate" style={{ color: "var(--text-muted)" }}
+                              title={b.subject_course}>{b.subject_course || "—"}</td>
+                          <td className="px-3 py-2 font-semibold max-w-[160px] truncate" style={{ color: "var(--text-primary)" }}
+                              title={b.title}>{b.title}</td>
+                          <td className="px-3 py-2 max-w-[110px] truncate" style={{ color: "var(--text-secondary)" }}
+                              title={b.author}>{b.author || "—"}</td>
+                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>{b.year || "—"}</td>
+                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>{b.resource_type || "—"}</td>
+                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>{b.format || "—"}</td>
+                          <td className="px-3 py-2 max-w-[120px] truncate" style={{ color: "var(--text-muted)" }} title={b.source}>
+                            {b.source
+                              ? <a href={b.source} target="_blank" rel="noopener noreferrer"
+                                   className="underline text-blue-500 hover:text-blue-700">Link</a>
+                              : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-1.5 max-h-[160px] overflow-y-auto pr-1">
-                {parsedSheets.map(sheet => {
-                  const checked = selectedSheets.includes(sheet.name);
-                  return (
-                    <label
-                      key={sheet.name}
-                      className="flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-colors"
-                      style={{
-                        background: checked ? "rgba(184,122,0,0.08)" : "var(--bg-subtle)",
-                        border: `1.5px solid ${checked ? "rgba(184,122,0,0.3)" : "var(--border-light)"}`,
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() =>
-                          setSelectedSheets(prev =>
-                            checked ? prev.filter(n => n !== sheet.name) : [...prev, sheet.name]
-                          )
-                        }
-                        className="accent-amber-500 w-3.5 h-3.5 shrink-0"
-                      />
-                      <span className="text-[11px] font-semibold truncate" style={{ color:"var(--text-primary)" }}>
-                        {sheet.name}
-                      </span>
-                      <span className="ml-auto text-[10px] font-bold shrink-0"
-                            style={{ color: checked ? "var(--accent-amber)" : "var(--text-muted)" }}>
-                        {sheet.books.length}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-
-              {/* Selected count */}
-              {(() => {
-                const total  = selectedBooks.length;
-                const capped = Math.min(total, 1000);
-                return total > 0 ? (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px]"
-                       style={{ background:"rgba(34,197,94,0.07)", border:"1.5px solid rgba(34,197,94,0.2)", color:"#15803d" }}>
-                    <CheckCircle2 size={12} style={{ flexShrink:0 }} />
-                    <span>
-                      <strong>{capped}</strong> title{capped !== 1 ? "s" : ""} selected for import
-                      {total > 1000 && (
-                        <span className="ml-1" style={{ color:"#b45309" }}>
-                          (capped at 1,000 — {total - 1000} will be excluded)
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px]"
-                       style={{ background:"rgba(220,38,38,0.07)", border:"1.5px solid rgba(220,38,38,0.2)", color:"#b91c1c" }}>
-                    <XCircle size={12} style={{ flexShrink:0 }} />
-                    <span>No program selected. Select at least one sheet to enable import.</span>
-                  </div>
-                );
-              })()}
+              {selectedBooks.length > 8 && (
+                <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>
+                  + {selectedBooks.length - 8} more titles not shown in preview
+                </p>
+              )}
             </div>
-          )}
 
-          {/* Preview table */}
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color:"var(--text-secondary)" }}>
-              Preview — first {Math.min(8, selectedBooks.length)} of {selectedBooks.length} selected titles
-            </p>
-            <div className="rounded-xl overflow-hidden border" style={{ borderColor:"var(--border-light)", background:"var(--bg-surface)" }}>
-              <div className="overflow-x-auto">
-                <table className="w-full text-[11px]">
-                  <thead>
-                    <tr style={{ background:"var(--bg-subtle)", borderBottom:"1.5px solid var(--border-light)" }}>
-                      {["Subject/Course", "Title", "Author", "Year", "Type", "Format", "Source"].map(h => (
-                        <th key={h} className="px-3 py-2 text-left font-bold whitespace-nowrap"
-                            style={{ color:"var(--text-secondary)" }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedBooks.slice(0, 8).map((b, i) => (
-                      <tr key={i} className="border-t transition-colors hover:bg-amber-50/20"
-                          style={{ borderColor:"var(--border-light)" }}>
-                        <td className="px-3 py-2 text-[10px] max-w-[120px] truncate" style={{ color:"var(--text-muted)" }}
-                            title={b.subject_course}>
-                          {b.subject_course || "—"}
-                        </td>
-                        <td className="px-3 py-2 font-semibold max-w-[160px] truncate" style={{ color:"var(--text-primary)" }}
-                            title={b.title}>{b.title}</td>
-                        <td className="px-3 py-2 max-w-[110px] truncate" style={{ color:"var(--text-secondary)" }}
-                            title={b.author}>{b.author || "—"}</td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color:"var(--text-secondary)" }}>
-                          {b.year || "—"}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color:"var(--text-secondary)" }}>
-                          {b.resource_type || "—"}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color:"var(--text-secondary)" }}>
-                          {b.format || "—"}
-                        </td>
-                        <td className="px-3 py-2 max-w-[120px] truncate" style={{ color:"var(--text-muted)" }}
-                            title={b.source}>
-                          {b.source
-                            ? <a href={b.source} target="_blank" rel="noopener noreferrer"
-                                 className="underline text-blue-500 hover:text-blue-700">Link</a>
-                            : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl text-[11px]"
+                 style={{ background: "rgba(50,102,127,0.07)", border: "1.5px solid rgba(50,102,127,0.2)", color: "#32667F" }}>
+              <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>
+                Books are saved to the Lexora e-library table. Each sheet (program) becomes the
+                collection label. A duplicate check against the database runs before import —
+                you will be shown any matches and asked to confirm before proceeding.
+              </span>
             </div>
-            {selectedBooks.length > 8 && (
-              <p className="text-[10px] mt-1" style={{ color:"var(--text-muted)" }}>
-                + {selectedBooks.length - 8} more titles not shown in preview
+
+            {parseError && (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-[12px]"
+                   style={{ background: "rgba(220,38,38,0.07)", border: "1.5px solid rgba(220,38,38,0.2)", color: "#b91c1c" }}>
+                <XCircle size={13} /> {parseError}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ══ STEP 3: Importing ══ */}
+        {step === 3 && (
+          <div className="flex flex-col items-center gap-5 py-6">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center"
+                 style={{ background: "rgba(184,122,0,0.1)" }}>
+              <Loader2 size={32} style={{ color: "var(--accent-amber)" }} className="animate-spin" />
+            </div>
+            <div className="text-center">
+              <p className="text-[14px] font-bold" style={{ color: "var(--text-primary)" }}>Importing Lexora books…</p>
+              <p className="text-[12px] mt-1" style={{ color: "var(--text-secondary)" }}>
+                {progress.title || "Sending data to server…"}
               </p>
+            </div>
+            <div className="w-full max-w-[360px]">
+              <div className="flex justify-between text-[10px] font-bold mb-1.5" style={{ color: "var(--text-muted)" }}>
+                <span>{progress.current} of {progress.total}</span>
+                <span>{pct}%</span>
+              </div>
+              <div className="w-full h-2.5 rounded-full overflow-hidden"
+                   style={{ background: "var(--bg-subtle)", border: "1px solid var(--border-light)" }}>
+                <div className="h-full rounded-full transition-all duration-500"
+                     style={{ width: `${pct}%`, background: "var(--accent-amber)" }} />
+              </div>
+            </div>
+            <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Please wait — do not close this modal</p>
+          </div>
+        )}
+
+        {/* ══ STEP 4: Done ══ */}
+        {step === 4 && results && (
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl"
+                   style={{ background: "rgba(34,197,94,0.08)", border: "1.5px solid rgba(34,197,94,0.2)" }}>
+                <CheckCircle2 size={26} style={{ color: "#15803d" }} />
+                <p className="text-2xl font-black" style={{ color: "#15803d" }}>{results.imported ?? 0}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "#15803d" }}>Titles Imported</p>
+              </div>
+              <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl"
+                   style={{ background: "rgba(184,122,0,0.08)", border: "1.5px solid rgba(184,122,0,0.2)" }}>
+                <FileSpreadsheet size={26} style={{ color: "var(--accent-amber)" }} />
+                <p className="text-2xl font-black" style={{ color: "var(--accent-amber)" }}>{results.updated ?? 0}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--accent-amber)" }}>Updated</p>
+              </div>
+              <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl"
+                   style={{
+                     background: (results.errors ?? 0) > 0 ? "rgba(220,38,38,0.07)" : "var(--bg-subtle)",
+                     border: `1.5px solid ${(results.errors ?? 0) > 0 ? "rgba(220,38,38,0.2)" : "var(--border-light)"}`,
+                   }}>
+                <XCircle size={26} style={{ color: (results.errors ?? 0) > 0 ? "#b91c1c" : "var(--text-muted)" }} />
+                <p className="text-2xl font-black" style={{ color: (results.errors ?? 0) > 0 ? "#b91c1c" : "var(--text-muted)" }}>
+                  {results.errors ?? 0}
+                </p>
+                <p className="text-[10px] font-bold uppercase tracking-wider"
+                   style={{ color: (results.errors ?? 0) > 0 ? "#b91c1c" : "var(--text-muted)" }}>Failed</p>
+              </div>
+            </div>
+
+            {(results.errorsDetail ?? []).length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: "#b91c1c" }}>Failed books</p>
+                <div className="rounded-xl border max-h-[120px] overflow-y-auto"
+                     style={{ borderColor: "rgba(220,38,38,0.2)", background: "var(--bg-surface)" }}>
+                  {results.errorsDetail.map((f, i) => (
+                    <div key={i} className="flex items-start gap-2 px-3 py-2 border-b text-[11px]"
+                         style={{ borderColor: "var(--border-light)" }}>
+                      <XCircle size={11} style={{ color: "#b91c1c", flexShrink: 0, marginTop: 1 }} />
+                      <div>
+                        <p className="font-semibold truncate" style={{ color: "var(--text-primary)" }}>{f.title}</p>
+                        <p style={{ color: "#b91c1c" }}>{f.error}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
-
-          <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl text-[11px]"
-               style={{ background:"rgba(50,102,127,0.07)", border:"1.5px solid rgba(50,102,127,0.2)", color:"#32667F" }}>
-            <AlertCircle size={13} style={{ flexShrink:0, marginTop:1 }} />
-            <span>
-              Books are saved to the Lexora e-library table. Each sheet (program) becomes the collection label.
-              Duplicates are skipped automatically.
-            </span>
-          </div>
-        </>
-      )}
-
-      {/* ══ STEP 3: Importing ══ */}
-      {step === 3 && (
-        <div className="flex flex-col items-center gap-5 py-6">
-          <div className="w-16 h-16 rounded-full flex items-center justify-center"
-               style={{ background:"rgba(184,122,0,0.1)" }}>
-            <Loader2 size={32} style={{ color:"var(--accent-amber)" }} className="animate-spin" />
-          </div>
-          <div className="text-center">
-            <p className="text-[14px] font-bold" style={{ color:"var(--text-primary)" }}>Importing Lexora books…</p>
-            <p className="text-[12px] mt-1" style={{ color:"var(--text-secondary)" }}>
-              {progress.title || "Sending data to server…"}
-            </p>
-          </div>
-          <div className="w-full max-w-[360px]">
-            <div className="flex justify-between text-[10px] font-bold mb-1.5" style={{ color:"var(--text-muted)" }}>
-              <span>{progress.current} of {progress.total}</span>
-              <span>{pct}%</span>
-            </div>
-            <div className="w-full h-2.5 rounded-full overflow-hidden"
-                 style={{ background:"var(--bg-subtle)", border:"1px solid var(--border-light)" }}>
-              <div className="h-full rounded-full transition-all duration-500"
-                   style={{ width:`${pct}%`, background:"var(--accent-amber)" }} />
-            </div>
-          </div>
-          <p className="text-[10px]" style={{ color:"var(--text-muted)" }}>Please wait — do not close this modal</p>
-        </div>
-      )}
-
-      {/* ══ STEP 4: Done ══ */}
-      {step === 4 && results && (
-        <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-3 gap-3">
-            <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl"
-                 style={{ background:"rgba(34,197,94,0.08)", border:"1.5px solid rgba(34,197,94,0.2)" }}>
-              <CheckCircle2 size={26} style={{ color:"#15803d" }} />
-              <p className="text-2xl font-black" style={{ color:"#15803d" }}>{results.imported ?? 0}</p>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color:"#15803d" }}>Titles Imported</p>
-            </div>
-            <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl"
-                 style={{ background:"rgba(184,122,0,0.08)", border:"1.5px solid rgba(184,122,0,0.2)" }}>
-              <FileSpreadsheet size={26} style={{ color:"var(--accent-amber)" }} />
-              <p className="text-2xl font-black" style={{ color:"var(--accent-amber)" }}>
-                {results.updated ?? 0}
-              </p>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color:"var(--accent-amber)" }}>Updated</p>
-            </div>
-            <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl"
-                 style={{
-                   background: (results.errors ?? 0) > 0 ? "rgba(220,38,38,0.07)" : "var(--bg-subtle)",
-                   border: `1.5px solid ${(results.errors ?? 0) > 0 ? "rgba(220,38,38,0.2)" : "var(--border-light)"}`,
-                 }}>
-              <XCircle size={26} style={{ color:(results.errors ?? 0) > 0 ? "#b91c1c" : "var(--text-muted)" }} />
-              <p className="text-2xl font-black" style={{ color:(results.errors ?? 0) > 0 ? "#b91c1c" : "var(--text-muted)" }}>
-                {results.errors ?? 0}
-              </p>
-              <p className="text-[10px] font-bold uppercase tracking-wider"
-                 style={{ color:(results.errors ?? 0) > 0 ? "#b91c1c" : "var(--text-muted)" }}>Failed</p>
-            </div>
-          </div>
-
-          {(results.errorsDetail ?? []).length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              <p className="text-[10px] font-black uppercase tracking-widest" style={{ color:"#b91c1c" }}>Failed books</p>
-              <div className="rounded-xl border max-h-[120px] overflow-y-auto"
-                   style={{ borderColor:"rgba(220,38,38,0.2)", background:"var(--bg-surface)" }}>
-                {results.errorsDetail.map((f, i) => (
-                  <div key={i} className="flex items-start gap-2 px-3 py-2 border-b text-[11px]"
-                       style={{ borderColor:"var(--border-light)" }}>
-                    <XCircle size={11} style={{ color:"#b91c1c", flexShrink:0, marginTop:1 }} />
-                    <div>
-                      <p className="font-semibold truncate" style={{ color:"var(--text-primary)" }}>{f.title}</p>
-                      <p style={{ color:"#b91c1c" }}>{f.error}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </>
   );
 });
 

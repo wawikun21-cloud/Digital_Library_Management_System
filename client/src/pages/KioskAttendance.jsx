@@ -14,9 +14,11 @@ import {
   getActiveAttendance,
   tapAttendance,
 } from "../services/api/attendanceApi";
+import { getStudentByStudentIdNumber, createStudent } from "../services/api/studentsApi";
 import {
   LogIn, LogOut, Clock, Users, Wifi, WifiOff,
-  BookOpen, GraduationCap, Hash, AlertTriangle, CheckCircle2,
+  Hash, AlertTriangle, CheckCircle2,
+  Maximize2, Minimize2, UserPlus, X, ChevronRight,
 } from "lucide-react";
 
 // ─── Helpers ─────────────────────────────────────────────
@@ -60,6 +62,40 @@ function useLiveClock() {
     return () => clearInterval(t);
   }, []);
   return now;
+}
+
+// ─── Fullscreen hook ──────────────────────────────────────
+function useFullscreen(ref) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const enter = useCallback(() => {
+    const el = ref.current || document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    else if (el.mozRequestFullScreen) el.mozRequestFullScreen();
+    else if (el.msRequestFullscreen) el.msRequestFullscreen();
+  }, [ref]);
+
+  const exit = useCallback(() => {
+    if (document.exitFullscreen) document.exitFullscreen();
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
+    else if (document.msExitFullscreen) document.msExitFullscreen();
+  }, []);
+
+  const toggle = useCallback(() => {
+    isFullscreen ? exit() : enter();
+  }, [isFullscreen, enter, exit]);
+
+  return { isFullscreen, toggle };
 }
 
 // ─── Live elapsed seconds per record ─────────────────────
@@ -171,24 +207,36 @@ function StudentCard({ record, index }) {
 // Big animated tap-result card (flies in from bottom)
 function TapCard({ result, onDone }) {
   const isIn = result.action === "checked_in";
-  const [bg, accent] = avatarColors(result.data?.student_name || "");
-  const [visible, setVisible] = useState(true);
-  const elapsed = useElapsed(result.data?.check_in_time || new Date());
+  const [, accent] = avatarColors(result.data?.student_name || "");
+  const [phase, setPhase] = useState("enter"); // "enter" | "exit"
 
+  // After progress bar runs out (2.7s), switch to exit phase
   useEffect(() => {
-    const hide = setTimeout(() => setVisible(false), 5500);
-    const done = setTimeout(onDone, 6000);
-    return () => { clearTimeout(hide); clearTimeout(done); };
-  }, [onDone]);
+    const t = setTimeout(() => setPhase("exit"), 2700);
+    return () => clearTimeout(t);
+  }, []);
+
+  // When exit animation finishes, remove the card from the tree
+  const handleAnimationEnd = () => {
+    if (phase === "exit") onDone();
+  };
+
+  const animation =
+    phase === "enter"
+      ? "tapCardIn 0.5s cubic-bezier(.34,1.4,.64,1) both"
+      : "tapCardOut 0.35s ease forwards";
 
   return (
-    <div style={{
-      position: "fixed", bottom: 32, left: "50%",
-      transform: "translateX(-50%)",
-      zIndex: 100,
-      animation: visible ? "tapCardIn 0.5s cubic-bezier(.34,1.4,.64,1) both" : "tapCardOut 0.4s ease forwards",
-      width: "min(520px, calc(100vw - 48px))",
-    }}>
+    <div
+      onAnimationEnd={handleAnimationEnd}
+      style={{
+        position: "fixed", bottom: 32, left: "50%",
+        transform: "translateX(-50%)",
+        zIndex: 100,
+        animation,
+        width: "min(520px, calc(100vw - 48px))",
+      }}
+    >
       <div style={{
         background: isIn
           ? "linear-gradient(135deg, #0f2a1a 0%, #0d1f2d 100%)"
@@ -296,29 +344,445 @@ function TapCard({ result, onDone }) {
           height: "100%",
           background: isIn ? "#34d399" : "#f59e0b",
           borderRadius: 2,
-          animation: "progressBar 5.5s linear forwards",
+          animation: "progressBar 2.7s linear forwards",
         }} />
       </div>
     </div>
   );
 }
 
-// Not-found flash banner
-function NotFoundBanner({ studentId, onDone }) {
-  const [visible, setVisible] = useState(true);
+// ─── Register Student Modal ───────────────────────────────
+// Opens when RFID is scanned but student is NOT in students table.
+// Looks up student from DB, pre-fills form, asks "Register This Student?"
+function RegisterStudentModal({ scannedId, onClose, onRegistered }) {
+  const CURRENT_SY = (() => {
+    const y = new Date().getFullYear();
+    const m = new Date().getMonth(); // 0-based; June=5
+    return m >= 5 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+  })();
+
+  const [form, setForm] = useState({
+    student_id_number: scannedId,
+    first_name:        "",
+    last_name:         "",
+    student_name:      "",
+    student_course:    "",
+    student_yr_level:  "",
+    student_school_year: CURRENT_SY,
+    student_email:     "",
+  });
+  const [looking,    setLooking]    = useState(true);
+  const [found,      setFound]      = useState(false); // exists in students table
+  const [submitting, setSubmitting] = useState(false);
+  const [error,      setError]      = useState("");
+  const [debugRaw,   setDebugRaw]   = useState(null); // ← temp debug
+  const firstRef = useRef(null);
+
+  // Lock body scroll
   useEffect(() => {
-    const hide = setTimeout(() => setVisible(false), 2800);
-    const done = setTimeout(onDone, 3200);
-    return () => { clearTimeout(hide); clearTimeout(done); };
-  }, [onDone]);
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  // Auto-lookup student from DB on mount
+  useEffect(() => {
+    let cancelled = false;
+    setLooking(true);
+    getStudentByStudentIdNumber(scannedId)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success && res.data) {
+          const s = res.data;
+          setDebugRaw(s); // ← capture raw response
+          setFound(true);
+          const fn = s.first_name || "";
+          const ln = s.last_name  || "";
+          setForm(f => ({
+            ...f,
+            first_name:          fn,
+            last_name:           ln,
+            student_name:        `${fn} ${ln}`.trim() || s.student_name || "",
+            student_course:      s.student_course     || "",
+            student_yr_level:    s.student_yr_level   || "",
+            student_school_year: s.student_school_year || CURRENT_SY,
+            student_email:       s.student_email      || "",
+          }));
+        }
+        // if not found, form stays with just the scanned ID pre-filled
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLooking(false); });
+    return () => { cancelled = true; };
+  }, [scannedId]);
+
+  // Focus first editable field once lookup done
+  useEffect(() => {
+    if (!looking) setTimeout(() => firstRef.current?.focus(), 80);
+  }, [looking]);
+
+  const set = (key) => (e) => {
+    const val = e.target.value;
+    setForm(f => {
+      const next = { ...f, [key]: val };
+      // Always rebuild student_name as "FirstName LastName"
+      if (key === "first_name" || key === "last_name") {
+        const fn = key === "first_name" ? val.trim() : f.first_name.trim();
+        const ln = key === "last_name"  ? val.trim() : f.last_name.trim();
+        next.student_name = [fn, ln].filter(Boolean).join(" ");
+      }
+      return next;
+    });
+  };
+
+  const handleSubmit = async () => {
+    setError("");
+    if (!form.first_name.trim() || !form.last_name.trim()) {
+      setError("First name and last name are required."); return;
+    }
+    if (!form.student_course.trim()) {
+      setError("Course is required."); return;
+    }
+    if (!form.student_yr_level.trim()) {
+      setError("Year level is required."); return;
+    }
+    setSubmitting(true);
+    try {
+      const fullName = `${form.first_name.trim()} ${form.last_name.trim()}`.trim();
+      const payload = {
+        student_id_number:   form.student_id_number,
+        first_name:          form.first_name.trim(),
+        last_name:           form.last_name.trim(),
+        student_name:        fullName,
+        display_name:        fullName,
+        student_course:      form.student_course.trim(),
+        student_yr_level:    form.student_yr_level.trim(),
+        student_school_year: form.student_school_year.trim(),
+        student_email:       form.student_email.trim(),
+        is_active:           1,
+      };
+      const res = await createStudent(payload);
+      if (res.success) {
+        onRegistered(scannedId); // triggers tap/check-in after register
+      } else {
+        setError(res.error || "Registration failed. Please try again.");
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Shared input style
+  const inputStyle = {
+    width: "100%", boxSizing: "border-box",
+    padding: "10px 14px", borderRadius: 10, fontSize: 13,
+    fontFamily: "'DM Sans', sans-serif", fontWeight: 500,
+    background: "rgba(255,255,255,0.06)",
+    border: "1.5px solid rgba(255,255,255,0.12)",
+    color: "#f1f5f9", outline: "none",
+    transition: "border-color 0.2s",
+  };
+  const labelStyle = {
+    display: "block", fontSize: 10, fontWeight: 700,
+    letterSpacing: "1px", textTransform: "uppercase",
+    color: "#64748b", marginBottom: 5,
+  };
 
   return (
-    <div style={{
-      position: "fixed", top: 24, left: "50%", transform: "translateX(-50%)",
-      zIndex: 100,
-      animation: visible ? "bannerIn 0.35s cubic-bezier(.34,1.4,.64,1) both" : "bannerOut 0.3s ease forwards",
-      width: "min(420px, calc(100vw - 48px))",
-    }}>
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 200,
+        background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 24, animation: "overlayIn 0.2s ease",
+      }}
+    >
+      <div style={{
+        width: "100%", maxWidth: 520,
+        background: "linear-gradient(160deg, #0d1f35 0%, #0a1628 100%)",
+        border: "1.5px solid rgba(99,102,241,0.3)",
+        borderRadius: 24,
+        boxShadow: "0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.1)",
+        overflow: "hidden",
+        animation: "modalIn 0.3s cubic-bezier(.34,1.4,.64,1)",
+      }}>
+
+        {/* ── Header ───────────────────────────────────── */}
+        <div style={{
+          padding: "20px 24px 18px",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 12,
+              background: "rgba(99,102,241,0.15)",
+              border: "1.5px solid rgba(99,102,241,0.3)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <UserPlus size={18} color="#818cf8" />
+            </div>
+            <div>
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "#f1f5f9" }}>
+                Register This Student?
+              </p>
+              <p style={{ margin: "2px 0 0", fontSize: 11, color: "#64748b" }}>
+                RFID <span style={{ fontFamily: "monospace", color: "#818cf8" }}>{scannedId}</span> is not registered
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 32, height: 32, borderRadius: 8, border: "none",
+            background: "rgba(255,255,255,0.06)", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <X size={14} color="#64748b" />
+          </button>
+        </div>
+
+        {/* ── Body ─────────────────────────────────────── */}
+        <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {looking ? (
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              gap: 10, padding: "32px 0", color: "#64748b",
+            }}>
+              <div style={{
+                width: 18, height: 18, borderRadius: "50%",
+                border: "2px solid rgba(99,102,241,0.3)",
+                borderTopColor: "#818cf8",
+                animation: "spin 0.7s linear infinite",
+              }} />
+              <span style={{ fontSize: 13 }}>Looking up student record…</span>
+            </div>
+          ) : (
+            <>
+              {/* Student ID — read only */}
+              <div>
+                <label style={labelStyle}>Student ID</label>
+                <input
+                  value={form.student_id_number}
+                  readOnly
+                  style={{ ...inputStyle, background: "rgba(99,102,241,0.08)", color: "#818cf8", fontFamily: "monospace", cursor: "not-allowed" }}
+                />
+              </div>
+
+              {/* ── DEBUG PANEL (remove after fixing) ── */}
+              {debugRaw && (
+                <div style={{
+                  padding: "10px 12px", borderRadius: 8, fontSize: 11,
+                  background: "rgba(255,200,0,0.08)",
+                  border: "1px solid rgba(255,200,0,0.3)",
+                  color: "#fbbf24", fontFamily: "monospace",
+                  lineHeight: 1.7,
+                }}>
+                  <strong style={{ display: "block", marginBottom: 4 }}>🐛 Raw API response:</strong>
+                  student_name: <b>"{debugRaw.student_name}"</b><br/>
+                  first_name: <b>"{debugRaw.first_name}"</b><br/>
+                  last_name: <b>"{debugRaw.last_name}"</b><br/>
+                  display_name: <b>"{debugRaw.display_name}"</b>
+                </div>
+              )}
+
+              {/* First + Last name row */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <label style={labelStyle}>First Name *</label>
+                  <input
+                    ref={firstRef}
+                    value={form.first_name}
+                    onChange={set("first_name")}
+                    placeholder="e.g. Juan"
+                    style={inputStyle}
+                    onFocus={e => e.target.style.borderColor = "rgba(99,102,241,0.6)"}
+                    onBlur={e  => e.target.style.borderColor = "rgba(255,255,255,0.12)"}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Last Name *</label>
+                  <input
+                    value={form.last_name}
+                    onChange={set("last_name")}
+                    placeholder="e.g. Dela Cruz"
+                    style={inputStyle}
+                    onFocus={e => e.target.style.borderColor = "rgba(99,102,241,0.6)"}
+                    onBlur={e  => e.target.style.borderColor = "rgba(255,255,255,0.12)"}
+                  />
+                </div>
+              </div>
+
+              {/* Full name preview */}
+              {form.student_name && (
+                <div style={{
+                  padding: "8px 12px", borderRadius: 8,
+                  background: "rgba(52,211,153,0.07)",
+                  border: "1px solid rgba(52,211,153,0.2)",
+                  fontSize: 12, color: "#34d399",
+                }}>
+                  Full name: <strong>{form.student_name}</strong>
+                </div>
+              )}
+
+              {/* Course */}
+              <div>
+                <label style={labelStyle}>Course *</label>
+                <input
+                  value={form.student_course}
+                  onChange={set("student_course")}
+                  placeholder="e.g. BSIT, BSCS, BSEd"
+                  style={inputStyle}
+                  onFocus={e => e.target.style.borderColor = "rgba(99,102,241,0.6)"}
+                  onBlur={e  => e.target.style.borderColor = "rgba(255,255,255,0.12)"}
+                />
+              </div>
+
+              {/* Year Level + School Year row */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <label style={labelStyle}>Year Level *</label>
+                  <select
+                    value={form.student_yr_level}
+                    onChange={set("student_yr_level")}
+                    style={{ ...inputStyle, cursor: "pointer", appearance: "none" }}
+                    onFocus={e => e.target.style.borderColor = "rgba(99,102,241,0.6)"}
+                    onBlur={e  => e.target.style.borderColor = "rgba(255,255,255,0.12)"}
+                  >
+                    <option value="">Select year…</option>
+                    {["1st Year","2nd Year","3rd Year","4th Year","5th Year","Graduate"].map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>School Year</label>
+                  <input
+                    value={form.student_school_year}
+                    onChange={set("student_school_year")}
+                    placeholder="e.g. 2025-2026"
+                    style={inputStyle}
+                    onFocus={e => e.target.style.borderColor = "rgba(99,102,241,0.6)"}
+                    onBlur={e  => e.target.style.borderColor = "rgba(255,255,255,0.12)"}
+                  />
+                </div>
+              </div>
+
+              {/* Email */}
+              <div>
+                <label style={labelStyle}>Email</label>
+                <input
+                  type="email"
+                  value={form.student_email}
+                  onChange={set("student_email")}
+                  placeholder="e.g. juan@school.edu.ph"
+                  style={inputStyle}
+                  onFocus={e => e.target.style.borderColor = "rgba(99,102,241,0.6)"}
+                  onBlur={e  => e.target.style.borderColor = "rgba(255,255,255,0.12)"}
+                />
+              </div>
+
+              {/* Error */}
+              {error && (
+                <div style={{
+                  padding: "9px 12px", borderRadius: 8,
+                  background: "rgba(239,68,68,0.1)",
+                  border: "1px solid rgba(239,68,68,0.25)",
+                  fontSize: 12, color: "#ef4444",
+                  display: "flex", alignItems: "center", gap: 8,
+                }}>
+                  <AlertTriangle size={13} /> {error}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* ── Footer ───────────────────────────────────── */}
+        {!looking && (
+          <div style={{
+            padding: "16px 24px",
+            borderTop: "1px solid rgba(255,255,255,0.06)",
+            display: "flex", gap: 10, justifyContent: "flex-end",
+          }}>
+            <button
+              onClick={onClose}
+              style={{
+                padding: "10px 20px", borderRadius: 10, fontSize: 13,
+                fontWeight: 600, cursor: "pointer", border: "none",
+                background: "rgba(255,255,255,0.06)", color: "#94a3b8",
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              style={{
+                padding: "10px 22px", borderRadius: 10, fontSize: 13,
+                fontWeight: 800, cursor: submitting ? "not-allowed" : "pointer",
+                border: "none", display: "flex", alignItems: "center", gap: 8,
+                background: submitting ? "rgba(99,102,241,0.4)" : "linear-gradient(135deg, #6366f1, #4f46e5)",
+                color: "#fff",
+                boxShadow: submitting ? "none" : "0 4px 16px rgba(99,102,241,0.4)",
+                transition: "all 0.2s",
+              }}
+            >
+              {submitting ? (
+                <>
+                  <div style={{
+                    width: 14, height: 14, borderRadius: "50%",
+                    border: "2px solid rgba(255,255,255,0.3)",
+                    borderTopColor: "#fff",
+                    animation: "spin 0.7s linear infinite",
+                  }} />
+                  Registering…
+                </>
+              ) : (
+                <>
+                  <UserPlus size={14} /> Register &amp; Check In
+                  <ChevronRight size={14} />
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+function NotFoundBanner({ studentId, onDone }) {
+  const [phase, setPhase] = useState("enter"); // "enter" | "exit"
+
+  // After progress bar runs out (2.7s), switch to exit phase
+  useEffect(() => {
+    const t = setTimeout(() => setPhase("exit"), 2700);
+    return () => clearTimeout(t);
+  }, []);
+
+  // When exit animation finishes, remove from tree
+  const handleAnimationEnd = () => {
+    if (phase === "exit") onDone();
+  };
+
+  const animation =
+    phase === "enter"
+      ? "bannerIn 0.35s cubic-bezier(.34,1.4,.64,1) both"
+      : "bannerOut 0.35s ease forwards";
+
+  return (
+    <div
+      onAnimationEnd={handleAnimationEnd}
+      style={{
+        position: "fixed", top: 24, left: "50%", transform: "translateX(-50%)",
+        zIndex: 100,
+        animation,
+        width: "min(420px, calc(100vw - 48px))",
+      }}
+    >
       <div style={{
         background: "linear-gradient(135deg, #2a0a0a, #1a0808)",
         border: "1.5px solid #ef444455",
@@ -335,7 +799,7 @@ function NotFoundBanner({ studentId, onDone }) {
         }}>
           <AlertTriangle size={20} color="#ef4444" />
         </div>
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#ef4444", fontFamily: "'DM Sans', sans-serif" }}>
             Student ID Not Found
           </p>
@@ -344,6 +808,20 @@ function NotFoundBanner({ studentId, onDone }) {
           </p>
         </div>
       </div>
+
+      {/* Progress bar — identical to TapCard */}
+      <div style={{
+        height: 3, borderRadius: 2, marginTop: 6,
+        background: "rgba(255,255,255,0.06)",
+        overflow: "hidden",
+      }}>
+        <div style={{
+          height: "100%",
+          background: "#ef4444",
+          borderRadius: 2,
+          animation: "progressBar 2.7s linear forwards",
+        }} />
+      </div>
     </div>
   );
 }
@@ -351,13 +829,16 @@ function NotFoundBanner({ studentId, onDone }) {
 // ─── Main Kiosk Page ──────────────────────────────────────
 export default function KioskAttendance() {
   const now = useLiveClock();
-  const [active, setActive]       = useState([]);
-  const [idInput, setIdInput]     = useState("");
-  const [tapping, setTapping]     = useState(false);
-  const [tapResult, setTapResult] = useState(null);
-  const [notFound, setNotFound]   = useState(null);
-  const [online, setOnline]       = useState(navigator.onLine);
-  const inputRef = useRef(null);
+  const [active, setActive]           = useState([]);
+  const [idInput, setIdInput]         = useState("");
+  const [tapping, setTapping]         = useState(false);
+  const [tapResult, setTapResult]     = useState(null);
+  const [notFound, setNotFound]       = useState(null);
+  const [registerModal, setRegisterModal] = useState(null); // scanned ID for registration
+  const [online, setOnline]           = useState(navigator.onLine);
+  const inputRef     = useRef(null);
+  const containerRef = useRef(null);
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(containerRef);
 
   // ── Poll active students every 10s ───────────────────
   const fetchActive = useCallback(async () => {
@@ -391,7 +872,8 @@ export default function KioskAttendance() {
         setTapResult(res);
         fetchActive();
       } else if (res.error?.toLowerCase().includes("not found")) {
-        setNotFound(id);
+        // Open registration modal instead of error banner
+        setRegisterModal(id);
       }
     } catch {
       setNotFound(idInput.trim());
@@ -402,14 +884,37 @@ export default function KioskAttendance() {
     }
   }, [idInput, tapping, fetchActive]);
 
-  const handleKeyDown = (e) => { if (e.key === "Enter") handleTap(); };
+  // ── After registration → auto check-in ───────────────
+  const handleRegistered = useCallback(async (studentId) => {
+    setRegisterModal(null);
+    // Small delay so DB write settles before tap
+    await new Promise(r => setTimeout(r, 400));
+    try {
+      const res = await tapAttendance(studentId);
+      if (res.success) {
+        setTapResult(res);
+        fetchActive();
+      } else {
+        setNotFound(studentId);
+      }
+    } catch {
+      setNotFound(studentId);
+    } finally {
+      setTimeout(() => inputRef.current?.focus(), 80);
+    }
+  }, [fetchActive]);
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") handleTap();
+    if (e.key === "F11")  { e.preventDefault(); toggleFullscreen(); }
+  };
 
   // Format clock
   const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
   return (
-    <div style={{
+    <div ref={containerRef} style={{
       minHeight: "100vh",
       background: "linear-gradient(160deg, #060d18 0%, #0a1628 40%, #060d18 100%)",
       color: "#f1f5f9",
@@ -457,14 +962,15 @@ export default function KioskAttendance() {
       }}>
         {/* Logo + title */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 10,
-            background: "linear-gradient(135deg, #EEA23A, #d4841f)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 4px 16px rgba(238,162,58,0.35)",
-          }}>
-            <BookOpen size={20} color="#fff" />
-          </div>
+          <img
+            src="/icon.png"
+            alt="Lexora Logo"
+            style={{
+              width: 40, height: 40, borderRadius: 10,
+              objectFit: "contain",
+              boxShadow: "0 4px 16px rgba(238,162,58,0.25)",
+            }}
+          />
           <div>
             <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#f1f5f9", letterSpacing: "-0.3px" }}>
               Lexora Library
@@ -514,6 +1020,32 @@ export default function KioskAttendance() {
             <span style={{ fontSize: 13, fontWeight: 700, color: "#818cf8" }}>{active.length}</span>
             <span style={{ fontSize: 10, color: "#64748b" }}>inside</span>
           </div>
+          {/* Fullscreen toggle */}
+          <button
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "Exit Fullscreen (F11)" : "Enter Fullscreen (F11)"}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 36, height: 36, borderRadius: 10, cursor: "pointer",
+              background: isFullscreen ? "rgba(238,162,58,0.15)" : "rgba(255,255,255,0.06)",
+              border: `1px solid ${isFullscreen ? "rgba(238,162,58,0.35)" : "rgba(255,255,255,0.1)"}`,
+              transition: "all 0.2s",
+              flexShrink: 0,
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = isFullscreen ? "rgba(238,162,58,0.25)" : "rgba(255,255,255,0.12)";
+              e.currentTarget.style.borderColor = isFullscreen ? "rgba(238,162,58,0.5)" : "rgba(255,255,255,0.2)";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = isFullscreen ? "rgba(238,162,58,0.15)" : "rgba(255,255,255,0.06)";
+              e.currentTarget.style.borderColor = isFullscreen ? "rgba(238,162,58,0.35)" : "rgba(255,255,255,0.1)";
+            }}
+          >
+            {isFullscreen
+              ? <Minimize2 size={15} color="#EEA23A" />
+              : <Maximize2 size={15} color="#94a3b8" />
+            }
+          </button>
         </div>
       </header>
 
@@ -715,9 +1247,30 @@ export default function KioskAttendance() {
         />
       )}
 
+      {/* ── Register Student Modal ───────────────────────── */}
+      {registerModal && (
+        <RegisterStudentModal
+          scannedId={registerModal}
+          onClose={() => {
+            setRegisterModal(null);
+            setTimeout(() => inputRef.current?.focus(), 80);
+          }}
+          onRegistered={handleRegistered}
+        />
+      )}
+
       {/* ── Global keyframes ─────────────────────────────── */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        @keyframes overlayIn {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+        @keyframes modalIn {
+          from { opacity: 0; transform: scale(0.94) translateY(12px); }
+          to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
 
         @keyframes orbFloat {
           0%, 100% { transform: translate(0, 0) scale(1); }
@@ -748,7 +1301,7 @@ export default function KioskAttendance() {
           to   { width: 0%; }
         }
         @keyframes spin {
-          to { transform: translateY(-50%) rotate(360deg); }
+          to { transform: rotate(360deg); }
         }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
