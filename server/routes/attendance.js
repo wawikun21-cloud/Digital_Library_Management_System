@@ -7,67 +7,38 @@ const express = require("express");
 const router = express.Router();
 const AttendanceController = require("../controllers/attendanceController");
 
-// ─────────────────────────────────────────────────────────
-//  GET Routes
-// ─────────────────────────────────────────────────────────
+// ── GET ───────────────────────────────────────────────────
 
-/**
- * @route   GET /api/attendance
- * @desc    Get all attendance records
- * @access  Public
- */
+/** GET /api/attendance            → all records */
 router.get("/", AttendanceController.getAllAttendance);
 
-/**
- * @route   GET /api/attendance/active
- * @desc    Get all active attendance records (checked in)
- * @access  Public
- */
+/** GET /api/attendance/active     → currently checked-in students */
 router.get("/active", AttendanceController.getActiveAttendance);
 
-/**
- * @route   GET /api/attendance/student/:studentIdNumber
- * @desc    Get attendance records by student ID number
- * @access  Public
- */
-router.get("/student/:studentIdNumber", AttendanceController.getAttendanceByStudentId);
-
-
-
-/**
- * @route   GET /api/attendance/stats
- * @desc    Get attendance statistics
- * @access  Public
- */
+/** GET /api/attendance/stats      → aggregate statistics */
 router.get("/stats", AttendanceController.getAttendanceStats);
 
-// ─────────────────────────────────────────────────────────
-//  POST Routes
-// ─────────────────────────────────────────────────────────
+/** GET /api/attendance/student/:studentIdNumber → history for one student */
+router.get("/student/:studentIdNumber", AttendanceController.getAttendanceByStudentId);
+
+// ── POST ──────────────────────────────────────────────────
 
 /**
- * @route   POST /api/attendance/check-in
- * @desc    Check in a student
- * @access  Public
+ * POST /api/attendance/tap/:studentIdNumber
+ * Smart toggle: 1st tap = check-in, 2nd tap = check-out.
+ * Student details are auto-fetched from the students master table.
  */
+router.post("/tap/:studentIdNumber", AttendanceController.tap);
+
+/** POST /api/attendance/check-in          → explicit check-in (legacy) */
 router.post("/check-in", AttendanceController.checkIn);
 
-/**
- * @route   POST /api/attendance/check-out/:studentIdNumber
- * @desc    Check out a student by student ID number
- * @access  Public
- */
+/** POST /api/attendance/check-out/:studentIdNumber → explicit check-out (legacy) */
 router.post("/check-out/:studentIdNumber", AttendanceController.checkOut);
 
-// ─────────────────────────────────────────────────────────
-//  DELETE Routes
-// ─────────────────────────────────────────────────────────
+// ── DELETE ────────────────────────────────────────────────
 
-/**
- * @route   DELETE /api/attendance/:id
- * @desc    Delete an attendance record
- * @access  Public
- */
+/** DELETE /api/attendance/:id → soft-delete a record */
 router.delete("/:id", AttendanceController.deleteAttendance);
 
 module.exports = router;

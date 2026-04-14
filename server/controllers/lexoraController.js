@@ -20,9 +20,11 @@ const bulkLexoraImport = async (req, res) => {
       updated:       result.updated,
       errors:        result.errors,
       data:          result.data,
+      updatedBooks:  result.updatedBooks || [],
       errorsDetail:  result.errorsDetail || [],
       skippedCopies: result.skippedCopies || 0,
     });
+
   } catch (error) {
     console.error("[LexoraController.bulkImport]", error.message);
     res.status(500).json(errorResponse("Failed to import Lexora books", 500));

@@ -16,9 +16,10 @@ const NAV_ITEMS = [
     to: "/dashboard/attendance",
     Icon: Users,
     isGroup: true,
-    children: [
+      children: [
       { to: "/dashboard/students", label: "Students", Icon: User      },
       { to: "/dashboard/faculty",  label: "Faculty",  Icon: UserCheck },
+      { to: "/dashboard/attendance/kiosk", label: "Kiosk Attendance", Icon: UserCheck },
     ],
   },
   { to: "/dashboard/deleted",      label: "Recently Deleted", Icon: Trash2        },

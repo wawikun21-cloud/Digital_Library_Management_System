@@ -35,8 +35,10 @@ const LexoraBookModel = {
         updated:      results.filter(r => !r.isNewBook).length,
         errors:       errors.length,
         data:         results.map(r => r.data),
+        updatedBooks: results.filter(r => !r.isNewBook).map(r => ({ title: r.data.title, author: r.data.author })),
         errorsDetail: errors,
       };
+
     } catch (error) {
       await conn.rollback();
       console.error("[LexoraBookModel.bulkImport]", error.message);

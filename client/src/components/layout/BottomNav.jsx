@@ -2,10 +2,10 @@ import { NavLink } from "react-router-dom";
 import { BarChart3, BookOpen, ClipboardList, Trash2 } from "lucide-react";
 
 const NAV = [
-  { to: "/",         label: "Home",     Icon: BarChart3     },
-  { to: "/books",    label: "Books",    Icon: BookOpen      },
-  { to: "/borrowed", label: "Borrowed", Icon: ClipboardList },
-  { to: "/deleted",  label: "Deleted",  Icon: Trash2        },
+  { to: "/dashboard",         label: "Dashboard",     Icon: BarChart3     },
+  { to: "/dashboard/books",    label: "Books",    Icon: BookOpen      },
+  { to: "/dashboard/borrowed", label: "Borrowed", Icon: ClipboardList },
+  { to: "/dashboard/deleted",  label: "Deleted",  Icon: Trash2        },
 ];
 
 export default function BottomNav() {
@@ -22,7 +22,7 @@ export default function BottomNav() {
         <NavLink
           key={to}
           to={to}
-          end={to === "/"}
+          end={to === "/dashboard"}
           className={({ isActive }) => [
             "flex flex-col items-center gap-1 transition-colors duration-200",
             isActive ? "text-white" : "text-slate-400"
