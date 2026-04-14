@@ -138,7 +138,7 @@ function LiveTimer({ checkInTime }) {
     <span style={{
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
       fontSize: 13, fontWeight: 700, letterSpacing: "0.5px",
-      color: isLong ? "#f59e0b" : "#34d399",
+      color: isLong ? "#ffe600" : "#34d399",
       display: "inline-flex", alignItems: "center", gap: 4,
     }}>
       <Clock size={11} style={{ opacity: 0.8 }} />
@@ -651,7 +651,7 @@ function RegisterStudentModal({ scannedId, onClose, onRegistered }) {
                     onBlur={e  => e.target.style.borderColor = "rgba(255,255,255,0.12)"}
                   >
                     <option value="">Select year…</option>
-                    {["1st Year","2nd Year","3rd Year","4th Year","5th Year","Graduate"].map(y => (
+                    {["1st Year","2nd Year","3rd Year","4th Year","Graduate"].map(y => (
                       <option key={y} value={y}>{y}</option>
                     ))}
                   </select>
@@ -1072,11 +1072,11 @@ export default function KioskAttendance() {
           <div style={{ textAlign: "center" }}>
             <div style={{
               width: 64, height: 64, borderRadius: 20, margin: "0 auto 16px",
-              background: "linear-gradient(135deg, rgba(238,162,58,0.2), rgba(238,162,58,0.05))",
-              border: "1.5px solid rgba(238,162,58,0.3)",
+              background: "linear-gradient(135deg, #ffe60031, rgba(255, 149, 0, 0.05))",
+              border: "1.5px solid #ffe600",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>
-              <Hash size={28} color="#EEA23A" />
+              <Hash size={28} color="#ffe600" />
             </div>
             <h2 style={{
               margin: 0, fontSize: 18, fontWeight: 800, color: "#f1f5f9",
@@ -1120,8 +1120,8 @@ export default function KioskAttendance() {
               }}>
                 <div style={{
                   width: 18, height: 18, borderRadius: "50%",
-                  border: "2px solid rgba(238,162,58,0.3)",
-                  borderTopColor: "#EEA23A",
+                  border: "2px solid #ffe600af",
+                  borderTopColor: "#ffe600",
                   animation: "spin 0.7s linear infinite",
                 }} />
               </div>
@@ -1137,7 +1137,7 @@ export default function KioskAttendance() {
               fontSize: 14, fontWeight: 800, letterSpacing: "0.5px",
               textTransform: "uppercase",
               background: idInput.trim() && !tapping
-                ? "linear-gradient(135deg, #EEA23A, #d4841f)"
+                ? "linear-gradient(135deg, #ffe600, #d4841f)"
                 : "rgba(255,255,255,0.06)",
               color: idInput.trim() && !tapping ? "#fff" : "#475569",
               border: "none", borderRadius: 14, cursor: idInput.trim() && !tapping ? "pointer" : "not-allowed",
@@ -1155,7 +1155,7 @@ export default function KioskAttendance() {
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {[
               { icon: LogIn,  color: "#34d399", label: "1st tap", desc: "Check In" },
-              { icon: LogOut, color: "#f59e0b", label: "2nd tap", desc: "Check Out" },
+              { icon: LogOut, color: "#ffe600", label: "2nd tap", desc: "Check Out" },
             ].map(({ icon: Icon, color, label, desc }) => (
               <div key={label} style={{
                 display: "flex", alignItems: "center", gap: 10,
