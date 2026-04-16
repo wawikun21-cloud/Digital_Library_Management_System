@@ -20,6 +20,3 @@
 Run as Admin: `taskkill /f /im httpd.exe`
 
 **Issue resolved - SPA routing now works via vite dev + .htaccess fallback.**
-
-
-

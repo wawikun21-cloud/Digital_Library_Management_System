@@ -5,7 +5,7 @@ import {
   Search, Clock, ArrowRight, ArrowLeft, Trash2, Users,
   AlertCircle, X, Download, Calendar, Filter, ChevronDown,
   User, Hash, GraduationCap, CheckCircle2, XCircle,
-  FileText, Timer, BookOpen, LogIn, AlertTriangle,
+  FileText, Timer, BookOpen, LogIn, AlertTriangle, Monitor,
 } from "lucide-react";
 import {
   getAllAttendance,
@@ -59,7 +59,6 @@ function getInitials(name = "") {
 function Avatar({ name, size = 32 }) {
   const COLORS = ["#32667F", "#EEA23A", "#2d7a47", "#7c3aed", "#EA8B33"];
   const bg = COLORS[(name?.charCodeAt(0) || 0) % COLORS.length];
-  const navigate = useNavigate();
   return (
     <div
       className="rounded-full flex items-center justify-center font-bold shrink-0 text-white"
@@ -366,43 +365,38 @@ function StudentModal({ record, onClose }) {
         }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-  <div>
-    <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
-      style={{ color: "var(--text-primary)" }}>
-      <Users size={22} style={{ color: "var(--accent-amber)" }} />
-      Attendance Management
-    </h1>
-    <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
-      Track student check-in / check-out and library visit history
-    </p>
-  </div>
- 
-        <div className="flex items-center gap-2">
-          {/* Kiosk button */}
-          <button
-            onClick={() => navigate("/dashboard/attendance/kiosk")}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-colors"
-            style={{
-              background: "var(--bg-surface)",
-              border: "1.5px solid var(--border)",
-              color: "var(--text-primary)",
-            }}
-          >
-            <Monitor size={14} style={{ color: "var(--accent-amber)" }} />
-            Kiosk View
-          </button>
-      
-          {/* Existing PDF button */}
-          <button
-            onClick={() => downloadGeneralPDF(filtered)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors"
-            style={{ background: "var(--accent-amber)", boxShadow: "0 2px 8px rgba(238,162,58,.3)" }}
-          >
-            <Download size={14} /> Download PDF
-          </button>
+        <div className="flex items-center justify-between gap-3 px-6 py-4 shrink-0"
+          style={{ borderBottom: "1px solid var(--border-light)" }}>
+          <div className="flex items-center gap-3 min-w-0">
+            <Avatar name={record.student_name} size={36} />
+            <div className="min-w-0">
+              <p className="text-[15px] font-bold truncate" style={{ color: "var(--text-primary)" }}>
+                {record.student_name}
+              </p>
+              <p className="text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                {record.student_id_number}
+                {record.student_course ? ` · ${record.student_course}` : ""}
+                {record.student_yr_level ? ` · ${record.student_yr_level}` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => downloadIndividualPDF(record, history)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-colors"
+              style={{ background: "var(--accent-amber)", boxShadow: "0 2px 6px rgba(238,162,58,.3)" }}
+            >
+              <Download size={13} /> Export PDF
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg transition-colors hover:opacity-70"
+              style={{ color: "var(--text-muted)" }}
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
-      </div>
 
         {/* Summary strip */}
         <div className="grid grid-cols-3 gap-3 px-6 py-4 shrink-0"
@@ -476,9 +470,35 @@ function StudentModal({ record, onClose }) {
 }
 
 // ─────────────────────────────────────────────────────────
+//  FilterField — defined outside Attendance so React never
+//  treats it as a new component type on re-render
+// ─────────────────────────────────────────────────────────
+const filterInputCls =
+  "w-full pl-8 pr-3 py-2 rounded-lg text-[12.5px] outline-none transition-all " +
+  "focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400";
+const filterInputStyle = {
+  background: "var(--bg-surface)", border: "1.5px solid var(--border)",
+  color: "var(--text-primary)",
+};
+
+function FilterField({ icon: Icon, children }) {
+  return (
+    <div className="relative flex items-center">
+      {Icon && (
+        <Icon size={13} className="absolute left-2.5 pointer-events-none z-10"
+          style={{ color: "var(--text-muted)" }} />
+      )}
+      {children}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
 //  Main Page
 // ─────────────────────────────────────────────────────────
 export default function Attendance() {
+  const navigate = useNavigate();
+
   // ── Data ──────────────────────────────────────────────
   const [records, setRecords]     = useState([]);
   const [active, setActive]       = useState([]);
@@ -497,7 +517,8 @@ export default function Attendance() {
   const [tapResult,   setTapResult]   = useState(null);   // last successful tap
   const [studentInfo, setStudentInfo] = useState(null);   // live lookup preview
   const [lookingUp,   setLookingUp]   = useState(false);
-  const debouncedId = useDebounce(idInput, 400);
+  const debouncedId     = useDebounce(idInput,  400);
+  const debouncedSearch = useDebounce(fSearch,  300);
   const inputRef = useRef(null);
 
   // ── Modals ────────────────────────────────────────────
@@ -608,7 +629,7 @@ export default function Attendance() {
   );
 
   const filtered = useMemo(() => {
-    const q = fSearch.toLowerCase().trim();
+    const q = debouncedSearch.toLowerCase().trim();
     return records.filter((r) => {
       if (q && !r.student_name.toLowerCase().includes(q) && !r.student_id_number.toLowerCase().includes(q)) return false;
       if (fCourse  && r.student_course !== fCourse)                                         return false;
@@ -616,28 +637,10 @@ export default function Attendance() {
       if (fStatus !== "all" && r.status !== fStatus)                                        return false;
       return true;
     });
-  }, [records, fSearch, fCourse, fDate, fStatus]);
+  }, [records, debouncedSearch, fCourse, fDate, fStatus]);
 
   const hasFilters  = fSearch || fCourse || fDate || fStatus !== "all";
   const clearFilters = () => { setFSearch(""); setFCourse(""); setFDate(""); setFStatus("all"); };
-
-  const FilterField = ({ icon: Icon, children }) => (
-    <div className="relative flex items-center">
-      {Icon && (
-        <Icon size={13} className="absolute left-2.5 pointer-events-none z-10"
-          style={{ color: "var(--text-muted)" }} />
-      )}
-      {children}
-    </div>
-  );
-
-  const filterInputCls =
-    "w-full pl-8 pr-3 py-2 rounded-lg text-[12.5px] outline-none transition-all " +
-    "focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400";
-  const filterInputStyle = {
-    background: "var(--bg-surface)", border: "1.5px solid var(--border)",
-    color: "var(--text-primary)",
-  };
 
   // ─────────────────────────────────────────────────────
   //  Render
@@ -657,13 +660,27 @@ export default function Attendance() {
             Track student check-in / check-out and library visit history
           </p>
         </div>
-        <button
-          onClick={() => downloadGeneralPDF(filtered)}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors"
-          style={{ background: "var(--accent-amber)", boxShadow: "0 2px 8px rgba(238,162,58,.3)" }}
-        >
-          <Download size={14} /> Download PDF
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/dashboard/attendance/kiosk")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-colors"
+            style={{
+              background: "var(--bg-surface)",
+              border: "1.5px solid var(--border)",
+              color: "var(--text-primary)",
+            }}
+          >
+            <Monitor size={14} style={{ color: "var(--accent-amber)" }} />
+            Kiosk View
+          </button>
+          <button
+            onClick={() => downloadGeneralPDF(filtered)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors"
+            style={{ background: "var(--accent-amber)", boxShadow: "0 2px 8px rgba(238,162,58,.3)" }}
+          >
+            <Download size={14} /> Download PDF
+          </button>
+        </div>
       </div>
 
       {/* ── Stats Cards ────────────────────────────────── */}

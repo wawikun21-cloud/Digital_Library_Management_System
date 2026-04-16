@@ -14,9 +14,11 @@ import {
   getActiveAttendance,
   tapAttendance,
 } from "../services/api/attendanceApi";
+import { getStudentByStudentIdNumber } from "../services/api/studentsApi";
 import {
   LogIn, LogOut, Clock, Users, Wifi, WifiOff,
-  BookOpen, GraduationCap, Hash, AlertTriangle, CheckCircle2,
+  Hash, AlertTriangle, CheckCircle2,
+  Maximize2, Minimize2, UserPlus, X, ChevronRight,
 } from "lucide-react";
 
 // ─── Helpers ─────────────────────────────────────────────
@@ -62,6 +64,40 @@ function useLiveClock() {
   return now;
 }
 
+// ─── Fullscreen hook ──────────────────────────────────────
+function useFullscreen(ref) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const enter = useCallback(() => {
+    const el = ref.current || document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    else if (el.mozRequestFullScreen) el.mozRequestFullScreen();
+    else if (el.msRequestFullscreen) el.msRequestFullscreen();
+  }, [ref]);
+
+  const exit = useCallback(() => {
+    if (document.exitFullscreen) document.exitFullscreen();
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
+    else if (document.msExitFullscreen) document.msExitFullscreen();
+  }, []);
+
+  const toggle = useCallback(() => {
+    isFullscreen ? exit() : enter();
+  }, [isFullscreen, enter, exit]);
+
+  return { isFullscreen, toggle };
+}
+
 // ─── Live elapsed seconds per record ─────────────────────
 function useElapsed(checkInTime) {
   const [elapsed, setElapsed] = useState(() =>
@@ -102,7 +138,7 @@ function LiveTimer({ checkInTime }) {
     <span style={{
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
       fontSize: 13, fontWeight: 700, letterSpacing: "0.5px",
-      color: isLong ? "#f59e0b" : "#34d399",
+      color: isLong ? "#ffd900" : "#34d399",
       display: "inline-flex", alignItems: "center", gap: 4,
     }}>
       <Clock size={11} style={{ opacity: 0.8 }} />
@@ -171,24 +207,36 @@ function StudentCard({ record, index }) {
 // Big animated tap-result card (flies in from bottom)
 function TapCard({ result, onDone }) {
   const isIn = result.action === "checked_in";
-  const [bg, accent] = avatarColors(result.data?.student_name || "");
-  const [visible, setVisible] = useState(true);
-  const elapsed = useElapsed(result.data?.check_in_time || new Date());
+  const [, accent] = avatarColors(result.data?.student_name || "");
+  const [phase, setPhase] = useState("enter"); // "enter" | "exit"
 
+  // After progress bar runs out (2.7s), switch to exit phase
   useEffect(() => {
-    const hide = setTimeout(() => setVisible(false), 5500);
-    const done = setTimeout(onDone, 6000);
-    return () => { clearTimeout(hide); clearTimeout(done); };
-  }, [onDone]);
+    const t = setTimeout(() => setPhase("exit"), 2700);
+    return () => clearTimeout(t);
+  }, []);
+
+  // When exit animation finishes, remove the card from the tree
+  const handleAnimationEnd = () => {
+    if (phase === "exit") onDone();
+  };
+
+  const animation =
+    phase === "enter"
+      ? "tapCardIn 0.5s cubic-bezier(.34,1.4,.64,1) both"
+      : "tapCardOut 0.35s ease forwards";
 
   return (
-    <div style={{
-      position: "fixed", bottom: 32, left: "50%",
-      transform: "translateX(-50%)",
-      zIndex: 100,
-      animation: visible ? "tapCardIn 0.5s cubic-bezier(.34,1.4,.64,1) both" : "tapCardOut 0.4s ease forwards",
-      width: "min(520px, calc(100vw - 48px))",
-    }}>
+    <div
+      onAnimationEnd={handleAnimationEnd}
+      style={{
+        position: "fixed", bottom: 32, left: "50%",
+        transform: "translateX(-50%)",
+        zIndex: 100,
+        animation,
+        width: "min(520px, calc(100vw - 48px))",
+      }}
+    >
       <div style={{
         background: isIn
           ? "linear-gradient(135deg, #0f2a1a 0%, #0d1f2d 100%)"
@@ -296,29 +344,406 @@ function TapCard({ result, onDone }) {
           height: "100%",
           background: isIn ? "#34d399" : "#f59e0b",
           borderRadius: 2,
-          animation: "progressBar 5.5s linear forwards",
+          animation: "progressBar 2.7s linear forwards",
         }} />
       </div>
     </div>
   );
 }
 
-// Not-found flash banner
-function NotFoundBanner({ studentId, onDone }) {
-  const [visible, setVisible] = useState(true);
+// ─── Register Student Modal ───────────────────────────────
+// New UX:
+// 1. Shows Student ID input pre-filled with scanned RFID
+// 2. Searches students table as user types (debounced)
+// 3. Shows dropdown of matching students
+// 4. Select one → auto-fills all fields (read-only)
+// 5. Confirm → check in
+function RegisterStudentModal({ scannedId, onClose, onRegistered }) {
+  const [searchId,    setSearchId]    = useState(scannedId);
+  const [searching,   setSearching]   = useState(false);
+  const [selected,    setSelected]    = useState(null);   // chosen student object
+  const [notInDb,     setNotInDb]     = useState(false);  // searched but not found
+  const [submitting,  setSubmitting]  = useState(false);
+  const [error,       setError]       = useState("");
+  const searchRef = useRef(null);
+  const debounceRef = useRef(null);
+
+  // Lock body scroll
   useEffect(() => {
-    const hide = setTimeout(() => setVisible(false), 2800);
-    const done = setTimeout(onDone, 3200);
-    return () => { clearTimeout(hide); clearTimeout(done); };
-  }, [onDone]);
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  // Auto-search on mount with scanned ID
+  useEffect(() => {
+    if (scannedId) doSearch(scannedId);
+    setTimeout(() => searchRef.current?.focus(), 80);
+  }, []);
+
+  // Debounced search as user edits the ID field
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearchId(val);
+    setSelected(null);
+    setNotInDb(false);
+    setError("");
+    clearTimeout(debounceRef.current);
+    if (!val.trim()) return;
+    debounceRef.current = setTimeout(() => doSearch(val.trim()), 400);
+  };
+
+  const doSearch = async (id) => {
+    setSearching(true);
+    setNotInDb(false);
+    try {
+      const res = await getStudentByStudentIdNumber(id);
+      if (res.success && res.data) {
+        // Auto-select immediately — only one result per exact ID
+        setSelected(res.data);
+        setNotInDb(false);
+      } else {
+        setSelected(null);
+        setNotInDb(true);
+      }
+    } catch {
+      setSelected(null);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  // Derive display name from student record
+  const getFullName = (s) => {
+    if (!s) return "";
+    const fn = (s.first_name || "").trim();
+    const ln = (s.last_name  || "").trim();
+    if (fn && ln) return `${fn} ${ln}`;
+    if (fn)       return fn;
+    // fallback: split student_name
+    return s.student_name || s.display_name || "";
+  };
+
+  const handleConfirm = async () => {
+    if (!selected) return;
+    setError("");
+    setSubmitting(true);
+    try {
+      // No createStudent needed — student already exists in DB
+      // Just call tapAttendance to check them in
+      onRegistered(selected.student_id_number);
+    } catch {
+      setError("Something went wrong. Please try again.");
+      setSubmitting(false);
+    }
+  };
+
+  // Shared styles
+  const fieldStyle = {
+    width: "100%", boxSizing: "border-box",
+    padding: "10px 14px", borderRadius: 10, fontSize: 13,
+    fontFamily: "'DM Sans', sans-serif", fontWeight: 500,
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    color: "#94a3b8", outline: "none",
+  };
+  const labelStyle = {
+    display: "block", fontSize: 10, fontWeight: 700,
+    letterSpacing: "1px", textTransform: "uppercase",
+    color: "#475569", marginBottom: 5,
+  };
+
+  const fullName = getFullName(selected);
 
   return (
-    <div style={{
-      position: "fixed", top: 24, left: "50%", transform: "translateX(-50%)",
-      zIndex: 100,
-      animation: visible ? "bannerIn 0.35s cubic-bezier(.34,1.4,.64,1) both" : "bannerOut 0.3s ease forwards",
-      width: "min(420px, calc(100vw - 48px))",
-    }}>
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 200,
+        background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 24, animation: "overlayIn 0.2s ease",
+      }}
+    >
+      <div style={{
+        width: "100%", maxWidth: 480,
+        background: "linear-gradient(160deg, #0d1f35 0%, #0a1628 100%)",
+        border: "1.5px solid rgba(99,102,241,0.3)",
+        borderRadius: 24,
+        boxShadow: "0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.1)",
+        overflow: "hidden",
+        animation: "modalIn 0.3s cubic-bezier(.34,1.4,.64,1)",
+      }}>
+
+        {/* ── Header ───────────────────────────────────── */}
+        <div style={{
+          padding: "20px 24px 18px",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 12,
+              background: "rgba(99,102,241,0.15)",
+              border: "1.5px solid rgba(99,102,241,0.3)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <UserPlus size={18} color="#818cf8" />
+            </div>
+            <div>
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "#f1f5f9" }}>
+                Student Not Registered
+              </p>
+              <p style={{ margin: "2px 0 0", fontSize: 11, color: "#64748b" }}>
+                Search the student by ID to link and check in
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 32, height: 32, borderRadius: 8, border: "none",
+            background: "rgba(255,255,255,0.06)", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <X size={14} color="#64748b" />
+          </button>
+        </div>
+
+        {/* ── Body ─────────────────────────────────────── */}
+        <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* ── Search input ─────────────────────────── */}
+          <div>
+            <label style={{ ...labelStyle, color: "#818cf8" }}>Search Student by ID</label>
+            <div style={{ position: "relative" }}>
+              <input
+                ref={searchRef}
+                type="text"
+                value={searchId}
+                onChange={handleSearchChange}
+                placeholder="Enter Student ID…"
+                style={{
+                  width: "100%", boxSizing: "border-box",
+                  padding: "12px 40px 12px 14px",
+                  borderRadius: 10, fontSize: 15,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontWeight: 700, letterSpacing: "1px",
+                  background: "rgba(99,102,241,0.08)",
+                  border: "1.5px solid rgba(99,102,241,0.4)",
+                  color: "#818cf8", outline: "none",
+                  transition: "border-color 0.2s, box-shadow 0.2s",
+                  boxShadow: "0 0 0 3px rgba(99,102,241,0.1)",
+                }}
+              />
+              {/* Spinner or search icon */}
+              <div style={{
+                position: "absolute", right: 12, top: "50%",
+                transform: "translateY(-50%)",
+              }}>
+                {searching ? (
+                  <div style={{
+                    width: 16, height: 16, borderRadius: "50%",
+                    border: "2px solid rgba(99,102,241,0.3)",
+                    borderTopColor: "#818cf8",
+                    animation: "spin 0.7s linear infinite",
+                  }} />
+                ) : (
+                  <Hash size={15} color="#475569" />
+                )}
+              </div>
+            </div>
+
+            {/* Not found message */}
+            {notInDb && !searching && (
+              <p style={{
+                margin: "8px 0 0", fontSize: 12, color: "#ef4444",
+                display: "flex", alignItems: "center", gap: 6,
+              }}>
+                <AlertTriangle size={12} />
+                No student found with ID <strong style={{ fontFamily: "monospace" }}>{searchId}</strong>
+              </p>
+            )}
+          </div>
+
+          {/* ── Student result card (auto-fills on match) ── */}
+          {selected && (
+            <div style={{
+              borderRadius: 14,
+              background: "rgba(52,211,153,0.06)",
+              border: "1.5px solid rgba(52,211,153,0.25)",
+              overflow: "hidden",
+              animation: "cardIn 0.3s cubic-bezier(.34,1.4,.64,1)",
+            }}>
+              {/* Student identity header */}
+              <div style={{
+                padding: "14px 16px",
+                borderBottom: "1px solid rgba(52,211,153,0.12)",
+                display: "flex", alignItems: "center", gap: 12,
+              }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
+                  background: "linear-gradient(135deg, rgba(52,211,153,0.3), rgba(52,211,153,0.1))",
+                  border: "1.5px solid rgba(52,211,153,0.4)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 16, fontWeight: 800, color: "#34d399",
+                }}>
+                  {fullName.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{
+                    margin: 0, fontSize: 16, fontWeight: 800, color: "#f1f5f9",
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}>
+                    {fullName}
+                  </p>
+                  <p style={{
+                    margin: "2px 0 0", fontSize: 11,
+                    color: "#34d399", fontFamily: "monospace",
+                  }}>
+                    {selected.student_id_number}
+                  </p>
+                </div>
+                <CheckCircle2 size={20} color="#34d399" style={{ flexShrink: 0 }} />
+              </div>
+
+              {/* Auto-filled fields — read only */}
+              <div style={{
+                display: "grid", gridTemplateColumns: "1fr 1fr",
+                gap: 1, background: "rgba(255,255,255,0.04)",
+              }}>
+                {[
+                  { label: "Course",      value: selected.student_course    || "—" },
+                  { label: "Year Level",  value: selected.student_yr_level  || "—" },
+                  { label: "School Year", value: selected.student_school_year || "—" },
+                  { label: "Email",       value: selected.student_email     || "—" },
+                ].map(({ label, value }) => (
+                  <div key={label} style={{
+                    padding: "10px 14px",
+                    background: "rgba(10,22,40,0.6)",
+                  }}>
+                    <p style={{ margin: 0, fontSize: 9, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px" }}>
+                      {label}
+                    </p>
+                    <p style={{
+                      margin: "3px 0 0", fontSize: 12, fontWeight: 600,
+                      color: "#94a3b8",
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    }}>
+                      {value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Empty state — waiting for search */}
+          {!selected && !notInDb && !searching && !searchId && (
+            <div style={{
+              padding: "24px 0", textAlign: "center",
+              color: "#334155", fontSize: 12,
+            }}>
+              Type a Student ID above to search
+            </div>
+          )}
+
+          {/* Error */}
+          {error && (
+            <div style={{
+              padding: "9px 12px", borderRadius: 8,
+              background: "rgba(239,68,68,0.1)",
+              border: "1px solid rgba(239,68,68,0.25)",
+              fontSize: 12, color: "#ef4444",
+              display: "flex", alignItems: "center", gap: 8,
+            }}>
+              <AlertTriangle size={13} /> {error}
+            </div>
+          )}
+        </div>
+
+        {/* ── Footer ───────────────────────────────────── */}
+        <div style={{
+          padding: "16px 24px",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+          display: "flex", gap: 10, justifyContent: "flex-end",
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: "10px 20px", borderRadius: 10, fontSize: 13,
+              fontWeight: 600, cursor: "pointer", border: "none",
+              background: "rgba(255,255,255,0.06)", color: "#94a3b8",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={!selected || submitting}
+            style={{
+              padding: "10px 22px", borderRadius: 10, fontSize: 13,
+              fontWeight: 800,
+              cursor: !selected || submitting ? "not-allowed" : "pointer",
+              border: "none", display: "flex", alignItems: "center", gap: 8,
+              background: !selected || submitting
+                ? "rgba(99,102,241,0.25)"
+                : "linear-gradient(135deg, #6366f1, #4f46e5)",
+              color: !selected ? "#475569" : "#fff",
+              boxShadow: selected && !submitting ? "0 4px 16px rgba(99,102,241,0.4)" : "none",
+              transition: "all 0.2s",
+            }}
+          >
+            {submitting ? (
+              <>
+                <div style={{
+                  width: 14, height: 14, borderRadius: "50%",
+                  border: "2px solid rgba(255,255,255,0.3)",
+                  borderTopColor: "#fff",
+                  animation: "spin 0.7s linear infinite",
+                }} />
+                Checking In…
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={14} /> Check In Student
+                <ChevronRight size={14} />
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function NotFoundBanner({ studentId, onDone }) {
+  const [phase, setPhase] = useState("enter"); // "enter" | "exit"
+
+  // After progress bar runs out (2.7s), switch to exit phase
+  useEffect(() => {
+    const t = setTimeout(() => setPhase("exit"), 2700);
+    return () => clearTimeout(t);
+  }, []);
+
+  // When exit animation finishes, remove from tree
+  const handleAnimationEnd = () => {
+    if (phase === "exit") onDone();
+  };
+
+  const animation =
+    phase === "enter"
+      ? "bannerIn 0.35s cubic-bezier(.34,1.4,.64,1) both"
+      : "bannerOut 0.35s ease forwards";
+
+  return (
+    <div
+      onAnimationEnd={handleAnimationEnd}
+      style={{
+        position: "fixed", top: 24, left: "50%", transform: "translateX(-50%)",
+        zIndex: 100,
+        animation,
+        width: "min(420px, calc(100vw - 48px))",
+      }}
+    >
       <div style={{
         background: "linear-gradient(135deg, #2a0a0a, #1a0808)",
         border: "1.5px solid #ef444455",
@@ -335,7 +760,7 @@ function NotFoundBanner({ studentId, onDone }) {
         }}>
           <AlertTriangle size={20} color="#ef4444" />
         </div>
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#ef4444", fontFamily: "'DM Sans', sans-serif" }}>
             Student ID Not Found
           </p>
@@ -344,6 +769,20 @@ function NotFoundBanner({ studentId, onDone }) {
           </p>
         </div>
       </div>
+
+      {/* Progress bar — identical to TapCard */}
+      <div style={{
+        height: 3, borderRadius: 2, marginTop: 6,
+        background: "rgba(255,255,255,0.06)",
+        overflow: "hidden",
+      }}>
+        <div style={{
+          height: "100%",
+          background: "#ef4444",
+          borderRadius: 2,
+          animation: "progressBar 2.7s linear forwards",
+        }} />
+      </div>
     </div>
   );
 }
@@ -351,13 +790,16 @@ function NotFoundBanner({ studentId, onDone }) {
 // ─── Main Kiosk Page ──────────────────────────────────────
 export default function KioskAttendance() {
   const now = useLiveClock();
-  const [active, setActive]       = useState([]);
-  const [idInput, setIdInput]     = useState("");
-  const [tapping, setTapping]     = useState(false);
-  const [tapResult, setTapResult] = useState(null);
-  const [notFound, setNotFound]   = useState(null);
-  const [online, setOnline]       = useState(navigator.onLine);
-  const inputRef = useRef(null);
+  const [active, setActive]           = useState([]);
+  const [idInput, setIdInput]         = useState("");
+  const [tapping, setTapping]         = useState(false);
+  const [tapResult, setTapResult]     = useState(null);
+  const [notFound, setNotFound]       = useState(null);
+  const [registerModal, setRegisterModal] = useState(null); // scanned ID for registration
+  const [online, setOnline]           = useState(navigator.onLine);
+  const inputRef     = useRef(null);
+  const containerRef = useRef(null);
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(containerRef);
 
   // ── Poll active students every 10s ───────────────────
   const fetchActive = useCallback(async () => {
@@ -391,7 +833,8 @@ export default function KioskAttendance() {
         setTapResult(res);
         fetchActive();
       } else if (res.error?.toLowerCase().includes("not found")) {
-        setNotFound(id);
+        // Open registration modal instead of error banner
+        setRegisterModal(id);
       }
     } catch {
       setNotFound(idInput.trim());
@@ -402,14 +845,37 @@ export default function KioskAttendance() {
     }
   }, [idInput, tapping, fetchActive]);
 
-  const handleKeyDown = (e) => { if (e.key === "Enter") handleTap(); };
+  // ── After registration → auto check-in ───────────────
+  const handleRegistered = useCallback(async (studentId) => {
+    setRegisterModal(null);
+    // Small delay so DB write settles before tap
+    await new Promise(r => setTimeout(r, 400));
+    try {
+      const res = await tapAttendance(studentId);
+      if (res.success) {
+        setTapResult(res);
+        fetchActive();
+      } else {
+        setNotFound(studentId);
+      }
+    } catch {
+      setNotFound(studentId);
+    } finally {
+      setTimeout(() => inputRef.current?.focus(), 80);
+    }
+  }, [fetchActive]);
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") handleTap();
+    if (e.key === "F11")  { e.preventDefault(); toggleFullscreen(); }
+  };
 
   // Format clock
   const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
   return (
-    <div style={{
+    <div ref={containerRef} style={{
       minHeight: "100vh",
       background: "linear-gradient(160deg, #060d18 0%, #0a1628 40%, #060d18 100%)",
       color: "#f1f5f9",
@@ -457,14 +923,15 @@ export default function KioskAttendance() {
       }}>
         {/* Logo + title */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 10,
-            background: "linear-gradient(135deg, #EEA23A, #d4841f)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 4px 16px rgba(238,162,58,0.35)",
-          }}>
-            <BookOpen size={20} color="#fff" />
-          </div>
+          <img
+            src="/icon.png"
+            alt="Lexora Logo"
+            style={{
+              width: 40, height: 40, borderRadius: 10,
+              objectFit: "contain",
+              boxShadow: "0 4px 16px rgba(238,162,58,0.25)",
+            }}
+          />
           <div>
             <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#f1f5f9", letterSpacing: "-0.3px" }}>
               Lexora Library
@@ -514,6 +981,32 @@ export default function KioskAttendance() {
             <span style={{ fontSize: 13, fontWeight: 700, color: "#818cf8" }}>{active.length}</span>
             <span style={{ fontSize: 10, color: "#64748b" }}>inside</span>
           </div>
+          {/* Fullscreen toggle */}
+          <button
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "Exit Fullscreen (F11)" : "Enter Fullscreen (F11)"}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 36, height: 36, borderRadius: 10, cursor: "pointer",
+              background: isFullscreen ? "rgba(255, 230, 0, 0.15)" : "rgba(255,255,255,0.06)",
+              border: `1px solid ${isFullscreen ? "rgba(255, 217, 0, 0.35)" : "rgba(255,255,255,0.1)"}`,
+              transition: "all 0.2s",
+              flexShrink: 0,
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = isFullscreen ? "rgba(238, 226, 58, 0.25)" : "rgba(255,255,255,0.12)";
+              e.currentTarget.style.borderColor = isFullscreen ? "rgba(238,162,58,0.5)" : "rgba(255,255,255,0.2)";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = isFullscreen ? "rgba(238,162,58,0.15)" : "rgba(255,255,255,0.06)";
+              e.currentTarget.style.borderColor = isFullscreen ? "rgba(238,162,58,0.35)" : "rgba(255,255,255,0.1)";
+            }}
+          >
+            {isFullscreen
+              ? <Minimize2 size={15} color="#ffd900" />
+              : <Maximize2 size={15} color="#94a3b8" />
+            }
+          </button>
         </div>
       </header>
 
@@ -540,11 +1033,11 @@ export default function KioskAttendance() {
           <div style={{ textAlign: "center" }}>
             <div style={{
               width: 64, height: 64, borderRadius: 20, margin: "0 auto 16px",
-              background: "linear-gradient(135deg, rgba(238,162,58,0.2), rgba(238,162,58,0.05))",
-              border: "1.5px solid rgba(238,162,58,0.3)",
+              background: "linear-gradient(135deg, rgba(255, 230, 0, 0.2), rgba(238,162,58,0.05))",
+              border: "1.5px solid rgba(250, 227, 23, 0.3)",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>
-              <Hash size={28} color="#EEA23A" />
+              <Hash size={28} color="#ffd900" />
             </div>
             <h2 style={{
               margin: 0, fontSize: 18, fontWeight: 800, color: "#f1f5f9",
@@ -575,7 +1068,7 @@ export default function KioskAttendance() {
                 fontFamily: "'JetBrains Mono', monospace",
                 letterSpacing: "1px",
                 background: "rgba(255,255,255,0.06)",
-                border: `1.5px solid ${idInput ? "rgba(238,162,58,0.5)" : "rgba(255,255,255,0.1)"}`,
+                border: `1.5px solid ${idInput ? "#ffd90073" : "rgba(255,255,255,0.1)"}`,
                 borderRadius: 14, color: "#f1f5f9",
                 outline: "none", textAlign: "center",
                 transition: "border-color 0.2s, box-shadow 0.2s",
@@ -589,7 +1082,7 @@ export default function KioskAttendance() {
                 <div style={{
                   width: 18, height: 18, borderRadius: "50%",
                   border: "2px solid rgba(238,162,58,0.3)",
-                  borderTopColor: "#EEA23A",
+                  borderTopColor: "#ffd900",
                   animation: "spin 0.7s linear infinite",
                 }} />
               </div>
@@ -605,7 +1098,7 @@ export default function KioskAttendance() {
               fontSize: 14, fontWeight: 800, letterSpacing: "0.5px",
               textTransform: "uppercase",
               background: idInput.trim() && !tapping
-                ? "linear-gradient(135deg, #EEA23A, #d4841f)"
+                ? "linear-gradient(135deg, #ffd900, #ffa600)"
                 : "rgba(255,255,255,0.06)",
               color: idInput.trim() && !tapping ? "#fff" : "#475569",
               border: "none", borderRadius: 14, cursor: idInput.trim() && !tapping ? "pointer" : "not-allowed",
@@ -623,7 +1116,7 @@ export default function KioskAttendance() {
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {[
               { icon: LogIn,  color: "#34d399", label: "1st tap", desc: "Check In" },
-              { icon: LogOut, color: "#f59e0b", label: "2nd tap", desc: "Check Out" },
+              { icon: LogOut, color: "#ffd900", label: "2nd tap", desc: "Check Out" },
             ].map(({ icon: Icon, color, label, desc }) => (
               <div key={label} style={{
                 display: "flex", alignItems: "center", gap: 10,
@@ -715,9 +1208,30 @@ export default function KioskAttendance() {
         />
       )}
 
+      {/* ── Register Student Modal ───────────────────────── */}
+      {registerModal && (
+        <RegisterStudentModal
+          scannedId={registerModal}
+          onClose={() => {
+            setRegisterModal(null);
+            setTimeout(() => inputRef.current?.focus(), 80);
+          }}
+          onRegistered={handleRegistered}
+        />
+      )}
+
       {/* ── Global keyframes ─────────────────────────────── */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        @keyframes overlayIn {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+        @keyframes modalIn {
+          from { opacity: 0; transform: scale(0.94) translateY(12px); }
+          to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
 
         @keyframes orbFloat {
           0%, 100% { transform: translate(0, 0) scale(1); }
@@ -748,7 +1262,7 @@ export default function KioskAttendance() {
           to   { width: 0%; }
         }
         @keyframes spin {
-          to { transform: translateY(-50%) rotate(360deg); }
+          to { transform: rotate(360deg); }
         }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }

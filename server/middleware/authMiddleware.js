@@ -1,6 +1,5 @@
 // ─────────────────────────────────────────────────────────
-//  middleware/auth.js
-//  Protects routes — rejects requests with no active session
+//  middleware/authMiddleware.js
 // ─────────────────────────────────────────────────────────
 
 function requireAuth(req, res, next) {
@@ -10,4 +9,21 @@ function requireAuth(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth };
+/**
+ * requireRole("admin")          — admin only
+ * requireRole("admin","staff")  — both roles
+ */
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!roles.includes(req.session?.user?.role)) {
+      return res.status(403).json({ success: false, error: "Forbidden: insufficient permissions" });
+    }
+    next();
+  };
+}
+
+const requireAdmin        = requireRole("admin");
+const requireStaff        = requireRole("staff");
+const requireAdminOrStaff = requireRole("admin", "staff");
+
+module.exports = { requireAuth, requireRole, requireAdmin, requireStaff, requireAdminOrStaff };

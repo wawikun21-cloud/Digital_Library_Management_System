@@ -2,32 +2,37 @@ import { useState } from 'react';
 import { NavLink, useLocation } from "react-router-dom";
 import { BarChart3, BookOpen, ClipboardList, Trash2, Sun, Moon, X, ChevronDown, Library, Users, User, Globe, UserCheck } from "lucide-react";
 import Logo from './Logo.jsx';
+import { STORAGE_KEYS } from "../../constants/index.js";
 
 const SIDEBAR_WIDTHS = { COLLAPSED: 58, EXPANDED: 220 };
 const BRAND_HEIGHT = 66;
 
+// roles: ["admin"]  → admin only
+// no roles key      → visible to everyone (admin + staff)
 const NAV_ITEMS = [
-  { to: "/dashboard",              label: "Dashboard",        Icon: BarChart3     },
-  { to: "/dashboard/books",        label: "Books",            Icon: BookOpen      },
-  { to: "/dashboard/lexora-books", label: "Lexora Books",     Icon: Globe         },
-  { to: "/dashboard/borrowed",     label: "Borrowed",         Icon: ClipboardList },
+  { to: "/dashboard",              label: "Dashboard",        Icon: BarChart3,     roles: ["admin"] },
+  { to: "/dashboard/books",        label: "Books",            Icon: BookOpen,      roles: ["admin"] },
+  { to: "/dashboard/lexora-books", label: "Lexora Books",     Icon: Globe,         roles: ["admin"] },
+  { to: "/dashboard/borrowed",     label: "Borrowed",         Icon: ClipboardList, roles: ["admin"] },
   {
     label: "Attendance",
     to: "/dashboard/attendance",
     Icon: Users,
     isGroup: true,
-      children: [
-      { to: "/dashboard/students", label: "Students", Icon: User      },
-      { to: "/dashboard/faculty",  label: "Faculty",  Icon: UserCheck },
+    // no roles = visible to admin + staff
+    children: [
+      { to: "/dashboard/students",         label: "Students",         Icon: User      },
+      { to: "/dashboard/faculty",          label: "Faculty",          Icon: UserCheck },
       { to: "/dashboard/attendance/kiosk", label: "Kiosk Attendance", Icon: UserCheck },
     ],
   },
-  { to: "/dashboard/deleted",      label: "Recently Deleted", Icon: Trash2        },
+  { to: "/dashboard/deleted", label: "Recently Deleted", Icon: Trash2, roles: ["admin"] },
 ];
 
 /* ─────────────────────────────────────────────────── */
 export default function Sidebar({
   collapsed, darkMode, onToggleTheme, mobileOpen, onMobileClose,
+  userRole,  // renamed from "role" — avoids collision with the HTML `role` attribute on <aside>
 }) {
   const [isHovered, setIsHovered] = useState(false);
   const effectiveCollapsed = collapsed && !isHovered;
@@ -45,7 +50,7 @@ export default function Sidebar({
         role="navigation"
         aria-expanded={!effectiveCollapsed}
       >
-        <Inner collapsed={effectiveCollapsed} sidebarWidth={desktopWidth} darkMode={darkMode} onToggleTheme={onToggleTheme} />
+        <Inner collapsed={effectiveCollapsed} sidebarWidth={desktopWidth} darkMode={darkMode} onToggleTheme={onToggleTheme} userRole={userRole} />
       </aside>
 
       {/* ── Mobile drawer ── */}
@@ -65,19 +70,48 @@ export default function Sidebar({
         >
           <X size={16} />
         </button>
-        <Inner collapsed={false} sidebarWidth={240} darkMode={darkMode} onToggleTheme={onToggleTheme} />
+        <Inner collapsed={false} sidebarWidth={240} darkMode={darkMode} onToggleTheme={onToggleTheme} userRole={userRole} />
       </aside>
     </>
   );
 }
 
 /* ── Shared inner content ────────────────────────── */
-function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme }) {
+
+/**
+ * Reads the user role directly from localStorage (synchronous, no hook delay).
+ * Returns the role string (e.g. "admin" | "staff") or null if not found.
+ * Never falls back to "admin" — unknown role = least-privileged view.
+ */
+function getRoleFromStorage(storageKey) {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme, userRole }) {
   const location = useLocation();
   const variant  = collapsed ? 'collapsed' : 'expanded';
 
+  // getRoleFromStorage is synchronous — no React hook timing gap.
+  // userRole prop is the secondary fallback (passed down from Layout).
+  // If both are missing, role stays null → staff-safe: hides all restricted items.
+  const role = getRoleFromStorage(STORAGE_KEYS.LEXORA_USER) ?? userRole ?? null;
+
+  // Filter nav items the current role may see:
+  //   • no `roles` key  → visible to everyone
+  //   • has `roles` key → role must be listed; null role never matches
+  const visibleItems = NAV_ITEMS.filter(item =>
+    !item.roles || (role !== null && item.roles.includes(role))
+  );
+
   // Auto-open Attendance group if a child is active
-  const attendanceGroup      = NAV_ITEMS.find(i => i.isGroup);
+  const attendanceGroup       = NAV_ITEMS.find(i => i.isGroup);
   const attendanceChildActive = attendanceGroup?.children.some(c => location.pathname.startsWith(c.to));
   const [attendanceOpen, setAttendanceOpen] = useState(attendanceChildActive || false);
 
@@ -94,7 +128,7 @@ function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme }) {
 
       {/* Nav */}
       <nav className="flex-1 flex flex-col gap-0.5 p-2 pt-4 overflow-y-auto overflow-x-hidden">
-        {NAV_ITEMS.map((item) =>
+        {visibleItems.map((item) =>
           item.isGroup ? (
             <StudentsMenu
               key={item.label}

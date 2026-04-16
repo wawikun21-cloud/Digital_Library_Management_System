@@ -91,8 +91,12 @@ async function parseLexoraExcel(buffer) {
         ? (row[colIdx.subject]?.toString().replace(/[\r\n]+/g, " ").trim() || null)
         : null;
 
-      // Global dedup: same title+author across sheets → skip
-      const key = `${title.toLowerCase()}||${(author || "").toLowerCase()}`;
+      // Dedup key: title + author + program.
+      // Using title+author alone would wrongly collapse books that share a
+      // title but have different authors across programs/sheets.
+      // Using title+author+program keeps legitimate cross-sheet duplicates
+      // while still preventing exact redundant rows within the same sheet.
+      const key = `${title.toLowerCase()}||${(author || "").toLowerCase()}||${sheetName.toLowerCase()}`;
       if (seen.has(key)) continue;
       seen.set(key, allBooks.length);
 
@@ -526,7 +530,7 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
             <AlertCircle size={13} style={{ flexShrink:0, marginTop:1 }} />
             <span>
               Books are saved to the Lexora e-library table. Each sheet (program) becomes the collection label.
-              Duplicates are skipped automatically.
+              Duplicates are updated automatically — existing records will be refreshed, not skipped.
             </span>
           </div>
         </>
@@ -563,12 +567,37 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
       {/* ══ STEP 4: Done ══ */}
       {step === 4 && results && (
         <div className="flex flex-col gap-4">
+
+          {/* ── FIX: Total processed banner so users know all books were handled ── */}
+          {(() => {
+            const total     = (results.imported ?? 0) + (results.updated ?? 0);
+            const hasErrors = (results.errors ?? 0) > 0;
+            return (
+              <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl"
+                   style={{
+                     background: hasErrors ? "rgba(184,122,0,0.07)" : "rgba(34,197,94,0.07)",
+                     border: `1.5px solid ${hasErrors ? "rgba(184,122,0,0.25)" : "rgba(34,197,94,0.25)"}`,
+                   }}>
+                <CheckCircle2 size={16} style={{ color: hasErrors ? "var(--accent-amber)" : "#15803d", flexShrink:0 }} />
+                <p className="text-[12px] font-semibold" style={{ color: hasErrors ? "#92400e" : "#15803d" }}>
+                  <strong>{total}</strong> of <strong>{total + (results.errors ?? 0)}</strong> titles processed successfully
+                  {results.updated > 0 && (
+                    <span className="ml-1 font-normal" style={{ color:"var(--text-secondary)" }}>
+                      ({results.imported ?? 0} new · {results.updated} already existed &amp; were updated)
+                    </span>
+                  )}
+                </p>
+              </div>
+            );
+          })()}
+
           <div className="grid grid-cols-3 gap-3">
+            {/* ── FIX: Renamed from "Titles Imported" → "New Titles" to avoid confusion with "updated" books ── */}
             <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl"
                  style={{ background:"rgba(34,197,94,0.08)", border:"1.5px solid rgba(34,197,94,0.2)" }}>
               <CheckCircle2 size={26} style={{ color:"#15803d" }} />
               <p className="text-2xl font-black" style={{ color:"#15803d" }}>{results.imported ?? 0}</p>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color:"#15803d" }}>Titles Imported</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color:"#15803d" }}>New Titles</p>
             </div>
             <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl"
                  style={{ background:"rgba(184,122,0,0.08)", border:"1.5px solid rgba(184,122,0,0.2)" }}>
@@ -576,7 +605,9 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
               <p className="text-2xl font-black" style={{ color:"var(--accent-amber)" }}>
                 {results.updated ?? 0}
               </p>
+              {/* ── FIX: "Updated" label now has a subtitle so users understand these were already in the DB ── */}
               <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color:"var(--accent-amber)" }}>Updated</p>
+              <p className="text-[9px] text-center leading-tight" style={{ color:"var(--text-muted)" }}>already in library</p>
             </div>
             <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl"
                  style={{

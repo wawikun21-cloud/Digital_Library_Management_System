@@ -7,18 +7,17 @@ const router           = express.Router();
 const BookModel        = require("../models/Book");
 const booksController  = require("../controllers/booksController");
 const lexoraController = require("../controllers/lexoraController");
+const { requireAuth, requireAdmin } = require("../middleware/authMiddleware");
 
 // ── GET /api/books ────────────────────────────────────────
-router.get("/", booksController.getBooks);
+router.get("/", requireAuth, requireAdmin, booksController.getBooks);
 
 // ── POST /api/books ───────────────────────────────────────
-// Now handled by booksController.createBook which inserts
-// the book row + all book_copies rows in one transaction.
-router.post("/", booksController.createBook);
+router.post("/", requireAuth, requireAdmin, booksController.createBook);
 
 // ── STATIC routes — MUST be before /:id ──────────────────
 
-// GET /api/books/public-search?title=...&author=...
+// GET /api/books/public-search?title=...&author=...  (public — no auth needed)
 router.get("/public-search", async (req, res) => {
   try {
     const { title, author } = req.query;
@@ -108,7 +107,7 @@ router.get("/public-search", async (req, res) => {
 });
 
 // GET /api/books/count/all
-router.get("/count/all", async (req, res) => {
+router.get("/count/all", requireAuth, requireAdmin, async (req, res) => {
   try {
     const result = await BookModel.getCount();
     if (!result.success) return res.status(400).json({ success: false, error: result.error });
@@ -120,7 +119,7 @@ router.get("/count/all", async (req, res) => {
 });
 
 // GET /api/books/stats
-router.get("/stats", async (req, res) => {
+router.get("/stats", requireAuth, requireAdmin, async (req, res) => {
   try {
     const nemcoResult  = await BookModel.getStats();
     const { pool }     = require("../config/db");
@@ -147,22 +146,22 @@ router.get("/stats", async (req, res) => {
 });
 
 // GET  /api/books/lexora
-router.get("/lexora", lexoraController.getLexoraBooks);
+router.get("/lexora", requireAuth, requireAdmin, lexoraController.getLexoraBooks);
 
 // POST /api/books/lexora
-router.post("/lexora", lexoraController.createLexoraBook);
+router.post("/lexora", requireAuth, requireAdmin, lexoraController.createLexoraBook);
 
 // PUT  /api/books/lexora/:id
-router.put("/lexora/:id", lexoraController.updateLexoraBook);
+router.put("/lexora/:id", requireAuth, requireAdmin, lexoraController.updateLexoraBook);
 
 // DELETE /api/books/lexora/:id
-router.delete("/lexora/:id", lexoraController.deleteLexoraBook);
+router.delete("/lexora/:id", requireAuth, requireAdmin, lexoraController.deleteLexoraBook);
 
 // POST /api/books/lexora-import
-router.post("/lexora-import", lexoraController.bulkLexoraImport);
+router.post("/lexora-import", requireAuth, requireAdmin, lexoraController.bulkLexoraImport);
 
 // POST /api/books/check-duplicates
-router.post("/check-duplicates", async (req, res) => {
+router.post("/check-duplicates", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { books } = req.body;
     if (!Array.isArray(books) || !books.length) {
@@ -185,7 +184,7 @@ router.post("/check-duplicates", async (req, res) => {
 });
 
 // POST /api/books/bulk-import
-router.post("/bulk-import", async (req, res) => {
+router.post("/bulk-import", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { books } = req.body;
     if (!Array.isArray(books) || books.length === 0) {
@@ -231,7 +230,7 @@ router.post("/bulk-import", async (req, res) => {
 // ── DYNAMIC routes — AFTER all static routes ─────────────
 
 // GET /api/books/:id
-router.get("/:id", async (req, res) => {
+router.get("/:id", requireAuth, requireAdmin, async (req, res) => {
   try {
     const result = await BookModel.getById(req.params.id);
     if (!result.success) return res.status(404).json({ success: false, error: result.error });
@@ -243,7 +242,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // GET /api/books/:id/copies
-router.get("/:id/copies", async (req, res) => {
+router.get("/:id/copies", requireAuth, requireAdmin, async (req, res) => {
   try {
     const result = await BookModel.getCopies(req.params.id);
     if (!result.success) return res.status(400).json({ success: false, error: result.error });
@@ -255,9 +254,9 @@ router.get("/:id/copies", async (req, res) => {
 });
 
 // PUT /api/books/:id
-router.put("/:id", booksController.updateBook);
+router.put("/:id", requireAuth, requireAdmin, booksController.updateBook);
 
 // DELETE /api/books/:id
-router.delete("/:id", booksController.deleteBook);
+router.delete("/:id", requireAuth, requireAdmin, booksController.deleteBook);
 
 module.exports = router;

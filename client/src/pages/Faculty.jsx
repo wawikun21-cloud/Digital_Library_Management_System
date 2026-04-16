@@ -22,6 +22,13 @@ const DEPARTMENTS = [
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+/** Always attach the session cookie so the server can authenticate us */
+const withCreds = (opts = {}) => ({
+  ...opts,
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+});
+
 // ─────────────────────────────────────────────────────────
 //  Faculty Page
 // ─────────────────────────────────────────────────────────
@@ -55,7 +62,7 @@ export default function Faculty() {
   const fetchFaculty = async () => {
     setIsLoading(true);
     try {
-      const res  = await fetch(`${API_BASE}/api/students/faculty`);
+      const res  = await fetch(`${API_BASE}/api/students/faculty`, withCreds());
       const data = await res.json();
       if (data.success) setFaculty(data.data);
       else showToast('Failed to load faculty', 'error');
@@ -96,11 +103,9 @@ export default function Faculty() {
     const e2 = validate();
     if (Object.keys(e2).length) { setFormErrors(e2); return; }
     try {
-      const res  = await fetch(`${API_BASE}/api/students/faculty`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
+      const res  = await fetch(`${API_BASE}/api/students/faculty`,
+        withCreds({ method: 'POST', body: JSON.stringify(formData) })
+      );
       const data = await res.json();
       if (data.success) {
         showToast('Faculty added successfully');
@@ -120,11 +125,9 @@ export default function Faculty() {
     const e2 = validate();
     if (Object.keys(e2).length) { setFormErrors(e2); return; }
     try {
-      const res  = await fetch(`${API_BASE}/api/students/faculty/${selectedFaculty.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
+      const res  = await fetch(`${API_BASE}/api/students/faculty/${selectedFaculty.id}`,
+        withCreds({ method: 'PUT', body: JSON.stringify(formData) })
+      );
       const data = await res.json();
       if (data.success) {
         showToast('Faculty updated successfully');
@@ -142,7 +145,7 @@ export default function Faculty() {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this faculty member?')) return;
     try {
-      const res  = await fetch(`${API_BASE}/api/students/faculty/${id}`, { method: 'DELETE' });
+      const res  = await fetch(`${API_BASE}/api/students/faculty/${id}`, withCreds({ method: 'DELETE' }));
       const data = await res.json();
       if (data.success) {
         showToast('Faculty deleted successfully');
@@ -225,11 +228,9 @@ export default function Faculty() {
   const handleBulkImport = async () => {
     if (!parsedData) return;
     try {
-      const res  = await fetch(`${API_BASE}/api/students/faculty/bulk-import`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(parsedData),
-      });
+      const res  = await fetch(`${API_BASE}/api/students/faculty/bulk-import`,
+        withCreds({ method: 'POST', body: JSON.stringify(parsedData) })
+      );
       const data = await res.json();
       if (data.success) {
         setImportResult(data.data);
