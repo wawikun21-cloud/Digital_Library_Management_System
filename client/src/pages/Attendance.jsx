@@ -56,6 +56,14 @@ function getInitials(name = "") {
   return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
+// Combines first_name + last_name into a full name.
+// Falls back to display_name, then student_name.
+function getFullName(student = {}) {
+  const { first_name, last_name, display_name, student_name } = student;
+  const combined = [first_name, last_name].filter(Boolean).join(" ").trim();
+  return combined || display_name || student_name || "";
+}
+
 function Avatar({ name, size = 32 }) {
   const COLORS = ["#32667F", "#EEA23A", "#2d7a47", "#7c3aed", "#EA8B33"];
   const bg = COLORS[(name?.charCodeAt(0) || 0) % COLORS.length];
@@ -194,7 +202,7 @@ function StudentNotFoundModal({ studentId, onClose }) {
 // ─────────────────────────────────────────────────────────
 //  RFID Registration Modal — Enhanced UI
 // ─────────────────────────────────────────────────────────
-function RfidRegistrationModal({ onClose, onRegistered }) {
+function RfidRegistrationModal({ onClose, onRegistered, onToast }) {
   const overlayRef = useRef(null);
   const [rfidCode, setRfidCode] = useState("");
   const rfidInputRef = useRef(null);
@@ -281,10 +289,19 @@ function RfidRegistrationModal({ onClose, onRegistered }) {
     setRegError("");
     try {
       const res = await registerRfid(rfidCode.trim(), selectedStudent.student_id_number);
-      if (res.success) onRegistered(res.data, selectedStudent);
-      else setRegError(res.error || "Registration failed. Please try again.");
+      if (res.success) {
+        const name = getFullName(selectedStudent) || selectedStudent.student_id_number;
+        onToast?.(`RFID card registered to ${name}`, "success");
+        onRegistered(res.data, selectedStudent);
+      } else {
+        const msg = res.error || "Registration failed. Please try again.";
+        setRegError(msg);
+        onToast?.(msg, "error");
+      }
     } catch {
-      setRegError("Network error. Please try again.");
+      const msg = "Network error. Please try again.";
+      setRegError(msg);
+      onToast?.(msg, "error");
     } finally {
       setRegistering(false);
     }
@@ -678,7 +695,7 @@ function TapResult({ result, onDismiss }) {
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[13px] font-bold truncate" style={{ color: isIn ? "#2d7a47" : "#b87a1a" }}>
-          {isIn ? "Checked In" : "Checked Out"} — {result.data?.student_name}
+          {isIn ? "Checked In" : "Checked Out"} — {getFullName(result.data || {}) || result.data?.student_name}
         </p>
         <div className="flex flex-wrap gap-1.5 mt-0.5">
           {result.data?.student_course && (
@@ -1056,11 +1073,7 @@ export default function Attendance() {
 
   const handleRfidRegistered = useCallback((cardData, student) => {
     setShowRfidRegistration(false);
-    const name = student.display_name ||
-      [student.first_name, student.last_name].filter(Boolean).join(" ") ||
-      student.student_name;
-    showToast(`RFID card registered to ${name}`, "success");
-  }, [showToast]);
+  }, []);
 
   const handleCheckOut = async (idNumber) => {
     try {
@@ -1225,10 +1238,10 @@ export default function Attendance() {
             {studentInfo && !lookingUp && (
               <div className="flex items-center gap-3 mt-2 px-3 py-2 rounded-lg"
                 style={{ background: "rgba(45,122,71,0.08)", border: "1px solid rgba(45,122,71,0.25)" }}>
-                <Avatar name={studentInfo.display_name || studentInfo.student_name} size={28} />
+                <Avatar name={getFullName(studentInfo)} size={28} />
                 <div>
                   <p className="text-[13px] font-semibold" style={{ color: "#2d7a47" }}>
-                    {studentInfo.display_name || studentInfo.student_name}
+                    {getFullName(studentInfo)}
                   </p>
                   <div className="flex gap-1.5 flex-wrap mt-0.5">
                     {studentInfo.student_course && (
@@ -1440,12 +1453,15 @@ export default function Attendance() {
         <RfidRegistrationModal
           onClose={() => setShowRfidRegistration(false)}
           onRegistered={handleRfidRegistered}
+          onToast={showToast}
         />
       )}
 
       {toast.show && (
         <Toast
-          message={toast.message} type={toast.type}
+          message={toast.message}
+          type={toast.type}
+          isVisible={toast.show}
           onClose={() => setToast((p) => ({ ...p, show: false }))}
         />
       )}

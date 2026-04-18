@@ -29,6 +29,14 @@ function getInitials(name = "") {
   return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
+// Combines first_name + last_name into a full name.
+// Falls back to display_name, then student_name.
+function getFullName(student = {}) {
+  const { first_name, last_name, display_name, student_name } = student;
+  const combined = [first_name, last_name].filter(Boolean).join(" ").trim();
+  return combined || display_name || student_name || "";
+}
+
 const AVATAR_COLORS = [
   ["#1a3a5c", "#4a9eda"],
   ["#3a1a1a", "#e05252"],
@@ -225,7 +233,8 @@ function LiveTimer({ checkInTime }) {
 // per card mount, not on every prop update. Cards that are already
 // visible don't re-animate when the active list refreshes.
 function StudentCard({ record, index }) {
-  const [, accent] = avatarColors(record.student_name);
+  const fullName = getFullName(record) || record.student_name;
+  const [, accent] = avatarColors(fullName);
 
   // Only animate on the very first render of this card instance.
   const animatedRef = useRef(false);
@@ -248,14 +257,14 @@ function StudentCard({ record, index }) {
       backdropFilter: "blur(8px)",
       ...animationStyle,
     }}>
-      <Avatar name={record.student_name} size={44} />
+      <Avatar name={fullName} size={44} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{
           margin: 0, fontSize: 13, fontWeight: 700,
           color: "#f1f5f9", whiteSpace: "nowrap",
           overflow: "hidden", textOverflow: "ellipsis",
         }}>
-          {record.student_name}
+          {fullName}
         </p>
         <p style={{
           margin: "2px 0 0", fontSize: 10, color: "#94a3b8",
@@ -292,7 +301,8 @@ function StudentCard({ record, index }) {
 // Big animated tap-result card (flies in from bottom)
 function TapCard({ result, onDone }) {
   const isIn = result.action === "checked_in";
-  const [, accent] = avatarColors(result.data?.student_name || "");
+  const fullName = getFullName(result.data || {}) || result.data?.student_name || "";
+  const [, accent] = avatarColors(fullName);
   const [phase, setPhase] = useState("enter");
 
   useEffect(() => {
@@ -353,7 +363,7 @@ function TapCard({ result, onDone }) {
             color: "#f1f5f9", lineHeight: 1.1,
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
           }}>
-            {result.data?.student_name}
+            {fullName}
           </p>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
             {result.data?.student_id_number && (
@@ -394,7 +404,7 @@ function TapCard({ result, onDone }) {
           </div>
         )}
 
-        <Avatar name={result.data?.student_name || ""} size={52} />
+        <Avatar name={fullName} size={52} />
       </div>
 
       {/* Progress bar */}
@@ -534,7 +544,13 @@ export default function KioskAttendance() {
   const [unregistered, setUnregistered] = useState(null);
   const [online, setOnline]           = useState(navigator.onLine);
 
-  const [rfidActive, setRfidActive]   = useState(false);
+  // ── Persist rfidActive in sessionStorage so it survives navigation ──
+  // sessionStorage clears when the tab is closed (correct kiosk behaviour),
+  // but keeps the value when the user navigates to another page and back.
+  const [rfidActive, setRfidActive]   = useState(
+    () => sessionStorage.getItem("kiosk_rfid_active") === "true"
+  );
+
   const [processing, setProcessing]   = useState(false);
   const rfidBufferRef = useRef("");
   const rfidInputRef  = useRef(null);
@@ -617,9 +633,11 @@ export default function KioskAttendance() {
     e.preventDefault();
   }, [rfidActive, handleRfidTap]);
 
+  // ── Save rfidActive to sessionStorage on every toggle ──
   const toggleRfid = useCallback(() => {
     setRfidActive((prev) => {
       const next = !prev;
+      sessionStorage.setItem("kiosk_rfid_active", String(next));
       if (next) {
         rfidBufferRef.current = "";
         setTimeout(() => rfidInputRef.current?.focus(), 50);

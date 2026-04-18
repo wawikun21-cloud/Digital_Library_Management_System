@@ -40,6 +40,13 @@ const fmtDuration = (mins) => {
 const getInitials = (name = '') =>
   name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
+// Combines first_name + last_name; falls back to display_name / student_name.
+const getFullName = (student = {}) => {
+  const { first_name, last_name, display_name, student_name } = student;
+  const combined = [first_name, last_name].filter(Boolean).join(' ').trim();
+  return combined || display_name || student_name || '';
+};
+
 const pad = (n) => String(n).padStart(2, '0');
 
 const AVATAR_COLORS = [
@@ -59,6 +66,7 @@ function printStudentPDF(student, sessions) {
   const e = (v) =>
     String(v ?? '—').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+  const fullName   = getFullName(student);
   const totalMins  = sessions.reduce((a, r) => a + (r.duration || 0), 0);
   const totalHours = (totalMins / 60).toFixed(1);
 
@@ -75,7 +83,7 @@ function printStudentPDF(student, sessions) {
     .join('');
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<title>Attendance — ${e(student.student_name)}</title>
+<title>Attendance — ${e(fullName)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#1a1a1a;padding:32px}
@@ -96,7 +104,7 @@ tr:nth-child(even) td{background:#f8f9fa}
 </style></head><body>
 <div class="hdr">
   <div class="hdr-left">
-    <h1>Attendance History — ${e(student.student_name)}</h1>
+    <h1>Attendance History — ${e(fullName)}</h1>
     <p>${e(student.student_id_number)} · ${e(student.student_course || '—')} · ${e(student.student_yr_level || '—')}</p>
   </div>
   <div class="hdr-right">
@@ -239,7 +247,8 @@ const StudentHistoryModal = ({ student, onClose, onDelete }) => {
   const totalMins  = sessions.reduce((a, r) => a + (r.duration || 0), 0);
   const totalHours = (totalMins / 60).toFixed(1);
   const isActive   = sessions.some((s) => s.status === 'checked_in');
-  const [bg1, bg2] = avatarColor(student.student_name);
+  const fullName   = getFullName(student);
+  const [bg1, bg2] = avatarColor(fullName);
 
   return (
     <div
@@ -275,7 +284,7 @@ const StudentHistoryModal = ({ student, onClose, onDelete }) => {
               className="w-11 h-11 rounded-full flex items-center justify-center text-[14px] font-bold text-white shrink-0 shadow"
               style={{ background: `linear-gradient(135deg, ${bg1} 0%, ${bg2} 100%)` }}
             >
-              {getInitials(student.student_name)}
+              {getInitials(fullName)}
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -283,7 +292,7 @@ const StudentHistoryModal = ({ student, onClose, onDelete }) => {
                   className="text-[15px] font-bold leading-snug"
                   style={{ color: 'var(--text-primary)' }}
                 >
-                  {student.student_name}
+                  {fullName}
                 </h2>
                 {isActive && (
                   <span
@@ -506,6 +515,8 @@ function groupByStudent(records) {
       map.set(key, {
         student_id_number: r.student_id_number,
         student_name:      r.student_name,
+        first_name:        r.first_name  || '',
+        last_name:         r.last_name   || '',
         student_course:    r.student_course,
         student_yr_level:  r.student_yr_level,
         sessions: [],
@@ -665,7 +676,8 @@ const AttendanceTable = React.memo(({
               const latest     = student.sessions[0];
               const isActive   = student.sessions.some((s) => s.status === 'checked_in');
               const totalMins  = student.sessions.reduce((s, r) => s + (r.duration || 0), 0);
-              const [bg1, bg2] = avatarColor(student.student_name);
+              const fullName   = getFullName(student);
+              const [bg1, bg2] = avatarColor(fullName);
 
               return (
                 <tr
@@ -693,12 +705,12 @@ const AttendanceTable = React.memo(({
                         className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold text-white shrink-0 shadow-sm"
                         style={{ background: `linear-gradient(135deg, ${bg1} 0%, ${bg2} 100%)` }}
                       >
-                        {getInitials(student.student_name)}
+                        {getInitials(fullName)}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-[13.5px] transition-colors" style={{ color: 'var(--text-primary)' }}>
-                            {student.student_name}
+                            {fullName}
                           </span>
                           {isActive && (
                             <span

@@ -12,9 +12,13 @@ const AttendanceModel = {
   async getAll() {
     try {
       const [rows] = await pool.query(`
-        SELECT * FROM attendance 
-        WHERE is_deleted = 0
-        ORDER BY check_in_time DESC
+        SELECT a.*,
+               s.first_name,
+               s.last_name
+        FROM attendance a
+        LEFT JOIN students s ON s.student_id_number = a.student_id_number
+        WHERE a.is_deleted = 0
+        ORDER BY a.check_in_time DESC
       `);
       return { success: true, data: rows };
     } catch (error) {
@@ -47,9 +51,13 @@ const AttendanceModel = {
   async getActiveAttendance() {
     try {
       const [rows] = await pool.query(`
-        SELECT * FROM attendance 
-        WHERE status = 'checked_in' AND is_deleted = 0
-        ORDER BY check_in_time DESC
+        SELECT a.*,
+               s.first_name,
+               s.last_name
+        FROM attendance a
+        LEFT JOIN students s ON s.student_id_number = a.student_id_number
+        WHERE a.status = 'checked_in' AND a.is_deleted = 0
+        ORDER BY a.check_in_time DESC
       `);
       return { success: true, data: rows };
     } catch (error) {
@@ -87,6 +95,8 @@ const AttendanceModel = {
         SELECT 
           student_name,
           display_name,
+          first_name,
+          last_name,
           student_course,
           student_yr_level,
           student_school_year
@@ -100,10 +110,12 @@ const AttendanceModel = {
       }
 
       const student = studentRecords[0];
-      const studentName   = student.display_name || student.student_name;
-      const studentCourse = student.student_course    || '';
-      const studentYrLevel= student.student_yr_level  || '';
-      const schoolYear    = student.student_school_year || '';
+      const studentName    = student.display_name || student.student_name;
+      const firstName      = student.first_name        || '';
+      const lastName       = student.last_name         || '';
+      const studentCourse  = student.student_course    || '';
+      const studentYrLevel = student.student_yr_level  || '';
+      const schoolYear     = student.student_school_year || '';
 
       // ── 2. Check for an open (checked_in) record today ───────────────
       const [existing] = await pool.query(`
@@ -135,7 +147,7 @@ const AttendanceModel = {
         );
 
         console.log(`✅ Checked OUT: ${studentName} (${studentIdNumber})`);
-        return { success: true, action: 'checked_out', data: updated[0] };
+        return { success: true, action: 'checked_out', data: { ...updated[0], first_name: firstName, last_name: lastName } };
       }
 
       // ── 3b. Not checked in → check in ───────────────────────────────
@@ -150,7 +162,7 @@ const AttendanceModel = {
       );
 
       console.log(`✅ Checked IN: ${studentName} (${studentIdNumber})`);
-      return { success: true, action: 'checked_in', data: inserted[0] };
+      return { success: true, action: 'checked_in', data: { ...inserted[0], first_name: firstName, last_name: lastName } };
 
     } catch (error) {
       console.error("[AttendanceModel.tap] Error:", error.message);
