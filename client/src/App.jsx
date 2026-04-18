@@ -17,6 +17,7 @@ const LexoraBooks     = lazy(() => import("./pages/LexoraBooks"));
 const Login           = lazy(() => import("./pages/Login"));
 const LandingPage     = lazy(() => import("./landing/landingpage"));
 const KioskAttendance = lazy(() => import("./pages/KioskAttendance"));
+const AuditLog        = lazy(() => import("./pages/AuditLog"));   // ← NEW
 
 // ── Pages each role may access ────────────────────────────────────────────────
 export const STAFF_ALLOWED_PATHS = [
@@ -66,14 +67,12 @@ function Page({ children }) {
   return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
 }
 
-// ── ProtectedRoute — verifies session and exposes user role ───────────────────
+// ── ProtectedRoute ────────────────────────────────────────────────────────────
 function ProtectedRoute({ children }) {
   const [status, setStatus] = useState("checking");
   const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
 
   useEffect(() => {
-    // FIX: single authApi.me() call regardless of cached user.
-    // We still verify the session is alive on the server every time.
     authApi.me()
       .then(() => setStatus("ok"))
       .catch(() => {
@@ -91,39 +90,24 @@ function ProtectedRoute({ children }) {
 
 /**
  * AdminOnlyRoute
- * - Reads role from localStorage.
- * - Staff → redirect to /dashboard/attendance.
- * - Admin → render children.
- * FIX: never returns null/nothing; always resolves to a redirect or children.
+ * Staff → redirect to /dashboard/attendance.
+ * Admin → render children.
  */
 function AdminOnlyRoute({ children }) {
   const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
-
-  // If the user object is missing entirely, ProtectedRoute already handled it.
-  // Treat missing role as "admin" to avoid blocking legitimate admins whose
-  // session was created before the role field was added.
   const role = user?.role ?? "admin";
-
-  if (role === "staff") {
-    return <Navigate to="/dashboard/attendance" replace />;
-  }
-
+  if (role === "staff") return <Navigate to="/dashboard/attendance" replace />;
   return children;
 }
 
 /**
  * StaffBlockedRoute
  * Wraps routes that staff must NOT access.
- * Redirects staff to /dashboard/attendance; lets admin through.
  */
 function StaffBlockedRoute({ children }) {
   const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
   const role = user?.role ?? "admin";
-
-  if (role === "staff") {
-    return <Navigate to="/dashboard/attendance" replace />;
-  }
-
+  if (role === "staff") return <Navigate to="/dashboard/attendance" replace />;
   return children;
 }
 
@@ -172,12 +156,6 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            {/*
-              Dashboard index:
-              - Admin → Dashboard page
-              - Staff → redirect to /dashboard/attendance
-              AdminOnlyRoute now always resolves (no null return).
-            */}
             <Route
               index
               element={
@@ -187,7 +165,7 @@ export default function App() {
               }
             />
 
-            {/* ── Admin-only pages — StaffBlockedRoute prevents direct URL access ── */}
+            {/* ── Admin-only pages ── */}
             <Route path="books"
               element={<StaffBlockedRoute><Page><Books /></Page></StaffBlockedRoute>}
             />
@@ -199,6 +177,16 @@ export default function App() {
             />
             <Route path="deleted"
               element={<StaffBlockedRoute><Page><RecentlyDeleted /></Page></StaffBlockedRoute>}
+            />
+
+            {/* ── Audit Trail — admin only ── */}
+            <Route
+              path="audit-log"
+              element={
+                <StaffBlockedRoute>
+                  <Page><AuditLog /></Page>
+                </StaffBlockedRoute>
+              }
             />
 
             {/* ── Shared pages (admin + staff) ── */}

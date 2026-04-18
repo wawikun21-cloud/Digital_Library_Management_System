@@ -1,3 +1,8 @@
+// ─────────────────────────────────────────────────────────
+//  pages/Attendance.jsx
+//  Attendance Management Page
+// ─────────────────────────────────────────────────────────
+
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import AttendanceTable from "../components/AttendanceTable";
 import { useNavigate } from "react-router-dom";
@@ -6,6 +11,7 @@ import {
   AlertCircle, X, Download, Calendar, Filter, ChevronDown,
   User, Hash, GraduationCap, CheckCircle2, XCircle,
   FileText, Timer, BookOpen, LogIn, AlertTriangle, Monitor,
+  Wifi, WifiOff, CreditCard, UserPlus, Loader2, ShieldCheck,
 } from "lucide-react";
 import {
   getAllAttendance,
@@ -16,14 +22,12 @@ import {
   checkOut,
   deleteAttendance,
 } from "../services/api/attendanceApi";
-import { getStudentByStudentIdNumber } from "../services/api/studentsApi";
+import { registerRfid, simulateRfidTap } from "../services/api/rfidApi";
+import { getStudentByStudentIdNumber, getAllStudents } from "../services/api/studentsApi";
 import StatsCard from "../components/StatsCard";
 import Toast from "../components/Toast";
 import useDebounce from "../hooks/useDebounce";
 
-// ─────────────────────────────────────────────────────────
-//  Helpers
-// ─────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, "0");
 
 function fmtDateTime(dt) {
@@ -42,7 +46,7 @@ function fmtDate(dt) {
 }
 
 function fmtDuration(mins) {
-  if (!mins && mins !== 0) return "—";
+  if (mins == null) return "—";
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
@@ -51,10 +55,6 @@ function fmtDuration(mins) {
 function getInitials(name = "") {
   return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
-
-// ─────────────────────────────────────────────────────────
-//  Sub-components
-// ─────────────────────────────────────────────────────────
 
 function Avatar({ name, size = 32 }) {
   const COLORS = ["#32667F", "#EEA23A", "#2d7a47", "#7c3aed", "#EA8B33"];
@@ -85,13 +85,20 @@ function StatusPill({ status }) {
   );
 }
 
+function parseAsUTC(dt) {
+  if (!dt) return new Date();
+  const s = String(dt);
+  if (s.endsWith("Z") || s.includes("+")) return new Date(s);
+  return new Date(s.replace(" ", "T") + "Z");
+}
+
 function LiveDuration({ checkInTime }) {
   const [elapsed, setElapsed] = useState(() =>
-    Math.floor((Date.now() - new Date(checkInTime).getTime()) / 1000)
+    Math.max(0, Math.floor((Date.now() - parseAsUTC(checkInTime).getTime()) / 1000))
   );
   useEffect(() => {
     const t = setInterval(
-      () => setElapsed(Math.floor((Date.now() - new Date(checkInTime).getTime()) / 1000)),
+      () => setElapsed(Math.max(0, Math.floor((Date.now() - parseAsUTC(checkInTime).getTime()) / 1000))),
       1000
     );
     return () => clearInterval(t);
@@ -121,9 +128,6 @@ function Spinner({ size = 18 }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────
-//  Student-Not-Found Error Modal
-// ─────────────────────────────────────────────────────────
 function StudentNotFoundModal({ studentId, onClose }) {
   const overlayRef = useRef(null);
 
@@ -132,7 +136,6 @@ function StudentNotFoundModal({ studentId, onClose }) {
     return () => { document.body.style.overflow = ""; };
   }, []);
 
-  // Close on Escape key
   useEffect(() => {
     const handler = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
@@ -156,13 +159,10 @@ function StudentNotFoundModal({ studentId, onClose }) {
           animation: "modalIn .22s cubic-bezier(.34,1.56,.64,1)",
         }}
       >
-        {/* Icon */}
         <div className="w-16 h-16 rounded-full flex items-center justify-center"
           style={{ background: "rgba(220,38,38,0.1)", border: "1.5px solid rgba(220,38,38,0.25)" }}>
           <AlertTriangle size={30} style={{ color: "#dc2626" }} />
         </div>
-
-        {/* Text */}
         <div className="flex flex-col gap-1.5">
           <h2 className="text-[17px] font-bold" style={{ color: "var(--text-primary)" }}>
             Student ID Not Found
@@ -179,8 +179,6 @@ function StudentNotFoundModal({ studentId, onClose }) {
             Please verify the ID and try again, or contact the librarian.
           </p>
         </div>
-
-        {/* Action */}
         <button
           onClick={onClose}
           className="w-full py-2.5 rounded-xl text-[13px] font-semibold text-white transition-all hover:opacity-90 active:scale-[.98]"
@@ -188,6 +186,461 @@ function StudentNotFoundModal({ studentId, onClose }) {
         >
           OK, Try Again
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+//  RFID Registration Modal — Enhanced UI
+// ─────────────────────────────────────────────────────────
+function RfidRegistrationModal({ onClose, onRegistered }) {
+  const overlayRef = useRef(null);
+  const [rfidCode, setRfidCode] = useState("");
+  const rfidInputRef = useRef(null);
+  const [studentIdInput,  setStudentIdInput]  = useState("");
+  const [allStudents,     setAllStudents]     = useState([]);
+  const [searchResults,   setSearchResults]   = useState([]);
+  const [showDropdown,    setShowDropdown]    = useState(false);
+  const [loadingStudents, setLoadingStudents] = useState(true);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const searchRef   = useRef(null);
+  const dropdownRef = useRef(null);
+  const debouncedStudentId = useDebounce(studentIdInput, 250);
+  const [registering, setRegistering] = useState(false);
+  const [regError,    setRegError]    = useState("");
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  useEffect(() => {
+    const handler = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  useEffect(() => {
+    setTimeout(() => rfidInputRef.current?.focus(), 80);
+  }, []);
+
+  useEffect(() => {
+    setLoadingStudents(true);
+    getAllStudents()
+      .then((res) => { if (res.success) setAllStudents(res.data || []); })
+      .finally(() => setLoadingStudents(false));
+  }, []);
+
+  useEffect(() => {
+    if (!debouncedStudentId.trim()) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      return;
+    }
+    const q = debouncedStudentId.toLowerCase();
+    const results = allStudents.filter((s) =>
+      s.student_id_number?.toLowerCase().includes(q) ||
+      s.first_name?.toLowerCase().includes(q) ||
+      s.last_name?.toLowerCase().includes(q) ||
+      s.student_name?.toLowerCase().includes(q)
+    ).slice(0, 8);
+    setSearchResults(results);
+    setShowDropdown(results.length > 0);
+  }, [debouncedStudentId, allStudents]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (
+        dropdownRef.current && !dropdownRef.current.contains(e.target) &&
+        searchRef.current && !searchRef.current.contains(e.target)
+      ) setShowDropdown(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleSelectStudent = (student) => {
+    setSelectedStudent(student);
+    setStudentIdInput(student.student_id_number);
+    setShowDropdown(false);
+    setRegError("");
+  };
+
+  const handleStudentIdChange = (e) => {
+    setStudentIdInput(e.target.value);
+    if (selectedStudent && e.target.value !== selectedStudent.student_id_number)
+      setSelectedStudent(null);
+    setRegError("");
+  };
+
+  const handleRegister = async () => {
+    if (!rfidCode.trim()) { setRegError("Please enter or scan the RFID code."); return; }
+    if (!selectedStudent) { setRegError("Please select a student from the list."); return; }
+    setRegistering(true);
+    setRegError("");
+    try {
+      const res = await registerRfid(rfidCode.trim(), selectedStudent.student_id_number);
+      if (res.success) onRegistered(res.data, selectedStudent);
+      else setRegError(res.error || "Registration failed. Please try again.");
+    } catch {
+      setRegError("Network error. Please try again.");
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  const fullName = selectedStudent
+    ? (selectedStudent.display_name ||
+       [selectedStudent.first_name, selectedStudent.last_name].filter(Boolean).join(" ") ||
+       selectedStudent.student_name || "")
+    : "";
+
+  const isReady = rfidCode.trim() && selectedStudent;
+
+  return (
+    <div
+      ref={overlayRef}
+      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
+      style={{
+        background: "rgba(8,18,28,0.78)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        animation: "overlayIn .18s ease",
+      }}
+    >
+      <div
+        className="w-full flex flex-col rounded-2xl overflow-hidden"
+        style={{
+          maxWidth: 520,
+          maxHeight: "92vh",
+          background: "var(--bg-surface)",
+          border: "1px solid var(--border)",
+          boxShadow: "0 32px 80px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04)",
+          animation: "modalIn .24s cubic-bezier(.34,1.46,.64,1)",
+        }}
+      >
+        {/* ── Header ─────────────────────────────────── */}
+        <div
+          className="flex items-center justify-between px-6 py-4 shrink-0"
+          style={{
+            background: "linear-gradient(135deg, rgba(45,122,71,0.12) 0%, rgba(238,162,58,0.08) 100%)",
+            borderBottom: "1px solid var(--border-light)",
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+              style={{
+                background: "linear-gradient(135deg, rgba(45,122,71,0.2), rgba(238,162,58,0.15))",
+                border: "1.5px solid rgba(45,122,71,0.3)",
+                boxShadow: "0 2px 8px rgba(45,122,71,0.15)",
+              }}
+            >
+              <CreditCard size={18} style={{ color: "#2d7a47" }} />
+            </div>
+            <div>
+              <h2 className="text-[15px] font-bold leading-tight" style={{ color: "var(--text-primary)" }}>
+                Register RFID Card
+              </h2>
+              <p className="text-[11.5px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                Link an RFID card to a student account
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:bg-red-50 hover:text-red-500"
+            style={{ color: "var(--text-muted)" }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* ── Scrollable Body ─────────────────────────── */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="flex flex-col gap-5 px-6 py-5">
+
+            {/* Step 1 — RFID Code */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span
+                  className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                  style={{ background: rfidCode.trim() ? "#2d7a47" : "var(--accent-amber)" }}
+                >
+                  {rfidCode.trim() ? <CheckCircle2 size={12} /> : "1"}
+                </span>
+                <label className="text-[12.5px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                  Scan or Enter RFID Code
+                  <span className="ml-1" style={{ color: "#dc2626" }}>*</span>
+                </label>
+              </div>
+              <div className="relative">
+                <CreditCard
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                  style={{ color: rfidCode.trim() ? "#2d7a47" : "var(--text-muted)" }}
+                />
+                <input
+                  ref={rfidInputRef}
+                  type="text"
+                  value={rfidCode}
+                  onChange={(e) => { setRfidCode(e.target.value); setRegError(""); }}
+                  placeholder="Place card on reader or type code…"
+                  className="w-full pl-9 pr-4 py-2.5 rounded-xl text-[13px] font-mono outline-none transition-all"
+                  style={{
+                    background: rfidCode.trim() ? "rgba(45,122,71,0.05)" : "var(--bg-input)",
+                    border: `1.5px solid ${rfidCode.trim() ? "rgba(45,122,71,0.45)" : "var(--border)"}`,
+                    color: "var(--text-primary)",
+                    boxShadow: rfidCode.trim() ? "0 0 0 3px rgba(45,122,71,0.08)" : "none",
+                    letterSpacing: "0.5px",
+                  }}
+                />
+                {rfidCode.trim() && (
+                  <button
+                    onClick={() => setRfidCode("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-100 transition-opacity"
+                  >
+                    <X size={13} style={{ color: "var(--text-muted)" }} />
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] mt-1.5" style={{ color: "var(--text-muted)" }}>
+                Place the card on the RFID reader — it will auto-fill, or type the code manually.
+              </p>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px" style={{ background: "var(--border-light)" }} />
+              <span className="text-[10.5px] font-bold tracking-widest px-2"
+                style={{ color: "var(--text-muted)" }}>
+                LINK TO STUDENT
+              </span>
+              <div className="flex-1 h-px" style={{ background: "var(--border-light)" }} />
+            </div>
+
+            {/* Step 2 — Student Search */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span
+                  className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                  style={{ background: selectedStudent ? "#2d7a47" : "var(--accent-amber)" }}
+                >
+                  {selectedStudent ? <CheckCircle2 size={12} /> : "2"}
+                </span>
+                <label className="text-[12.5px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                  Search Student
+                  <span className="ml-1" style={{ color: "#dc2626" }}>*</span>
+                </label>
+                {loadingStudents && (
+                  <span className="text-[11px] flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                    <Loader2 size={11} className="animate-spin" /> Loading…
+                  </span>
+                )}
+              </div>
+
+              <div className="relative" ref={searchRef}>
+                <Search
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10"
+                  style={{ color: selectedStudent ? "#2d7a47" : "var(--text-muted)" }}
+                />
+                <input
+                  type="text"
+                  value={studentIdInput}
+                  onChange={handleStudentIdChange}
+                  onFocus={() => { if (searchResults.length > 0) setShowDropdown(true); }}
+                  placeholder="Type Student ID or name to search…"
+                  className="w-full pl-9 pr-4 py-2.5 rounded-xl text-[13px] outline-none transition-all"
+                  style={{
+                    background: selectedStudent ? "rgba(45,122,71,0.05)" : "var(--bg-input)",
+                    border: `1.5px solid ${selectedStudent ? "rgba(45,122,71,0.45)" : "var(--border)"}`,
+                    color: "var(--text-primary)",
+                    boxShadow: selectedStudent ? "0 0 0 3px rgba(45,122,71,0.08)" : "none",
+                  }}
+                />
+
+                {/* Dropdown */}
+                {showDropdown && (
+                  <div
+                    ref={dropdownRef}
+                    className="absolute left-0 right-0 top-full mt-1.5 rounded-xl overflow-hidden z-50"
+                    style={{
+                      background: "var(--bg-surface)",
+                      border: "1px solid var(--border)",
+                      boxShadow: "0 16px 40px rgba(0,0,0,0.22)",
+                      maxHeight: 240,
+                      overflowY: "auto",
+                    }}
+                  >
+                    {searchResults.map((student, idx) => {
+                      const name = student.display_name ||
+                        [student.first_name, student.last_name].filter(Boolean).join(" ") ||
+                        student.student_name;
+                      return (
+                        <button
+                          key={student.student_id_number}
+                          onClick={() => handleSelectStudent(student)}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-amber-50/30"
+                          style={{
+                            borderBottom: idx < searchResults.length - 1 ? "1px solid var(--border-light)" : "none",
+                          }}
+                        >
+                          <Avatar name={name} size={30} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+                              {name}
+                            </p>
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              <span className="font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>
+                                {student.student_id_number}
+                              </span>
+                              {student.student_course && (
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                                  style={{ background: "rgba(50,102,127,.1)", color: "#32667F" }}>
+                                  {student.student_course}
+                                </span>
+                              )}
+                              {student.student_yr_level && (
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                                  style={{ background: "rgba(124,58,237,.1)", color: "#7c3aed" }}>
+                                  {student.student_yr_level}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Selected Student Card */}
+            {selectedStudent && (
+              <div
+                className="rounded-xl overflow-hidden"
+                style={{
+                  border: "1.5px solid rgba(45,122,71,0.3)",
+                  background: "linear-gradient(135deg, rgba(45,122,71,0.05), rgba(45,122,71,0.02))",
+                  animation: "modalIn .18s ease",
+                }}
+              >
+                <div className="flex items-center gap-3 px-4 py-3"
+                  style={{ borderBottom: "1px solid rgba(45,122,71,0.12)" }}>
+                  <Avatar name={fullName} size={40} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] font-bold truncate" style={{ color: "var(--text-primary)" }}>
+                      {fullName}
+                    </p>
+                    <p className="font-mono text-[12px] mt-0.5" style={{ color: "#2d7a47" }}>
+                      {selectedStudent.student_id_number}
+                    </p>
+                  </div>
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+                    style={{ background: "rgba(45,122,71,0.15)" }}
+                  >
+                    <CheckCircle2 size={15} style={{ color: "#2d7a47" }} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2"
+                  style={{ background: "rgba(45,122,71,0.03)" }}>
+                  {[
+                    { label: "First Name",  value: selectedStudent.first_name        || "—" },
+                    { label: "Last Name",   value: selectedStudent.last_name         || "—" },
+                    { label: "Course",      value: selectedStudent.student_course    || "—" },
+                    { label: "Year Level",  value: selectedStudent.student_yr_level  || "—" },
+                  ].map(({ label, value }, i) => (
+                    <div
+                      key={label}
+                      className="px-4 py-2.5"
+                      style={{
+                        borderRight: i % 2 === 0 ? "1px solid rgba(45,122,71,0.1)" : "none",
+                        borderBottom: i < 2 ? "1px solid rgba(45,122,71,0.1)" : "none",
+                      }}
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-wide mb-0.5"
+                        style={{ color: "rgba(45,122,71,0.6)" }}>
+                        {label}
+                      </p>
+                      <p className="text-[13px] font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+                        {value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Error */}
+            {regError && (
+              <div
+                className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl"
+                style={{ background: "rgba(220,38,38,0.07)", border: "1px solid rgba(220,38,38,0.2)" }}
+              >
+                <AlertTriangle size={14} style={{ color: "#dc2626", flexShrink: 0 }} />
+                <p className="text-[12.5px] font-medium" style={{ color: "#dc2626" }}>{regError}</p>
+              </div>
+            )}
+
+            {/* Info note */}
+            <div
+              className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl"
+              style={{ background: "rgba(50,102,127,0.07)", border: "1px solid rgba(50,102,127,0.15)" }}
+            >
+              <AlertCircle size={13} style={{ color: "#32667F", flexShrink: 0, marginTop: 1 }} />
+              <p className="text-[11.5px] leading-relaxed" style={{ color: "#32667F" }}>
+                Once registered, tapping this card will check the student <strong>in</strong> on the first tap and <strong>out</strong> on the second tap.
+              </p>
+            </div>
+
+          </div>
+        </div>
+
+        {/* ── Footer ─────────────────────────────────── */}
+        <div
+          className="flex items-center justify-between gap-3 px-6 py-4 shrink-0"
+          style={{ borderTop: "1px solid var(--border-light)", background: "var(--bg-subtle)" }}
+        >
+          {/* Progress dots */}
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full transition-all"
+              style={{ background: rfidCode.trim() ? "#2d7a47" : "var(--border)" }} />
+            <div className="w-2 h-2 rounded-full transition-all"
+              style={{ background: selectedStudent ? "#2d7a47" : "var(--border)" }} />
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={onClose}
+              className="px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-all hover:opacity-80 active:scale-[.98]"
+              style={{ background: "var(--bg-hover)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleRegister}
+              disabled={!isReady || registering}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white transition-all hover:opacity-90 active:scale-[.98] disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{
+                background: isReady
+                  ? "linear-gradient(135deg, #2d7a47, #38a169)"
+                  : "var(--accent-amber)",
+                boxShadow: isReady ? "0 3px 10px rgba(45,122,71,.35)" : "0 2px 8px rgba(238,162,58,.3)",
+                transition: "all .2s ease",
+              }}
+            >
+              {registering
+                ? <><Loader2 size={14} className="animate-spin" /> Registering…</>
+                : <><UserPlus size={14} /> Register Card</>
+              }
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -364,104 +817,114 @@ function StudentModal({ record, onClose }) {
           animation: "modalIn .22s cubic-bezier(.34,1.56,.64,1)",
         }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-6 py-4 shrink-0"
-          style={{ borderBottom: "1px solid var(--border-light)" }}>
-          <div className="flex items-center gap-3 min-w-0">
-            <Avatar name={record.student_name} size={36} />
-            <div className="min-w-0">
-              <p className="text-[15px] font-bold truncate" style={{ color: "var(--text-primary)" }}>
+        <div className="flex items-center justify-between px-6 py-5 shrink-0"
+          style={{ borderBottom: "1px solid var(--border-light)", background: "var(--bg-subtle)" }}>
+          <div className="flex items-center gap-3">
+            <Avatar name={record.student_name} size={40} />
+            <div>
+              <h2 className="text-[16px] font-bold" style={{ color: "var(--text-primary)" }}>
                 {record.student_name}
-              </p>
-              <p className="text-[12px]" style={{ color: "var(--text-secondary)" }}>
-                {record.student_id_number}
-                {record.student_course ? ` · ${record.student_course}` : ""}
-                {record.student_yr_level ? ` · ${record.student_yr_level}` : ""}
-              </p>
+              </h2>
+              <div className="flex gap-2 flex-wrap mt-0.5">
+                <span className="text-[12px] font-mono" style={{ color: "var(--text-secondary)" }}>
+                  {record.student_id_number}
+                </span>
+                {record.student_course && (
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: "rgba(50,102,127,.1)", color: "#32667F" }}>
+                    {record.student_course}
+                  </span>
+                )}
+                {record.student_yr_level && (
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: "rgba(124,58,237,.1)", color: "#7c3aed" }}>
+                    {record.student_yr_level}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => downloadIndividualPDF(record, history)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-colors"
-              style={{ background: "var(--accent-amber)", boxShadow: "0 2px 6px rgba(238,162,58,.3)" }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all hover:opacity-90"
+              style={{ background: "var(--accent-amber)", color: "#fff" }}
             >
-              <Download size={13} /> Export PDF
+              <Download size={12} /> PDF Download 
             </button>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg transition-colors hover:opacity-70"
+              className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-black/5"
               style={{ color: "var(--text-muted)" }}
             >
-              <X size={18} />
+              <X size={16} />
             </button>
           </div>
         </div>
 
-        {/* Summary strip */}
-        <div className="grid grid-cols-3 gap-3 px-6 py-4 shrink-0"
-          style={{ borderBottom: "1px solid var(--border-light)" }}>
+        <div className="flex gap-5 px-6 py-4 shrink-0"
+          style={{ borderBottom: "1px solid var(--border-light)", background: "var(--bg-subtle)" }}>
           {[
-            { icon: BookOpen, label: "Total Visits",   value: history.length, color: "#32667F" },
-            { icon: Timer,    label: "Total Hours",    value: `${totalHours}h`, color: "#EEA23A" },
-            { icon: null,     label: "Current Status", value: null, status: record.status },
-          ].map(({ icon: Icon, label, value, color, status }, i) => (
-            <div key={i} className="flex flex-col gap-1 px-4 py-3 rounded-xl"
-              style={{ background: "var(--bg-subtle)", border: "1px solid var(--border-light)" }}>
-              <span className="text-[10.5px] font-semibold uppercase tracking-wide"
-                style={{ color: "var(--text-muted)" }}>{label}</span>
-              {value !== null
-                ? <span className="text-[22px] font-bold leading-none" style={{ color }}>{value}</span>
-                : <StatusPill status={status} />
-              }
+            { icon: BookOpen,     label: "Total Visits", value: history.length,           color: "#3b82f6" },
+            { icon: Timer,        label: "Total Hours",  value: `${totalHours}h`,          color: "#EEA23A" },
+            { icon: CheckCircle2, label: "Status Now",   value: record.status === "checked_in" ? "Inside" : "Outside",
+              color: record.status === "checked_in" ? "#22c55e" : "#a855f7" },
+          ].map(({ icon: Icon, label, value, color }) => (
+            <div key={label} className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{ background: `${color}1a` }}>
+                <Icon size={13} style={{ color }} />
+              </div>
+              <div>
+                <p className="text-[14px] font-bold leading-none" style={{ color: "var(--text-primary)" }}>{value}</p>
+                <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>{label}</p>
+              </div>
             </div>
           ))}
         </div>
 
-        {/* History table */}
-        <div className="flex-1 overflow-y-auto px-6 pb-5">
-          <p className="text-[10.5px] font-bold uppercase tracking-wider mt-4 mb-3"
-            style={{ color: "var(--text-muted)" }}>
-            Visit History
-          </p>
+        <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="flex items-center justify-center gap-2.5 py-12" style={{ color: "var(--text-secondary)" }}>
-              <Spinner /> <span className="text-[13px]">Loading history…</span>
+            <div className="flex items-center justify-center py-12 gap-3" style={{ color: "var(--text-secondary)" }}>
+              <Spinner size={18} /> Loading history…
             </div>
           ) : history.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-2" style={{ color: "var(--text-muted)" }}>
-              <AlertCircle size={32} className="opacity-30" />
-              <span className="text-[13px]">No visit history found.</span>
+            <div className="flex flex-col items-center justify-center py-12 gap-2">
+              <AlertCircle size={28} style={{ color: "var(--text-muted)" }} />
+              <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>No attendance records found.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-slate-50">
-                  <tr>
-                    {["#", "Date", "Check In", "Check Out", "Duration", "Status"].map((h) => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  {history.map((r, i) => (
-                    <tr key={r.id} className="hover:bg-slate-50 transition-colors even:bg-slate-50/50">
-                      <td className="px-4 py-3 text-sm text-slate-600 font-medium">{i + 1}</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-slate-900">{fmtDate(r.check_in_time)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{fmtDateTime(r.check_in_time)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{r.check_out_time ? fmtDateTime(r.check_out_time) : "—"}</td>
-                      <td className="px-4 py-3">
-                        {r.status === "checked_in"
-                          ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600"><Clock size={12} className="animate-pulse" /> Live</span>
-                          : <span className="text-sm font-mono text-slate-900">{fmtDuration(r.duration)}</span>
-                        }
-                      </td>
-                      <td className="px-4 py-3"><StatusPill status={r.status} /></td>
-                    </tr>
+            <table className="w-full">
+              <thead>
+                <tr style={{ background: "var(--bg-subtle)", borderBottom: "1px solid var(--border-light)" }}>
+                  {["#", "Date", "Check In", "Check Out", "Duration", "Status"].map((h) => (
+                    <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wide"
+                      style={{ color: "var(--text-muted)" }}>{h}</th>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((r, i) => (
+                  <tr key={r.id} style={{ borderBottom: "1px solid var(--border-light)" }}
+                    className="hover:bg-amber-50/30 transition-colors">
+                    <td className="px-5 py-3 text-[12px]" style={{ color: "var(--text-muted)" }}>{i + 1}</td>
+                    <td className="px-5 py-3 text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>
+                      {fmtDate(r.check_in_time)}
+                    </td>
+                    <td className="px-5 py-3 text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                      {fmtDateTime(r.check_in_time)}
+                    </td>
+                    <td className="px-5 py-3 text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                      {r.check_out_time ? fmtDateTime(r.check_out_time) : "—"}
+                    </td>
+                    <td className="px-5 py-3 text-[12px] font-mono font-semibold" style={{ color: "var(--accent-amber)" }}>
+                      {r.status === "checked_in" ? <LiveDuration checkInTime={r.check_in_time} /> : fmtDuration(r.duration)}
+                    </td>
+                    <td className="px-5 py-3"><StatusPill status={r.status} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
@@ -470,68 +933,59 @@ function StudentModal({ record, onClose }) {
 }
 
 // ─────────────────────────────────────────────────────────
-//  FilterField — defined outside Attendance so React never
-//  treats it as a new component type on re-render
+//  Filter wrapper
 // ─────────────────────────────────────────────────────────
-const filterInputCls =
-  "w-full pl-8 pr-3 py-2 rounded-lg text-[12.5px] outline-none transition-all " +
-  "focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400";
-const filterInputStyle = {
-  background: "var(--bg-surface)", border: "1.5px solid var(--border)",
-  color: "var(--text-primary)",
-};
-
 function FilterField({ icon: Icon, children }) {
   return (
     <div className="relative flex items-center">
-      {Icon && (
-        <Icon size={13} className="absolute left-2.5 pointer-events-none z-10"
-          style={{ color: "var(--text-muted)" }} />
-      )}
-      {children}
+      <Icon size={13} className="absolute left-2.5 z-10 pointer-events-none"
+        style={{ color: "var(--text-muted)" }} />
+      <div className="pl-7 relative">{children}</div>
     </div>
   );
 }
 
+const filterInputCls = "pl-0 pr-3 py-2 rounded-lg text-[12.5px] border outline-none transition-all focus:ring-2 focus:ring-amber-400/25 focus:border-amber-400";
+const filterInputStyle = {
+  background: "var(--bg-input)",
+  borderColor: "var(--border)",
+  color: "var(--text-primary)",
+};
+
 // ─────────────────────────────────────────────────────────
-//  Main Page
+//  Main Attendance Page
 // ─────────────────────────────────────────────────────────
 export default function Attendance() {
   const navigate = useNavigate();
 
-  // ── Data ──────────────────────────────────────────────
   const [records, setRecords]     = useState([]);
   const [active, setActive]       = useState([]);
   const [stats, setStats]         = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ── Filter state ──────────────────────────────────────
   const [fSearch, setFSearch] = useState("");
   const [fCourse, setFCourse] = useState("");
   const [fDate,   setFDate]   = useState("");
   const [fStatus, setFStatus] = useState("all");
 
-  // ── Tap / check-in form ───────────────────────────────
   const [idInput,     setIdInput]     = useState("");
-  const [tapping,     setTapping]     = useState(false);  // request in-flight
-  const [tapResult,   setTapResult]   = useState(null);   // last successful tap
-  const [studentInfo, setStudentInfo] = useState(null);   // live lookup preview
+  const [tapping,     setTapping]     = useState(false);
+  const [tapResult,   setTapResult]   = useState(null);
+  const [studentInfo, setStudentInfo] = useState(null);
   const [lookingUp,   setLookingUp]   = useState(false);
   const debouncedId     = useDebounce(idInput,  400);
   const debouncedSearch = useDebounce(fSearch,  300);
   const inputRef = useRef(null);
 
-  // ── Modals ────────────────────────────────────────────
-  const [selectedRecord,    setSelectedRecord]    = useState(null);
-  const [notFoundStudentId, setNotFoundStudentId] = useState(null); // error modal
+  const [selectedRecord,        setSelectedRecord]        = useState(null);
+  const [notFoundStudentId,     setNotFoundStudentId]     = useState(null);
+  const [showRfidRegistration,  setShowRfidRegistration]  = useState(false);
 
-  // ── Toast ─────────────────────────────────────────────
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
   const showToast = useCallback((message, type = "success") => {
     setToast({ show: true, message, type });
   }, []);
 
-  // ── Fetch all data ────────────────────────────────────
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -550,39 +1004,31 @@ export default function Attendance() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ── Live student lookup as user types ─────────────────
   useEffect(() => {
     if (!debouncedId?.trim()) { setStudentInfo(null); return; }
     let cancelled = false;
     setLookingUp(true);
     getStudentByStudentIdNumber(debouncedId.trim())
-      .then((res) => {
-        if (!cancelled) setStudentInfo(res.success ? res.data : null);
-      })
+      .then((res) => { if (!cancelled) setStudentInfo(res.success ? res.data : null); })
       .catch(() => { if (!cancelled) setStudentInfo(null); })
       .finally(() => { if (!cancelled) setLookingUp(false); });
     return () => { cancelled = true; };
   }, [debouncedId]);
 
-  // ── Tap handler (check-in / check-out toggle) ─────────
   const handleTap = useCallback(async (e) => {
     e?.preventDefault();
     const id = idInput.trim();
     if (!id) return;
-
     setTapping(true);
     try {
       const res = await tapAttendance(id);
-
       if (res.success) {
         setTapResult(res);
         setIdInput("");
         setStudentInfo(null);
         fetchData();
-        // Re-focus the input for rapid scanning
         setTimeout(() => inputRef.current?.focus(), 50);
       } else {
-        // Student not found → show error modal
         if (res.error?.toLowerCase().includes("not found")) {
           setNotFoundStudentId(id);
           setIdInput("");
@@ -597,12 +1043,16 @@ export default function Attendance() {
     }
   }, [idInput, fetchData, showToast]);
 
-  // Support barcode scanners: submit on Enter key
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") handleTap(e);
-  };
+  const handleKeyDown = (e) => { if (e.key === "Enter") handleTap(e); };
 
-  // ── Manual check-out from active table ────────────────
+  const handleRfidRegistered = useCallback((cardData, student) => {
+    setShowRfidRegistration(false);
+    const name = student.display_name ||
+      [student.first_name, student.last_name].filter(Boolean).join(" ") ||
+      student.student_name;
+    showToast(`RFID card registered to ${name}`, "success");
+  }, [showToast]);
+
   const handleCheckOut = async (idNumber) => {
     try {
       const res = await checkOut(idNumber);
@@ -611,7 +1061,6 @@ export default function Attendance() {
     } catch { showToast("Failed to check out student", "error"); }
   };
 
-  // ── Delete ────────────────────────────────────────────
   const handleDelete = async (e, id) => {
     e.stopPropagation();
     if (!window.confirm("Delete this attendance record?")) return;
@@ -622,7 +1071,6 @@ export default function Attendance() {
     } catch { showToast("Failed to delete record", "error"); }
   };
 
-  // ── Derived ───────────────────────────────────────────
   const courses = useMemo(
     () => [...new Set(records.map((r) => r.student_course).filter(Boolean))].sort(),
     [records]
@@ -639,16 +1087,13 @@ export default function Attendance() {
     });
   }, [records, debouncedSearch, fCourse, fDate, fStatus]);
 
-  const hasFilters  = fSearch || fCourse || fDate || fStatus !== "all";
+  const hasFilters   = fSearch || fCourse || fDate || fStatus !== "all";
   const clearFilters = () => { setFSearch(""); setFCourse(""); setFDate(""); setFStatus("all"); };
 
-  // ─────────────────────────────────────────────────────
-  //  Render
-  // ─────────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-5">
 
-      {/* ── Page Header ────────────────────────────────── */}
+      {/* ── Page Header ──────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
@@ -660,7 +1105,24 @@ export default function Attendance() {
             Track student check-in / check-out and library visit history
           </p>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-2 flex-wrap">
+
+          {/* Register RFID Button */}
+          <button
+            onClick={() => setShowRfidRegistration(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-all hover:opacity-90 active:scale-[.98]"
+            style={{
+              background: "rgba(45,122,71,0.1)",
+              border: "1.5px solid rgba(45,122,71,0.35)",
+              color: "#2d7a47",
+            }}
+          >
+            <CreditCard size={14} />
+            Register RFID
+          </button>
+
+          {/* Kiosk View */}
           <button
             onClick={() => navigate("/dashboard/attendance/kiosk")}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-colors"
@@ -673,6 +1135,8 @@ export default function Attendance() {
             <Monitor size={14} style={{ color: "var(--accent-amber)" }} />
             Kiosk View
           </button>
+
+          {/* Download PDF */}
           <button
             onClick={() => downloadGeneralPDF(filtered)}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors"
@@ -683,14 +1147,14 @@ export default function Attendance() {
         </div>
       </div>
 
-      {/* ── Stats Cards ────────────────────────────────── */}
+      {/* ── Stats Cards ──────────────────────────────── */}
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Total Visits",      value: stats.total,                                        color: "#3b82f6", icon: BookOpen     },
-            { label: "In Library Now",    value: stats.active,                                       color: "#22c55e", icon: Users        },
-            { label: "Total Hours",       value: `${Math.round((stats.totalDuration || 0) / 60)}h`,  color: "#EEA23A", icon: Timer        },
-            { label: "Checked Out Today", value: stats.checkedOut,                                   color: "#a855f7", icon: CheckCircle2 },
+            { label: "Total Visits",      value: stats.total,                                       color: "#3b82f6", icon: BookOpen     },
+            { label: "In Library Now",    value: stats.active,                                      color: "#22c55e", icon: Users        },
+            { label: "Total Hours",       value: `${Math.round((stats.totalDuration || 0) / 60)}h`, color: "#EEA23A", icon: Timer        },
+            { label: "Checked Out Today", value: stats.checkedOut,                                  color: "#a855f7", icon: CheckCircle2 },
           ].map(({ label, value, color, icon: Icon }) => (
             <div key={label}
               className="flex items-center gap-3 px-4 py-3 rounded-xl"
@@ -708,21 +1172,17 @@ export default function Attendance() {
         </div>
       )}
 
-      {/* ── Check-In / Tap Form ────────────────────────── */}
+      {/* ── Check-In / Tap Form ──────────────────────── */}
       <div className="rounded-xl px-5 py-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
         <p className="flex items-center gap-2 text-[13px] font-semibold mb-3"
           style={{ color: "var(--text-primary)" }}>
           <LogIn size={14} style={{ color: "var(--accent-amber)" }} />
-          Student ID Tap — Check In / Check Out
+          Input Student ID to Check In / Out
         </p>
-
-        {/* Helper text */}
         <p className="text-[11.5px] mb-3" style={{ color: "var(--text-muted)" }}>
-          Enter or scan a student ID. First tap checks in, second tap checks out automatically.
+          Enter a student ID. First Enter checks in, second Enter checks out automatically.
         </p>
-
         <div className="flex flex-col sm:flex-row gap-3 items-start">
-          {/* ID input */}
           <div className="flex-1 w-full">
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
@@ -743,16 +1203,12 @@ export default function Attendance() {
                 }}
               />
               {tapping && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <Spinner size={15} />
-                </div>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2"><Spinner size={15} /></div>
               )}
             </div>
 
-            {/* Live lookup feedback */}
             {lookingUp && (
-              <div className="flex items-center gap-2 mt-2 text-[12px]"
-                style={{ color: "var(--text-secondary)" }}>
+              <div className="flex items-center gap-2 mt-2 text-[12px]" style={{ color: "var(--text-secondary)" }}>
                 <Spinner size={13} /> Looking up student…
               </div>
             )}
@@ -778,12 +1234,6 @@ export default function Attendance() {
                         {studentInfo.student_yr_level}
                       </span>
                     )}
-                    {studentInfo.student_school_year && (
-                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                        style={{ background: "rgba(16,185,129,.1)", color: "#059669" }}>
-                        SY {studentInfo.student_school_year}
-                      </span>
-                    )}
                   </div>
                 </div>
               </div>
@@ -795,7 +1245,6 @@ export default function Attendance() {
               </p>
             )}
 
-            {/* Last tap result feedback */}
             {tapResult && (
               <div className="mt-2">
                 <TapResult result={tapResult} onDismiss={() => setTapResult(null)} />
@@ -803,7 +1252,6 @@ export default function Attendance() {
             )}
           </div>
 
-          {/* Submit */}
           <button
             onClick={handleTap}
             disabled={!idInput.trim() || tapping}
@@ -818,7 +1266,7 @@ export default function Attendance() {
         </div>
       </div>
 
-      {/* ── Currently Active Students ───────────────────── */}
+      {/* ── Currently Active Students ────────────────── */}
       {active.length > 0 && (
         <div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
           <div className="flex items-center gap-2 px-5 py-3.5"
@@ -832,24 +1280,18 @@ export default function Attendance() {
               {active.length}
             </span>
           </div>
-
           <div className="overflow-x-auto rounded-lg border-t border-slate-200">
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-emerald-50/50">
                 <tr>
-                  {["Student", "ID", "Course", "Year", "School Year", "Check In", "Duration", "Action"].map((h) => (
+                  {["Student", "ID", "Course", "Year", "School Year", "Check In", "Action"].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {active.map((s) => (
-                  <tr
-                    key={s.id}
-                    className="cursor-pointer hover:bg-emerald-50/50 transition-colors group"
-                    onClick={() => setSelectedRecord(s)}
-                    title="Click to view full attendance history"
-                  >
+                  <tr key={s.id} className="hover:bg-emerald-50/50 transition-colors group">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400/20 to-emerald-500/20 flex items-center justify-center border border-emerald-200/50">
@@ -863,10 +1305,9 @@ export default function Attendance() {
                     <td className="px-4 py-4 text-sm text-slate-600">{s.student_yr_level || "—"}</td>
                     <td className="px-4 py-4 text-sm text-slate-600">{s.school_year || "—"}</td>
                     <td className="px-4 py-4 text-sm text-slate-600">{fmtDateTime(s.check_in_time)}</td>
-                    <td className="px-4 py-4"><LiveDuration checkInTime={s.check_in_time} /></td>
                     <td className="px-4 py-4 whitespace-nowrap">
                       <button
-                        onClick={(e) => { e.stopPropagation(); handleCheckOut(s.student_id_number); }}
+                        onClick={() => handleCheckOut(s.student_id_number)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 transition-colors shadow-sm"
                       >
                         <ArrowLeft size={11} /> Check Out
@@ -880,7 +1321,7 @@ export default function Attendance() {
         </div>
       )}
 
-      {/* ── Attendance History ──────────────────────────── */}
+      {/* ── Attendance History ────────────────────────── */}
       <div className="rounded-xl overflow-hidden border border-slate-200/60 shadow-sm" style={{ background: "var(--bg-surface)" }}>
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-200"
           style={{ borderBottom: "1px solid var(--border-light)" }}>
@@ -906,10 +1347,8 @@ export default function Attendance() {
           )}
         </div>
 
-        {/* Filters Row */}
         <div className="flex flex-wrap gap-2.5 p-5 bg-gradient-to-r from-slate-50/70 to-slate-50/30 backdrop-blur-sm"
           style={{ borderBottom: "1px solid var(--border-light)" }}>
-
           <FilterField icon={User}>
             <input
               type="text" placeholder="Search Name or ID…" value={fSearch}
@@ -918,7 +1357,6 @@ export default function Attendance() {
               style={{ ...filterInputStyle, minWidth: 220 }}
             />
           </FilterField>
-
           <FilterField icon={GraduationCap}>
             <select
               value={fCourse} onChange={(e) => setFCourse(e.target.value)}
@@ -931,7 +1369,6 @@ export default function Attendance() {
             <ChevronDown size={12} className="absolute right-2.5 pointer-events-none"
               style={{ color: "var(--text-muted)" }} />
           </FilterField>
-
           <FilterField icon={Calendar}>
             <input
               type="date" value={fDate}
@@ -940,7 +1377,6 @@ export default function Attendance() {
               style={{ ...filterInputStyle, minWidth: 160 }}
             />
           </FilterField>
-
           <FilterField icon={Filter}>
             <select
               value={fStatus} onChange={(e) => setFStatus(e.target.value)}
@@ -967,7 +1403,7 @@ export default function Attendance() {
         />
       </div>
 
-      {/* ── Modals ─────────────────────────────────────── */}
+      {/* ── Modals ────────────────────────────────────── */}
       {selectedRecord && (
         <StudentModal record={selectedRecord} onClose={() => setSelectedRecord(null)} />
       )}
@@ -982,7 +1418,13 @@ export default function Attendance() {
         />
       )}
 
-      {/* ── Toast ──────────────────────────────────────── */}
+      {showRfidRegistration && (
+        <RfidRegistrationModal
+          onClose={() => setShowRfidRegistration(false)}
+          onRegistered={handleRfidRegistered}
+        />
+      )}
+
       {toast.show && (
         <Toast
           message={toast.message} type={toast.type}

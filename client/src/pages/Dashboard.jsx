@@ -599,6 +599,7 @@ function HoldingsBreakdown({ data: rawData, loading, error }) {
   const grandTotal  = totalNemco + totalLexora;
 
   // ── Skeleton rows
+// sourcery skip: avoid-function-declarations-in-blocks
   function SkeletonRows() {
     return Array.from({ length: 6 }).map((_, i) => (
       <tr key={i} className="animate-pulse">
@@ -1079,7 +1080,30 @@ export default function Dashboard() {
 
   return (
     <main className="flex flex-col gap-4 lg:gap-5" aria-label="Library Analytics Dashboard">
-      <h1 className="sr-only">Analytics Dashboard Overview</h1>
+      
+      {/* ── Page Header ── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
+            style={{ color: "var(--text-primary)" }}>
+            <Library size={22} style={{ color: "var(--accent-amber)" }} />
+            Library Analytics Dashboard
+          </h1>
+          <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
+            Real-time statistics, charts, and actionable library insights
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={refresh}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-all hover:opacity-90 active:scale-[.98]"
+            style={{ background: "var(--accent-amber)", boxShadow: "0 2px 8px rgba(238,162,58,.3)" }}
+          >
+            <RefreshCw size={14} /> Refresh All
+          </button>
+        </div>
+      </div>
 
       {/* KPI Stats */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">

@@ -317,6 +317,7 @@ export default function Borrowed() {
 
   // ── Add book to list ──────────────────────────────────
   // accessionNumber starts null — user picks the specific copy via CopiesList below.
+// sourcery skip: avoid-function-declarations-in-blocks
   function addBook(book) {
     if (form.borrower_type !== "faculty" && form.books.length >= MAX_BOOKS) return;
     if (form.books.some(b => b.id === book.id)) return;
@@ -484,7 +485,21 @@ body: JSON.stringify({
   //  Render
   // ─────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col gap-5">
+<div className="flex flex-col gap-5">
+
+      {/* ── Page Header ──────────────────────────────── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
+            style={{ color: "var(--text-primary)" }}>
+            <BookOpen size={22} style={{ color: "var(--accent-amber)" }} />
+            Borrowed Books
+          </h1>
+          <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
+            Manage borrowing transactions, returns, renewals, and overdue fines
+          </p>
+        </div>
+      </div>
 
       {/* ── Summary pills ──────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

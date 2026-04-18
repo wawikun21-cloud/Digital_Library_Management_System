@@ -261,7 +261,7 @@ export default function LandingPage() {
             return;
           }
           setLoading(true);
-          fetch(`/api/books/${bookId}/copies`)
+          fetch(`/api/books/${bookId}/copies/public`)
             .then(r => r.json())
             .then(d => { 
               if (d.success) {

@@ -3,7 +3,8 @@
 //  Handles login, logout, session check, and profile update
 // ─────────────────────────────────────────────────────────
 
-const User = require("../models/User");
+const User         = require("../models/User");
+const auditService = require("../services/auditService");
 
 /**
  * POST /api/auth/login
@@ -21,11 +22,27 @@ async function login(req, res) {
 
     const user = await User.findByUsername(username.trim());
     if (!user) {
+      // ── Audit: failed login (unknown username) ──────────
+      await auditService.logAction(req, {
+        entity_type : "auth",
+        entity_id   : null,
+        action      : "LOGIN_FAILED",
+        old_data    : null,
+        new_data    : { username: username.trim(), reason: "User not found" },
+      });
       return res.status(401).json({ success: false, error: "Invalid username or password" });
     }
 
     const valid = await User.verifyPassword(password, user.password);
     if (!valid) {
+      // ── Audit: failed login (wrong password) ────────────
+      await auditService.logAction(req, {
+        entity_type : "auth",
+        entity_id   : user.id,
+        action      : "LOGIN_FAILED",
+        old_data    : null,
+        new_data    : { username: user.username, role: user.role, reason: "Wrong password" },
+      });
       return res.status(401).json({ success: false, error: "Invalid username or password" });
     }
 
@@ -35,6 +52,16 @@ async function login(req, res) {
       role:       user.role,
       avatar_url: user.avatar_url || null,
     };
+
+    // ── Audit: successful LOGIN ─────────────────────────
+    // Session is set above so auditService can read req.session.user
+    await auditService.logAction(req, {
+      entity_type : "auth",
+      entity_id   : user.id,
+      action      : "LOGIN",
+      old_data    : null,
+      new_data    : { username: user.username, role: user.role },
+    });
 
     return res.json({
       success: true,
@@ -50,12 +77,24 @@ async function login(req, res) {
  * POST /api/auth/logout
  */
 function logout(req, res) {
-  req.session.destroy((err) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: "Could not log out" });
-    }
-    res.clearCookie("lexora.sid");
-    return res.json({ success: true, message: "Logged out successfully" });
+  // Capture user before destroying session
+  const sessionUser = req.session?.user ?? null;
+
+  // ── Audit: LOGOUT (fire-and-forget before destroy) ──
+  auditService.logAction(req, {
+    entity_type : "auth",
+    entity_id   : sessionUser?.id   ?? null,
+    action      : "LOGOUT",
+    old_data    : null,
+    new_data    : { username: sessionUser?.username ?? "unknown", role: sessionUser?.role ?? "unknown" },
+  }).finally(() => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ success: false, error: "Could not log out" });
+      }
+      res.clearCookie("lexora.sid");
+      return res.json({ success: true, message: "Logged out successfully" });
+    });
   });
 }
 

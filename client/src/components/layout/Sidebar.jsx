@@ -1,3 +1,4 @@
+import { ShieldCheck } from "lucide-react";
 import { useState } from 'react';
 import { NavLink, useLocation } from "react-router-dom";
 import { BarChart3, BookOpen, ClipboardList, Trash2, Sun, Moon, X, ChevronDown, Library, Users, User, Globe, UserCheck } from "lucide-react";
@@ -26,7 +27,8 @@ const NAV_ITEMS = [
       { to: "/dashboard/attendance/kiosk", label: "Kiosk Attendance", Icon: UserCheck },
     ],
   },
-  { to: "/dashboard/deleted", label: "Recently Deleted", Icon: Trash2, roles: ["admin"] },
+  { to: "/dashboard/deleted",    label: "Recently Deleted", Icon: Trash2,      roles: ["admin"] },
+  { to: "/dashboard/audit-log", label: "Audit Trail",      Icon: ShieldCheck, roles: ["admin"] },
 ];
 
 /* ─────────────────────────────────────────────────── */

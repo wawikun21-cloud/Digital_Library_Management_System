@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────
 
 const AttendanceModel = require("../models/Attendance");
+const auditService    = require("../services/auditService");
 
 const AttendanceController = {
 
@@ -67,7 +68,7 @@ const AttendanceController = {
   /**
    * POST /api/attendance/tap/:studentIdNumber
    * First tap → check in. Second tap → check out.
-   * All student info is pulled automatically from the students table.
+   * Triggered by RFID kiosk — no logged-in user, logs as "system".
    */
   async tap(req, res) {
     try {
@@ -80,10 +81,24 @@ const AttendanceController = {
       const result = await AttendanceModel.tap(studentIdNumber.trim());
 
       if (result.success) {
-        const statusCode = result.action === 'checked_in' ? 201 : 200;
-        const message    = result.action === 'checked_in'
+        const statusCode = result.action === "checked_in" ? 201 : 200;
+        const message    = result.action === "checked_in"
           ? `${result.data.student_name} checked in successfully`
           : `${result.data.student_name} checked out successfully`;
+
+        // ── Audit: CHECK_IN / CHECK_OUT ─────────────────
+        // Kiosk has no session user — override username to "system"
+        const auditReq = { ...req, session: { user: { id: null, username: "system", role: "system" } }, headers: req.headers, socket: req.socket };
+        await auditService.logAction(auditReq, {
+          entity_type : "attendance",
+          entity_id   : result.data?.id ?? null,
+          action      : result.action === "checked_in" ? "CHECK_IN" : "CHECK_OUT",
+          old_data    : null,
+          new_data    : {
+            student_id_number : studentIdNumber.trim(),
+            student_name      : result.data?.student_name ?? null,
+          },
+        });
 
         return res.status(statusCode).json({
           success: true,
@@ -108,6 +123,18 @@ const AttendanceController = {
     try {
       const result = await AttendanceModel.checkIn(req.body);
       if (result.success) {
+        // ── Audit: CHECK_IN ─────────────────────────────
+        const auditReq = { ...req, session: { user: { id: null, username: "system", role: "system" } }, headers: req.headers, socket: req.socket };
+        await auditService.logAction(auditReq, {
+          entity_type : "attendance",
+          entity_id   : result.data?.id ?? null,
+          action      : "CHECK_IN",
+          old_data    : null,
+          new_data    : {
+            student_id_number : req.body.student_id_number ?? null,
+            student_name      : result.data?.student_name  ?? null,
+          },
+        });
         return res.status(201).json({ success: true, data: result.data, message: "Student checked in successfully" });
       }
       const statusCode = result.error?.toLowerCase().includes("not found") ? 404 : 400;
@@ -124,6 +151,18 @@ const AttendanceController = {
       const { studentIdNumber } = req.params;
       const result = await AttendanceModel.checkOut(studentIdNumber);
       if (result.success) {
+        // ── Audit: CHECK_OUT ────────────────────────────
+        const auditReq = { ...req, session: { user: { id: null, username: "system", role: "system" } }, headers: req.headers, socket: req.socket };
+        await auditService.logAction(auditReq, {
+          entity_type : "attendance",
+          entity_id   : result.data?.id ?? null,
+          action      : "CHECK_OUT",
+          old_data    : null,
+          new_data    : {
+            student_id_number : studentIdNumber,
+            student_name      : result.data?.student_name ?? null,
+          },
+        });
         return res.status(200).json({ success: true, data: result.data, message: "Student checked out successfully" });
       }
       return res.status(400).json({ success: false, error: result.error });

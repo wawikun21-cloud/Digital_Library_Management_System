@@ -184,50 +184,40 @@ router.post("/check-duplicates", requireAuth, requireAdmin, async (req, res) => 
 });
 
 // POST /api/books/bulk-import
-router.post("/bulk-import", requireAuth, requireAdmin, async (req, res) => {
+router.post("/bulk-import", requireAuth, requireAdmin, booksController.bulkImport);
+
+// ── DYNAMIC routes — AFTER all static routes ─────────────
+
+// GET /api/books/:id/copies/public  ← NO AUTH — used by the public landing page
+// Returns only: accession_number, status, date_acquired for each live copy.
+// Intentionally omits condition_notes and internal IDs.
+router.get("/:id/copies/public", async (req, res) => {
   try {
-    const { books } = req.body;
-    if (!Array.isArray(books) || books.length === 0) {
-      return res.status(400).json({ success: false, error: "No books provided" });
+    const { pool } = require("../config/db");
+    const bookId   = req.params.id;
+
+    // Verify the book exists and is not deleted
+    const [[book]] = await pool.query(
+      "SELECT id FROM books WHERE id = ? AND is_deleted = 0 LIMIT 1",
+      [bookId]
+    );
+    if (!book) {
+      return res.status(404).json({ success: false, error: "Book not found" });
     }
 
-    const imported      = [];
-    const existingBooks = [];
-    const skippedBooks  = [];
-    const skippedCopies = [];
-
-    for (const bookData of books) {
-      const result = await BookModel.importWithCopies(bookData);
-
-      if (result.success) {
-        result.isNewBook ? imported.push(result.data) : existingBooks.push(result.data);
-        if (result.skippedCopies?.length) {
-          skippedCopies.push(...result.skippedCopies.map((s) => ({ book: bookData.title, ...s })));
-        }
-      } else {
-        skippedBooks.push({ title: bookData.title, error: result.error });
-      }
-    }
-
-    res.json({
-      success:       true,
-      imported:      imported.length,
-      existing:      existingBooks.length,
-      failedBooks:   skippedBooks.length,
-      skippedCopies: skippedCopies.length,
-      data:          [...imported, ...existingBooks],
-      newBooks:      imported,
-      existingBooks,
-      errors:        skippedBooks,
-      skippedCopies,
-    });
+    const [rows] = await pool.query(
+      `SELECT accession_number, status, date_acquired
+       FROM   book_copies
+       WHERE  book_id = ? AND is_deleted = 0
+       ORDER  BY id ASC`,
+      [bookId]
+    );
+    res.json({ success: true, data: rows });
   } catch (err) {
-    console.error("[POST /api/books/bulk-import]", err.message);
+    console.error("[GET /api/books/:id/copies/public]", err.message);
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
-
-// ── DYNAMIC routes — AFTER all static routes ─────────────
 
 // GET /api/books/:id
 router.get("/:id", requireAuth, requireAdmin, async (req, res) => {

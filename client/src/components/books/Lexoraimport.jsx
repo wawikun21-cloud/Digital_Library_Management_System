@@ -235,7 +235,17 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
         const res  = await fetch(`${API_BASE}/books/lexora-import`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ books: chunk }),
+          body:    JSON.stringify({
+            books:             chunk,
+            is_first_chunk:    offset === 0,
+            is_last_chunk:     offset + CHUNK_SIZE >= total,
+            // Running totals BEFORE this chunk — server adds its own chunk
+            // counts on top so the final audit log reflects everything.
+            acc_imported:      importedCount,
+            acc_updated:       updatedCount,
+            acc_errors:        allFailed.length,
+            acc_skippedCopies: 0,
+          }),
         });
         const data = await res.json();
 

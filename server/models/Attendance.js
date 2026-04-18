@@ -117,22 +117,24 @@ const AttendanceModel = {
 
       // ── 3a. Already checked in → check out ──────────────────────────
       if (existing.length > 0) {
-        const record       = existing[0];
-        const checkOutTime = new Date();
-        const checkInTime  = new Date(record.check_in_time);
-        const duration     = Math.max(0, Math.floor((checkOutTime - checkInTime) / 1000 / 60));
+        const record = existing[0];
 
+        // Use MySQL TIMESTAMPDIFF to avoid JS↔MySQL timezone mismatch.
+        // NOW() and check_in_time are both stored/compared in the same
+        // MySQL session timezone, so the difference is always correct.
         await pool.query(`
           UPDATE attendance 
-          SET check_out_time = ?, duration = ?, status = 'checked_out'
+          SET check_out_time = NOW(),
+              duration = GREATEST(0, TIMESTAMPDIFF(MINUTE, check_in_time, NOW())),
+              status = 'checked_out'
           WHERE id = ?
-        `, [checkOutTime, duration, record.id]);
+        `, [record.id]);
 
         const [updated] = await pool.query(
           `SELECT * FROM attendance WHERE id = ?`, [record.id]
         );
 
-        console.log(`✅ Checked OUT: ${studentName} (${studentIdNumber}) — ${duration} min`);
+        console.log(`✅ Checked OUT: ${studentName} (${studentIdNumber})`);
         return { success: true, action: 'checked_out', data: updated[0] };
       }
 
@@ -230,16 +232,16 @@ const AttendanceModel = {
         return { success: false, error: "Student is not currently checked in." };
       }
 
-      const record       = attendance[0];
-      const checkOutTime = new Date();
-      const checkInTime  = new Date(record.check_in_time);
-      const duration     = Math.max(0, Math.floor((checkOutTime - checkInTime) / 1000 / 60));
+      const record = attendance[0];
 
+      // Use MySQL TIMESTAMPDIFF to avoid JS↔MySQL timezone mismatch.
       await pool.query(`
         UPDATE attendance 
-        SET check_out_time = ?, duration = ?, status = 'checked_out'
+        SET check_out_time = NOW(),
+            duration = GREATEST(0, TIMESTAMPDIFF(MINUTE, check_in_time, NOW())),
+            status = 'checked_out'
         WHERE id = ?
-      `, [checkOutTime, duration, record.id]);
+      `, [record.id]);
 
       const [rows] = await pool.query(
         `SELECT * FROM attendance WHERE id = ?`, [record.id]

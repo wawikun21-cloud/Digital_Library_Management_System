@@ -1,24 +1,25 @@
 // ─────────────────────────────────────────────────────────
 //  pages/KioskAttendance.jsx
 //  Library Attendance Kiosk — full-screen display view.
-//  • Shows live clock + date
-//  • Single Student ID input (barcode-scanner friendly)
-//  • Tap = check-in / check-out toggle (backend-driven)
-//  • Animated card flies in on every tap showing student details
+//
+//  RFID-only mode:
+//  • Admin presses "Activate RFID Detection" to start listening
+//  • Once ON, the hidden input auto-focuses and captures every
+//    RFID scan (hardware scanners emit as keyboard input + Enter)
+//  • Detection stays ON indefinitely until admin clicks "Deactivate"
+//  • No manual typing UI for students — tap only
+//  • 1st tap = Check In | 2nd tap = Check Out
+//  • Animated result card flies in on every tap
 //  • Active-students grid with live duration timers
-//  • "Student Not Found" flash banner
 // ─────────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import {
-  getActiveAttendance,
-  tapAttendance,
-} from "../services/api/attendanceApi";
-import { getStudentByStudentIdNumber } from "../services/api/studentsApi";
+import { tapRfid } from "../services/api/rfidApi";
+import { getActiveAttendance } from "../services/api/attendanceApi";
 import {
   LogIn, LogOut, Clock, Users, Wifi, WifiOff,
-  Hash, AlertTriangle, CheckCircle2,
-  Maximize2, Minimize2, UserPlus, X, ChevronRight,
+  AlertTriangle, CheckCircle2,
+  Maximize2, Minimize2, Power, PowerOff, ShieldCheck,
 } from "lucide-react";
 
 // ─── Helpers ─────────────────────────────────────────────
@@ -49,9 +50,45 @@ function fmtElapsed(seconds) {
   return `${pad(m)}:${pad(s)}`;
 }
 
+// ─── FIX 1: parseAsUTC → parseTimestamp ──────────────────
+//
+// PROBLEM: The old `parseAsUTC` unconditionally appended "Z" to any
+// string without a timezone suffix, forcing UTC interpretation.
+// MySQL TIMESTAMP/DATETIME columns are typically stored and returned
+// in the *server's local timezone* (e.g. PHT = UTC+8), NOT in UTC.
+// Appending "Z" made every timestamp appear 8 hours in the past,
+// causing two visible bugs:
+//
+//   a) "in at" display was 8 h off  (e.g. 08:30 shown as 00:30)
+//   b) useElapsed() calculated a NEGATIVE initial elapsed value
+//      (Date.now() minus a future UTC-misread time = negative),
+//      which Math.max(0, ...) clamped to 0 — so every card started
+//      its timer at 00:00 on each poll/re-mount instead of showing
+//      the real time already spent.
+//
+// FIX: Treat strings without an explicit timezone offset as LOCAL
+// time by replacing the space separator with "T" but NOT appending
+// "Z". The browser then parses them as local time, matching the
+// server's timezone.
+//
+// If your MySQL server is configured to return UTC timestamps
+// (e.g. via `SET time_zone = '+00:00'`), re-add the "Z" suffix.
+// The key is to match whatever timezone the DB column actually uses.
+function parseTimestamp(dt) {
+  if (!dt) return new Date();
+  const s = String(dt);
+  // Already has explicit tz info — parse as-is.
+  if (s.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(s)) return new Date(s);
+  // No tz info → treat as local time (server local tz).
+  return new Date(s.replace(" ", "T"));
+}
+
 function fmtCheckIn(dt) {
   if (!dt) return "—";
-  return new Date(dt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  return parseTimestamp(dt).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 // ─── Live clock ───────────────────────────────────────────
@@ -67,48 +104,76 @@ function useLiveClock() {
 // ─── Fullscreen hook ──────────────────────────────────────
 function useFullscreen(ref) {
   const [isFullscreen, setIsFullscreen] = useState(false);
-
   useEffect(() => {
-    const onChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
-
   const enter = useCallback(() => {
     const el = ref.current || document.documentElement;
     if (el.requestFullscreen) el.requestFullscreen();
     else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-    else if (el.mozRequestFullScreen) el.mozRequestFullScreen();
-    else if (el.msRequestFullscreen) el.msRequestFullscreen();
   }, [ref]);
-
   const exit = useCallback(() => {
     if (document.exitFullscreen) document.exitFullscreen();
     else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-    else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
-    else if (document.msExitFullscreen) document.msExitFullscreen();
   }, []);
-
   const toggle = useCallback(() => {
     isFullscreen ? exit() : enter();
   }, [isFullscreen, enter, exit]);
-
   return { isFullscreen, toggle };
 }
 
-// ─── Live elapsed seconds per record ─────────────────────
+// ─── FIX 2: useElapsed — stable elapsed calculation ──────
+//
+// PROBLEM (original):
+//   const [elapsed, setElapsed] = useState(() =>
+//     Math.max(0, Math.floor((Date.now() - parseAsUTC(checkInTime).getTime()) / 1000))
+//   );
+//
+// There were TWO issues here:
+//
+// a) The useState lazy initializer only runs ONCE (on mount). When
+//    the parent re-renders with a *different* checkInTime prop
+//    (e.g. after the 10-second active-poll refreshes the list),
+//    the initial state is NOT recalculated — the timer appears to
+//    reset to whatever it was on first render and then continues
+//    ticking from that stale baseline.
+//
+//    FIX: Derive the base timestamp into a ref so the interval
+//    always reads the latest parsed value without needing to
+//    restart the effect.
+//
+// b) parseAsUTC (now parseTimestamp) was misreading local timestamps
+//    as UTC, making `Date.now() - checkInMs` negative. Math.max
+//    clamped this to 0, so every card showed 00:00 on render and
+//    only started ticking *forward* from 0 — losing all accrued time.
+//
+//    FIX: parseTimestamp now correctly interprets local timestamps.
 function useElapsed(checkInTime) {
-  const [elapsed, setElapsed] = useState(() =>
-    Math.max(0, Math.floor((Date.now() - new Date(checkInTime).getTime()) / 1000))
-  );
+  // Keep a ref to the parsed check-in ms so the interval closure
+  // always sees the latest value without restarting.
+  const checkInMsRef = useRef(parseTimestamp(checkInTime).getTime());
+
+  // Update the ref whenever checkInTime changes (e.g. after a poll).
   useEffect(() => {
-    const t = setInterval(() => {
-      setElapsed(Math.max(0, Math.floor((Date.now() - new Date(checkInTime).getTime()) / 1000)));
-    }, 1000);
-    return () => clearInterval(t);
+    checkInMsRef.current = parseTimestamp(checkInTime).getTime();
   }, [checkInTime]);
+
+  const calcElapsed = useCallback(
+    () => Math.max(0, Math.floor((Date.now() - checkInMsRef.current) / 1000)),
+    []
+  );
+
+  const [elapsed, setElapsed] = useState(calcElapsed);
+
+  useEffect(() => {
+    // Recalculate immediately when checkInTime changes.
+    setElapsed(calcElapsed());
+    const t = setInterval(() => setElapsed(calcElapsed()), 1000);
+    return () => clearInterval(t);
+  }, [checkInTime, calcElapsed]); // re-subscribe when the prop changes
+
   return elapsed;
 }
 
@@ -147,9 +212,32 @@ function LiveTimer({ checkInTime }) {
   );
 }
 
-// Active student card in the grid
+// ─── FIX 3: StudentCard — stable animation on re-renders ─
+//
+// PROBLEM: `animationDelay: \`${index * 40}ms\`` caused every card
+// to re-animate its fly-in whenever the parent re-rendered (e.g.
+// every 10-second poll), because React reconciles by key and
+// the index prop can shift when students check in/out, triggering
+// a fresh mount with a new delay. This made cards "flash" on
+// every background refresh.
+//
+// FIX: Gate the entry animation with a ref so it only fires once
+// per card mount, not on every prop update. Cards that are already
+// visible don't re-animate when the active list refreshes.
 function StudentCard({ record, index }) {
-  const [bg, accent] = avatarColors(record.student_name);
+  const [, accent] = avatarColors(record.student_name);
+
+  // Only animate on the very first render of this card instance.
+  const animatedRef = useRef(false);
+  const animationStyle = animatedRef.current
+    ? {}
+    : {
+        animation: `cardIn 0.4s cubic-bezier(.34,1.4,.64,1) both`,
+        animationDelay: `${index * 40}ms`,
+      };
+  // Mark as animated after first paint.
+  useEffect(() => { animatedRef.current = true; }, []);
+
   return (
     <div style={{
       background: "rgba(255,255,255,0.04)",
@@ -157,10 +245,8 @@ function StudentCard({ record, index }) {
       borderRadius: 16,
       padding: "14px 16px",
       display: "flex", alignItems: "center", gap: 12,
-      animation: `cardIn 0.4s cubic-bezier(.34,1.4,.64,1) both`,
-      animationDelay: `${index * 40}ms`,
       backdropFilter: "blur(8px)",
-      transition: "border-color 0.2s",
+      ...animationStyle,
     }}>
       <Avatar name={record.student_name} size={44} />
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -168,7 +254,6 @@ function StudentCard({ record, index }) {
           margin: 0, fontSize: 13, fontWeight: 700,
           color: "#f1f5f9", whiteSpace: "nowrap",
           overflow: "hidden", textOverflow: "ellipsis",
-          fontFamily: "'DM Sans', sans-serif",
         }}>
           {record.student_name}
         </p>
@@ -208,15 +293,13 @@ function StudentCard({ record, index }) {
 function TapCard({ result, onDone }) {
   const isIn = result.action === "checked_in";
   const [, accent] = avatarColors(result.data?.student_name || "");
-  const [phase, setPhase] = useState("enter"); // "enter" | "exit"
+  const [phase, setPhase] = useState("enter");
 
-  // After progress bar runs out (2.7s), switch to exit phase
   useEffect(() => {
     const t = setTimeout(() => setPhase("exit"), 2700);
     return () => clearTimeout(t);
   }, []);
 
-  // When exit animation finishes, remove the card from the tree
   const handleAnimationEnd = () => {
     if (phase === "exit") onDone();
   };
@@ -248,33 +331,26 @@ function TapCard({ result, onDone }) {
         backdropFilter: "blur(20px)",
         display: "flex", gap: 18, alignItems: "center",
       }}>
-        {/* Action icon */}
         <div style={{
           width: 56, height: 56, borderRadius: 16, flexShrink: 0,
           background: isIn ? "rgba(52,211,153,0.15)" : "rgba(245,158,11,0.15)",
           border: `1.5px solid ${isIn ? "#34d39944" : "#f59e0b44"}`,
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
-          {isIn
-            ? <LogIn size={24} color="#34d399" />
-            : <LogOut size={24} color="#f59e0b" />
-          }
+          {isIn ? <LogIn size={24} color="#34d399" /> : <LogOut size={24} color="#f59e0b" />}
         </div>
 
-        {/* Student info */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{
             margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: "1.5px",
             textTransform: "uppercase",
             color: isIn ? "#34d399" : "#f59e0b",
-            fontFamily: "'DM Sans', sans-serif",
           }}>
             {isIn ? "✓ Checked In" : "← Checked Out"}
           </p>
           <p style={{
             margin: "4px 0 0", fontSize: 20, fontWeight: 800,
             color: "#f1f5f9", lineHeight: 1.1,
-            fontFamily: "'DM Sans', sans-serif",
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
           }}>
             {result.data?.student_name}
@@ -299,16 +375,9 @@ function TapCard({ result, onDone }) {
                 background: "rgba(148,163,184,0.12)", color: "#94a3b8",
               }}>{result.data.student_yr_level}</span>
             )}
-            {result.data?.school_year && (
-              <span style={{
-                fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 20,
-                background: "rgba(99,102,241,0.15)", color: "#818cf8",
-              }}>SY {result.data.school_year}</span>
-            )}
           </div>
         </div>
 
-        {/* Duration (only for check-out) */}
         {!isIn && result.data?.duration != null && (
           <div style={{
             textAlign: "center", flexShrink: 0,
@@ -316,30 +385,20 @@ function TapCard({ result, onDone }) {
             border: "1px solid rgba(245,158,11,0.2)",
             borderRadius: 12, padding: "8px 14px",
           }}>
-            <p style={{
-              margin: 0, fontSize: 20, fontWeight: 800,
-              color: "#f59e0b", fontFamily: "monospace",
-            }}>
+            <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#f59e0b", fontFamily: "monospace" }}>
               {result.data.duration >= 60
                 ? `${Math.floor(result.data.duration / 60)}h${result.data.duration % 60}m`
                 : `${result.data.duration}m`}
             </p>
-            <p style={{ margin: "2px 0 0", fontSize: 9, color: "#78716c", letterSpacing: "0.5px" }}>
-              DURATION
-            </p>
+            <p style={{ margin: "2px 0 0", fontSize: 9, color: "#78716c", letterSpacing: "0.5px" }}>DURATION</p>
           </div>
         )}
 
-        {/* Avatar */}
         <Avatar name={result.data?.student_name || ""} size={52} />
       </div>
 
       {/* Progress bar */}
-      <div style={{
-        height: 3, borderRadius: 2, marginTop: 6,
-        background: "rgba(255,255,255,0.06)",
-        overflow: "hidden",
-      }}>
+      <div style={{ height: 3, borderRadius: 2, marginTop: 6, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
         <div style={{
           height: "100%",
           background: isIn ? "#34d399" : "#f59e0b",
@@ -351,396 +410,83 @@ function TapCard({ result, onDone }) {
   );
 }
 
-// ─── Register Student Modal ───────────────────────────────
-// New UX:
-// 1. Shows Student ID input pre-filled with scanned RFID
-// 2. Searches students table as user types (debounced)
-// 3. Shows dropdown of matching students
-// 4. Select one → auto-fills all fields (read-only)
-// 5. Confirm → check in
-function RegisterStudentModal({ scannedId, onClose, onRegistered }) {
-  const [searchId,    setSearchId]    = useState(scannedId);
-  const [searching,   setSearching]   = useState(false);
-  const [selected,    setSelected]    = useState(null);   // chosen student object
-  const [notInDb,     setNotInDb]     = useState(false);  // searched but not found
-  const [submitting,  setSubmitting]  = useState(false);
-  const [error,       setError]       = useState("");
-  const searchRef = useRef(null);
-  const debounceRef = useRef(null);
-
-  // Lock body scroll
+// Unregistered RFID banner
+function UnregisteredBanner({ rfidCode, onDone }) {
+  const [phase, setPhase] = useState("enter");
   useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
-  }, []);
-
-  // Auto-search on mount with scanned ID
-  useEffect(() => {
-    if (scannedId) doSearch(scannedId);
-    setTimeout(() => searchRef.current?.focus(), 80);
-  }, []);
-
-  // Debounced search as user edits the ID field
-  const handleSearchChange = (e) => {
-    const val = e.target.value;
-    setSearchId(val);
-    setSelected(null);
-    setNotInDb(false);
-    setError("");
-    clearTimeout(debounceRef.current);
-    if (!val.trim()) return;
-    debounceRef.current = setTimeout(() => doSearch(val.trim()), 400);
-  };
-
-  const doSearch = async (id) => {
-    setSearching(true);
-    setNotInDb(false);
-    try {
-      const res = await getStudentByStudentIdNumber(id);
-      if (res.success && res.data) {
-        // Auto-select immediately — only one result per exact ID
-        setSelected(res.data);
-        setNotInDb(false);
-      } else {
-        setSelected(null);
-        setNotInDb(true);
-      }
-    } catch {
-      setSelected(null);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  // Derive display name from student record
-  const getFullName = (s) => {
-    if (!s) return "";
-    const fn = (s.first_name || "").trim();
-    const ln = (s.last_name  || "").trim();
-    if (fn && ln) return `${fn} ${ln}`;
-    if (fn)       return fn;
-    // fallback: split student_name
-    return s.student_name || s.display_name || "";
-  };
-
-  const handleConfirm = async () => {
-    if (!selected) return;
-    setError("");
-    setSubmitting(true);
-    try {
-      // No createStudent needed — student already exists in DB
-      // Just call tapAttendance to check them in
-      onRegistered(selected.student_id_number);
-    } catch {
-      setError("Something went wrong. Please try again.");
-      setSubmitting(false);
-    }
-  };
-
-  // Shared styles
-  const fieldStyle = {
-    width: "100%", boxSizing: "border-box",
-    padding: "10px 14px", borderRadius: 10, fontSize: 13,
-    fontFamily: "'DM Sans', sans-serif", fontWeight: 500,
-    background: "rgba(255,255,255,0.04)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    color: "#94a3b8", outline: "none",
-  };
-  const labelStyle = {
-    display: "block", fontSize: 10, fontWeight: 700,
-    letterSpacing: "1px", textTransform: "uppercase",
-    color: "#475569", marginBottom: 5,
-  };
-
-  const fullName = getFullName(selected);
-
-  return (
-    <div
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position: "fixed", inset: 0, zIndex: 200,
-        background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 24, animation: "overlayIn 0.2s ease",
-      }}
-    >
-      <div style={{
-        width: "100%", maxWidth: 480,
-        background: "linear-gradient(160deg, #0d1f35 0%, #0a1628 100%)",
-        border: "1.5px solid rgba(99,102,241,0.3)",
-        borderRadius: 24,
-        boxShadow: "0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.1)",
-        overflow: "hidden",
-        animation: "modalIn 0.3s cubic-bezier(.34,1.4,.64,1)",
-      }}>
-
-        {/* ── Header ───────────────────────────────────── */}
-        <div style={{
-          padding: "20px 24px 18px",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 12,
-              background: "rgba(99,102,241,0.15)",
-              border: "1.5px solid rgba(99,102,241,0.3)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <UserPlus size={18} color="#818cf8" />
-            </div>
-            <div>
-              <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "#f1f5f9" }}>
-                Student Not Registered
-              </p>
-              <p style={{ margin: "2px 0 0", fontSize: 11, color: "#64748b" }}>
-                Search the student by ID to link and check in
-              </p>
-            </div>
-          </div>
-          <button onClick={onClose} style={{
-            width: 32, height: 32, borderRadius: 8, border: "none",
-            background: "rgba(255,255,255,0.06)", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <X size={14} color="#64748b" />
-          </button>
-        </div>
-
-        {/* ── Body ─────────────────────────────────────── */}
-        <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
-
-          {/* ── Search input ─────────────────────────── */}
-          <div>
-            <label style={{ ...labelStyle, color: "#818cf8" }}>Search Student by ID</label>
-            <div style={{ position: "relative" }}>
-              <input
-                ref={searchRef}
-                type="text"
-                value={searchId}
-                onChange={handleSearchChange}
-                placeholder="Enter Student ID…"
-                style={{
-                  width: "100%", boxSizing: "border-box",
-                  padding: "12px 40px 12px 14px",
-                  borderRadius: 10, fontSize: 15,
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontWeight: 700, letterSpacing: "1px",
-                  background: "rgba(99,102,241,0.08)",
-                  border: "1.5px solid rgba(99,102,241,0.4)",
-                  color: "#818cf8", outline: "none",
-                  transition: "border-color 0.2s, box-shadow 0.2s",
-                  boxShadow: "0 0 0 3px rgba(99,102,241,0.1)",
-                }}
-              />
-              {/* Spinner or search icon */}
-              <div style={{
-                position: "absolute", right: 12, top: "50%",
-                transform: "translateY(-50%)",
-              }}>
-                {searching ? (
-                  <div style={{
-                    width: 16, height: 16, borderRadius: "50%",
-                    border: "2px solid rgba(99,102,241,0.3)",
-                    borderTopColor: "#818cf8",
-                    animation: "spin 0.7s linear infinite",
-                  }} />
-                ) : (
-                  <Hash size={15} color="#475569" />
-                )}
-              </div>
-            </div>
-
-            {/* Not found message */}
-            {notInDb && !searching && (
-              <p style={{
-                margin: "8px 0 0", fontSize: 12, color: "#ef4444",
-                display: "flex", alignItems: "center", gap: 6,
-              }}>
-                <AlertTriangle size={12} />
-                No student found with ID <strong style={{ fontFamily: "monospace" }}>{searchId}</strong>
-              </p>
-            )}
-          </div>
-
-          {/* ── Student result card (auto-fills on match) ── */}
-          {selected && (
-            <div style={{
-              borderRadius: 14,
-              background: "rgba(52,211,153,0.06)",
-              border: "1.5px solid rgba(52,211,153,0.25)",
-              overflow: "hidden",
-              animation: "cardIn 0.3s cubic-bezier(.34,1.4,.64,1)",
-            }}>
-              {/* Student identity header */}
-              <div style={{
-                padding: "14px 16px",
-                borderBottom: "1px solid rgba(52,211,153,0.12)",
-                display: "flex", alignItems: "center", gap: 12,
-              }}>
-                <div style={{
-                  width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
-                  background: "linear-gradient(135deg, rgba(52,211,153,0.3), rgba(52,211,153,0.1))",
-                  border: "1.5px solid rgba(52,211,153,0.4)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 16, fontWeight: 800, color: "#34d399",
-                }}>
-                  {fullName.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase()}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{
-                    margin: 0, fontSize: 16, fontWeight: 800, color: "#f1f5f9",
-                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                  }}>
-                    {fullName}
-                  </p>
-                  <p style={{
-                    margin: "2px 0 0", fontSize: 11,
-                    color: "#34d399", fontFamily: "monospace",
-                  }}>
-                    {selected.student_id_number}
-                  </p>
-                </div>
-                <CheckCircle2 size={20} color="#34d399" style={{ flexShrink: 0 }} />
-              </div>
-
-              {/* Auto-filled fields — read only */}
-              <div style={{
-                display: "grid", gridTemplateColumns: "1fr 1fr",
-                gap: 1, background: "rgba(255,255,255,0.04)",
-              }}>
-                {[
-                  { label: "Course",      value: selected.student_course    || "—" },
-                  { label: "Year Level",  value: selected.student_yr_level  || "—" },
-                  { label: "School Year", value: selected.student_school_year || "—" },
-                  { label: "Email",       value: selected.student_email     || "—" },
-                ].map(({ label, value }) => (
-                  <div key={label} style={{
-                    padding: "10px 14px",
-                    background: "rgba(10,22,40,0.6)",
-                  }}>
-                    <p style={{ margin: 0, fontSize: 9, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px" }}>
-                      {label}
-                    </p>
-                    <p style={{
-                      margin: "3px 0 0", fontSize: 12, fontWeight: 600,
-                      color: "#94a3b8",
-                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                    }}>
-                      {value}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Empty state — waiting for search */}
-          {!selected && !notInDb && !searching && !searchId && (
-            <div style={{
-              padding: "24px 0", textAlign: "center",
-              color: "#334155", fontSize: 12,
-            }}>
-              Type a Student ID above to search
-            </div>
-          )}
-
-          {/* Error */}
-          {error && (
-            <div style={{
-              padding: "9px 12px", borderRadius: 8,
-              background: "rgba(239,68,68,0.1)",
-              border: "1px solid rgba(239,68,68,0.25)",
-              fontSize: 12, color: "#ef4444",
-              display: "flex", alignItems: "center", gap: 8,
-            }}>
-              <AlertTriangle size={13} /> {error}
-            </div>
-          )}
-        </div>
-
-        {/* ── Footer ───────────────────────────────────── */}
-        <div style={{
-          padding: "16px 24px",
-          borderTop: "1px solid rgba(255,255,255,0.06)",
-          display: "flex", gap: 10, justifyContent: "flex-end",
-        }}>
-          <button
-            onClick={onClose}
-            style={{
-              padding: "10px 20px", borderRadius: 10, fontSize: 13,
-              fontWeight: 600, cursor: "pointer", border: "none",
-              background: "rgba(255,255,255,0.06)", color: "#94a3b8",
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleConfirm}
-            disabled={!selected || submitting}
-            style={{
-              padding: "10px 22px", borderRadius: 10, fontSize: 13,
-              fontWeight: 800,
-              cursor: !selected || submitting ? "not-allowed" : "pointer",
-              border: "none", display: "flex", alignItems: "center", gap: 8,
-              background: !selected || submitting
-                ? "rgba(99,102,241,0.25)"
-                : "linear-gradient(135deg, #6366f1, #4f46e5)",
-              color: !selected ? "#475569" : "#fff",
-              boxShadow: selected && !submitting ? "0 4px 16px rgba(99,102,241,0.4)" : "none",
-              transition: "all 0.2s",
-            }}
-          >
-            {submitting ? (
-              <>
-                <div style={{
-                  width: 14, height: 14, borderRadius: "50%",
-                  border: "2px solid rgba(255,255,255,0.3)",
-                  borderTopColor: "#fff",
-                  animation: "spin 0.7s linear infinite",
-                }} />
-                Checking In…
-              </>
-            ) : (
-              <>
-                <CheckCircle2 size={14} /> Check In Student
-                <ChevronRight size={14} />
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
-function NotFoundBanner({ studentId, onDone }) {
-  const [phase, setPhase] = useState("enter"); // "enter" | "exit"
-
-  // After progress bar runs out (2.7s), switch to exit phase
-  useEffect(() => {
-    const t = setTimeout(() => setPhase("exit"), 2700);
+    const t = setTimeout(() => setPhase("exit"), 3500);
     return () => clearTimeout(t);
   }, []);
-
-  // When exit animation finishes, remove from tree
-  const handleAnimationEnd = () => {
-    if (phase === "exit") onDone();
-  };
-
-  const animation =
-    phase === "enter"
-      ? "bannerIn 0.35s cubic-bezier(.34,1.4,.64,1) both"
-      : "bannerOut 0.35s ease forwards";
+  const handleAnimationEnd = () => { if (phase === "exit") onDone(); };
+  const animation = phase === "enter"
+    ? "bannerIn 0.35s cubic-bezier(.34,1.4,.64,1) both"
+    : "bannerOut 0.35s ease forwards";
 
   return (
     <div
       onAnimationEnd={handleAnimationEnd}
       style={{
         position: "fixed", top: 24, left: "50%", transform: "translateX(-50%)",
-        zIndex: 100,
-        animation,
+        zIndex: 100, animation,
+        width: "min(460px, calc(100vw - 48px))",
+      }}
+    >
+      <div style={{
+        background: "linear-gradient(135deg, #2a1a08, #1a1000)",
+        border: "1.5px solid #f59e0b55",
+        borderRadius: 16, padding: "14px 20px",
+        display: "flex", alignItems: "center", gap: 14,
+        boxShadow: "0 16px 48px rgba(245,158,11,0.2)",
+        backdropFilter: "blur(16px)",
+      }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+          background: "rgba(245,158,11,0.15)",
+          border: "1px solid rgba(245,158,11,0.3)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <AlertTriangle size={20} color="#f59e0b" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#f59e0b" }}>
+            RFID Card Not Registered
+          </p>
+          <p style={{ margin: "3px 0 0", fontSize: 11, color: "#94a3b8", fontFamily: "monospace" }}>
+            {rfidCode}
+          </p>
+          <p style={{ margin: "4px 0 0", fontSize: 11, color: "#64748b" }}>
+            Please register this card via the Admin Attendance page.
+          </p>
+        </div>
+      </div>
+      <div style={{ height: 3, borderRadius: 2, marginTop: 6, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+        <div style={{
+          height: "100%", background: "#f59e0b", borderRadius: 2,
+          animation: "progressBar 3.5s linear forwards",
+        }} />
+      </div>
+    </div>
+  );
+}
+
+// Not-found banner (student ID not in DB)
+function NotFoundBanner({ studentId, onDone }) {
+  const [phase, setPhase] = useState("enter");
+  useEffect(() => {
+    const t = setTimeout(() => setPhase("exit"), 2700);
+    return () => clearTimeout(t);
+  }, []);
+  const handleAnimationEnd = () => { if (phase === "exit") onDone(); };
+  const animation = phase === "enter"
+    ? "bannerIn 0.35s cubic-bezier(.34,1.4,.64,1) both"
+    : "bannerOut 0.35s ease forwards";
+
+  return (
+    <div
+      onAnimationEnd={handleAnimationEnd}
+      style={{
+        position: "fixed", top: 24, left: "50%", transform: "translateX(-50%)",
+        zIndex: 100, animation,
         width: "min(420px, calc(100vw - 48px))",
       }}
     >
@@ -761,25 +507,17 @@ function NotFoundBanner({ studentId, onDone }) {
           <AlertTriangle size={20} color="#ef4444" />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#ef4444", fontFamily: "'DM Sans', sans-serif" }}>
-            Student ID Not Found
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#ef4444" }}>
+            Student Not Found
           </p>
           <p style={{ margin: "2px 0 0", fontSize: 11, color: "#94a3b8", fontFamily: "monospace" }}>
             {studentId}
           </p>
         </div>
       </div>
-
-      {/* Progress bar — identical to TapCard */}
-      <div style={{
-        height: 3, borderRadius: 2, marginTop: 6,
-        background: "rgba(255,255,255,0.06)",
-        overflow: "hidden",
-      }}>
+      <div style={{ height: 3, borderRadius: 2, marginTop: 6, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
         <div style={{
-          height: "100%",
-          background: "#ef4444",
-          borderRadius: 2,
+          height: "100%", background: "#ef4444", borderRadius: 2,
           animation: "progressBar 2.7s linear forwards",
         }} />
       </div>
@@ -789,16 +527,18 @@ function NotFoundBanner({ studentId, onDone }) {
 
 // ─── Main Kiosk Page ──────────────────────────────────────
 export default function KioskAttendance() {
-  const now = useLiveClock();
+  const now          = useLiveClock();
   const [active, setActive]           = useState([]);
-  const [idInput, setIdInput]         = useState("");
-  const [tapping, setTapping]         = useState(false);
   const [tapResult, setTapResult]     = useState(null);
   const [notFound, setNotFound]       = useState(null);
-  const [registerModal, setRegisterModal] = useState(null); // scanned ID for registration
+  const [unregistered, setUnregistered] = useState(null);
   const [online, setOnline]           = useState(navigator.onLine);
-  const inputRef     = useRef(null);
-  const containerRef = useRef(null);
+
+  const [rfidActive, setRfidActive]   = useState(false);
+  const [processing, setProcessing]   = useState(false);
+  const rfidBufferRef = useRef("");
+  const rfidInputRef  = useRef(null);
+  const containerRef  = useRef(null);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(containerRef);
 
   // ── Poll active students every 10s ───────────────────
@@ -819,58 +559,75 @@ export default function KioskAttendance() {
     const off = () => setOnline(false);
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
-    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
   }, []);
 
-  // ── Tap handler ───────────────────────────────────────
-  const handleTap = useCallback(async () => {
-    const id = idInput.trim();
-    if (!id || tapping) return;
-    setTapping(true);
+  // ── Auto-focus hidden input when RFID is active ───────
+  useEffect(() => {
+    if (rfidActive) {
+      rfidInputRef.current?.focus();
+    }
+  }, [rfidActive]);
+
+  useEffect(() => {
+    if (!rfidActive) return;
+    const handler = () => {
+      setTimeout(() => rfidInputRef.current?.focus(), 100);
+    };
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
+  }, [rfidActive]);
+
+  // ── Core RFID tap handler ─────────────────────────────
+  const handleRfidTap = useCallback(async (rfidCode) => {
+    if (!rfidCode?.trim() || processing) return;
+    setProcessing(true);
     try {
-      const res = await tapAttendance(id);
-      if (res.success) {
+      const res = await tapRfid(rfidCode.trim());
+
+      if (res.unregistered) {
+        setUnregistered(rfidCode.trim());
+      } else if (res.success) {
         setTapResult(res);
         fetchActive();
       } else if (res.error?.toLowerCase().includes("not found")) {
-        // Open registration modal instead of error banner
-        setRegisterModal(id);
+        setNotFound(rfidCode.trim());
       }
     } catch {
-      setNotFound(idInput.trim());
+      // silent — network banner would be distracting on a kiosk
     } finally {
-      setIdInput("");
-      setTapping(false);
-      setTimeout(() => inputRef.current?.focus(), 50);
+      setProcessing(false);
+      setTimeout(() => rfidInputRef.current?.focus(), 50);
     }
-  }, [idInput, tapping, fetchActive]);
+  }, [processing, fetchActive]);
 
-  // ── After registration → auto check-in ───────────────
-  const handleRegistered = useCallback(async (studentId) => {
-    setRegisterModal(null);
-    // Small delay so DB write settles before tap
-    await new Promise(r => setTimeout(r, 400));
-    try {
-      const res = await tapAttendance(studentId);
-      if (res.success) {
-        setTapResult(res);
-        fetchActive();
-      } else {
-        setNotFound(studentId);
+  const handleRfidKeyDown = useCallback((e) => {
+    if (!rfidActive) return;
+
+    if (e.key === "Enter") {
+      const code = rfidBufferRef.current.trim();
+      rfidBufferRef.current = "";
+      if (code) handleRfidTap(code);
+    } else if (e.key.length === 1) {
+      rfidBufferRef.current += e.key;
+    }
+    e.preventDefault();
+  }, [rfidActive, handleRfidTap]);
+
+  const toggleRfid = useCallback(() => {
+    setRfidActive((prev) => {
+      const next = !prev;
+      if (next) {
+        rfidBufferRef.current = "";
+        setTimeout(() => rfidInputRef.current?.focus(), 50);
       }
-    } catch {
-      setNotFound(studentId);
-    } finally {
-      setTimeout(() => inputRef.current?.focus(), 80);
-    }
-  }, [fetchActive]);
+      return next;
+    });
+  }, []);
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") handleTap();
-    if (e.key === "F11")  { e.preventDefault(); toggleFullscreen(); }
-  };
-
-  // Format clock
   const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
@@ -884,11 +641,28 @@ export default function KioskAttendance() {
       position: "relative", overflow: "hidden",
     }}>
 
+      {/* ── Hidden RFID capture input ─── */}
+      <input
+        ref={rfidInputRef}
+        onKeyDown={handleRfidKeyDown}
+        onChange={() => {}}
+        value=""
+        readOnly
+        tabIndex={rfidActive ? 0 : -1}
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          top: -9999,
+          left: -9999,
+          opacity: 0,
+          width: 1,
+          height: 1,
+          pointerEvents: "none",
+        }}
+      />
+
       {/* ── Ambient background orbs ─────────────────────── */}
-      <div style={{
-        position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
-        overflow: "hidden",
-      }}>
+      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden" }}>
         <div style={{
           position: "absolute", width: 600, height: 600,
           borderRadius: "50%", top: -200, left: -100,
@@ -901,7 +675,6 @@ export default function KioskAttendance() {
           background: "radial-gradient(circle, rgba(234,130,50,0.06) 0%, transparent 70%)",
           animation: "orbFloat 16s ease-in-out infinite reverse",
         }} />
-        {/* Grid lines */}
         <div style={{
           position: "absolute", inset: 0,
           backgroundImage: `
@@ -921,7 +694,6 @@ export default function KioskAttendance() {
         backdropFilter: "blur(12px)",
         background: "rgba(6,13,24,0.6)",
       }}>
-        {/* Logo + title */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <img
             src="/icon.png"
@@ -942,7 +714,6 @@ export default function KioskAttendance() {
           </div>
         </div>
 
-        {/* Live clock */}
         <div style={{ textAlign: "center" }}>
           <p style={{
             margin: 0, fontSize: 32, fontWeight: 800, letterSpacing: "-1px",
@@ -956,9 +727,7 @@ export default function KioskAttendance() {
           </p>
         </div>
 
-        {/* Status + count */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {/* Online indicator */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{
             display: "flex", alignItems: "center", gap: 6,
             padding: "6px 12px", borderRadius: 20,
@@ -970,7 +739,7 @@ export default function KioskAttendance() {
               : <><WifiOff size={12} color="#ef4444" /><span style={{ fontSize: 11, color: "#ef4444", fontWeight: 600 }}>Offline</span></>
             }
           </div>
-          {/* Active count */}
+
           <div style={{
             display: "flex", alignItems: "center", gap: 6,
             padding: "6px 14px", borderRadius: 20,
@@ -981,31 +750,19 @@ export default function KioskAttendance() {
             <span style={{ fontSize: 13, fontWeight: 700, color: "#818cf8" }}>{active.length}</span>
             <span style={{ fontSize: 10, color: "#64748b" }}>inside</span>
           </div>
-          {/* Fullscreen toggle */}
+
           <button
             onClick={toggleFullscreen}
             title={isFullscreen ? "Exit Fullscreen (F11)" : "Enter Fullscreen (F11)"}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 36, height: 36, borderRadius: 10, cursor: "pointer",
-              background: isFullscreen ? "rgba(255, 230, 0, 0.15)" : "rgba(255,255,255,0.06)",
-              border: `1px solid ${isFullscreen ? "rgba(255, 217, 0, 0.35)" : "rgba(255,255,255,0.1)"}`,
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.1)",
               transition: "all 0.2s",
-              flexShrink: 0,
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = isFullscreen ? "rgba(238, 226, 58, 0.25)" : "rgba(255,255,255,0.12)";
-              e.currentTarget.style.borderColor = isFullscreen ? "rgba(238,162,58,0.5)" : "rgba(255,255,255,0.2)";
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = isFullscreen ? "rgba(238,162,58,0.15)" : "rgba(255,255,255,0.06)";
-              e.currentTarget.style.borderColor = isFullscreen ? "rgba(238,162,58,0.35)" : "rgba(255,255,255,0.1)";
             }}
           >
-            {isFullscreen
-              ? <Minimize2 size={15} color="#ffd900" />
-              : <Maximize2 size={15} color="#94a3b8" />
-            }
+            {isFullscreen ? <Minimize2 size={15} color="#ffd900" /> : <Maximize2 size={15} color="#94a3b8" />}
           </button>
         </div>
       </header>
@@ -1014,137 +771,155 @@ export default function KioskAttendance() {
       <main style={{
         position: "relative", zIndex: 10,
         flex: 1, display: "flex", gap: 0,
-        padding: "0",
         overflow: "hidden",
       }}>
 
-        {/* ── Left: Tap input panel ──────────────────────── */}
+        {/* ── Left panel: RFID activation ────────────────── */}
         <div style={{
           width: 340, flexShrink: 0,
           borderRight: "1px solid rgba(255,255,255,0.05)",
           display: "flex", flexDirection: "column",
-          padding: "32px 28px",
+          padding: "36px 28px",
           gap: 28,
           background: "rgba(255,255,255,0.015)",
           backdropFilter: "blur(8px)",
         }}>
 
-          {/* Instruction */}
           <div style={{ textAlign: "center" }}>
             <div style={{
-              width: 64, height: 64, borderRadius: 20, margin: "0 auto 16px",
-              background: "linear-gradient(135deg, rgba(255, 230, 0, 0.2), rgba(238,162,58,0.05))",
-              border: "1.5px solid rgba(250, 227, 23, 0.3)",
+              width: 72, height: 72, borderRadius: 24, margin: "0 auto 18px",
+              background: rfidActive
+                ? "linear-gradient(135deg, rgba(52,211,153,0.2), rgba(52,211,153,0.05))"
+                : "linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
+              border: `1.5px solid ${rfidActive ? "rgba(52,211,153,0.4)" : "rgba(255,255,255,0.1)"}`,
               display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "all 0.4s",
+              boxShadow: rfidActive ? "0 0 32px rgba(52,211,153,0.15)" : "none",
             }}>
-              <Hash size={28} color="#ffd900" />
+              {rfidActive
+                ? <ShieldCheck size={32} color="#34d399" />
+                : <PowerOff size={32} color="#475569" />
+              }
             </div>
+
             <h2 style={{
-              margin: 0, fontSize: 18, fontWeight: 800, color: "#f1f5f9",
+              margin: 0, fontSize: 18, fontWeight: 800,
+              color: rfidActive ? "#34d399" : "#94a3b8",
               letterSpacing: "-0.5px",
+              transition: "color 0.3s",
             }}>
-              Scan or Enter ID
+              {rfidActive ? "RFID Active" : "RFID Inactive"}
             </h2>
-            <p style={{ margin: "8px 0 0", fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
-              Place your ID card on the scanner or type your Student ID below
+
+            <p style={{ margin: "8px 0 0", fontSize: 12, color: "#64748b", lineHeight: 1.6 }}>
+              {rfidActive
+                ? "Scanner is listening. Tap your RFID card on the reader to check in or out."
+                : "Tap the button below to activate RFID card detection."
+              }
             </p>
           </div>
 
-          {/* Input */}
-          <div style={{ position: "relative" }}>
-            <input
-              ref={inputRef}
-              type="text"
-              value={idInput}
-              onChange={(e) => setIdInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Student ID…"
-              autoFocus
-              disabled={tapping}
-              style={{
-                width: "100%", boxSizing: "border-box",
-                padding: "14px 16px",
-                fontSize: 18, fontWeight: 700,
-                fontFamily: "'JetBrains Mono', monospace",
-                letterSpacing: "1px",
-                background: "rgba(255,255,255,0.06)",
-                border: `1.5px solid ${idInput ? "#ffd90073" : "rgba(255,255,255,0.1)"}`,
-                borderRadius: 14, color: "#f1f5f9",
-                outline: "none", textAlign: "center",
-                transition: "border-color 0.2s, box-shadow 0.2s",
-                boxShadow: idInput ? "0 0 0 3px rgba(238,162,58,0.12)" : "none",
-              }}
-            />
-            {tapping && (
-              <div style={{
-                position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)",
-              }}>
-                <div style={{
-                  width: 18, height: 18, borderRadius: "50%",
-                  border: "2px solid rgba(238,162,58,0.3)",
-                  borderTopColor: "#ffd900",
-                  animation: "spin 0.7s linear infinite",
-                }} />
-              </div>
-            )}
-          </div>
-
-          {/* Tap button */}
           <button
-            onClick={handleTap}
-            disabled={!idInput.trim() || tapping}
+            onClick={toggleRfid}
             style={{
-              width: "100%", padding: "14px",
+              width: "100%",
+              padding: "16px",
               fontSize: 14, fontWeight: 800, letterSpacing: "0.5px",
               textTransform: "uppercase",
-              background: idInput.trim() && !tapping
-                ? "linear-gradient(135deg, #ffd900, #ffa600)"
-                : "rgba(255,255,255,0.06)",
-              color: idInput.trim() && !tapping ? "#fff" : "#475569",
-              border: "none", borderRadius: 14, cursor: idInput.trim() && !tapping ? "pointer" : "not-allowed",
-              transition: "all 0.2s",
-              boxShadow: idInput.trim() && !tapping ? "0 4px 20px rgba(238,162,58,0.35)" : "none",
+              background: rfidActive
+                ? "linear-gradient(135deg, #ef4444, #dc2626)"
+                : "linear-gradient(135deg, #34d399, #10b981)",
+              color: "#fff",
+              border: "none", borderRadius: 14, cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+              transition: "all 0.25s",
+              boxShadow: rfidActive
+                ? "0 4px 20px rgba(239,68,68,0.35)"
+                : "0 4px 20px rgba(52,211,153,0.35)",
             }}
           >
-            {tapping ? "Processing…" : "Tap In / Out"}
+            {rfidActive
+              ? <><PowerOff size={18} /> Deactivate RFID</>
+              : <><Power size={18} /> Activate RFID Detection</>
+            }
           </button>
 
-          {/* Divider */}
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }} />
-
-          {/* Instructions */}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {[
-              { icon: LogIn,  color: "#34d399", label: "1st tap", desc: "Check In" },
-              { icon: LogOut, color: "#ffd900", label: "2nd tap", desc: "Check Out" },
-            ].map(({ icon: Icon, color, label, desc }) => (
-              <div key={label} style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "10px 12px", borderRadius: 10,
-                background: `${color}0d`, border: `1px solid ${color}22`,
-              }}>
-                <Icon size={16} color={color} />
-                <div>
-                  <span style={{ fontSize: 11, fontWeight: 700, color, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</span>
-                  <span style={{ fontSize: 11, color: "#64748b", marginLeft: 6 }}>→ {desc}</span>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "12px 14px", borderRadius: 12,
+              background: rfidActive ? "rgba(52,211,153,0.06)" : "rgba(255,255,255,0.03)",
+              border: `1px solid ${rfidActive ? "rgba(52,211,153,0.2)" : "rgba(255,255,255,0.07)"}`,
+              transition: "all 0.3s",
+            }}>
+              <div style={{
+                width: 8, height: 8, borderRadius: "50%",
+                background: rfidActive ? "#34d399" : "#334155",
+                boxShadow: rfidActive ? "0 0 0 3px rgba(52,211,153,0.2)" : "none",
+                animation: rfidActive ? "pulse 1.5s ease-in-out infinite" : "none",
+              }} />
+              <span style={{ fontSize: 12, fontWeight: 600, color: rfidActive ? "#34d399" : "#475569" }}>
+                {rfidActive ? "Listening for RFID taps…" : "Not listening"}
+              </span>
+              {processing && (
+                <div style={{
+                  marginLeft: "auto",
+                  width: 14, height: 14, borderRadius: "50%",
+                  border: "2px solid rgba(255,255,255,0.2)",
+                  borderTopColor: "#34d399",
+                  animation: "spin 0.7s linear infinite",
+                }} />
+              )}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {[
+                { color: "#34d399", label: "1st Tap", desc: "→ Check In" },
+                { color: "#f59e0b", label: "2nd Tap", desc: "→ Check Out" },
+              ].map(({ color, label, desc }) => (
+                <div key={label} style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "10px 12px", borderRadius: 10,
+                  background: `${color}0d`, border: `1px solid ${color}22`,
+                }}>
+                  <div style={{
+                    width: 8, height: 8, borderRadius: "50%",
+                    background: color, flexShrink: 0,
+                  }} />
+                  <span style={{ fontSize: 11, fontWeight: 700, color, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    {label}
+                  </span>
+                  <span style={{ fontSize: 11, color: "#64748b" }}>{desc}</span>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            <div style={{
+              padding: "10px 14px", borderRadius: 10,
+              background: "rgba(99,102,241,0.06)",
+              border: "1px solid rgba(99,102,241,0.15)",
+            }}>
+              <p style={{ margin: 0, fontSize: 10, color: "#818cf8", lineHeight: 1.5 }}>
+                <strong>Admin:</strong> Detection stays ON until you click Deactivate.
+                Register new RFID cards from the Attendance page.
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* ── Right: Active students grid ────────────────── */}
+        {/* ── Right: Active students grid ─────────────────── */}
         <div style={{
           flex: 1, overflow: "hidden",
           display: "flex", flexDirection: "column",
           padding: "28px 32px",
           gap: 16,
         }}>
-
-          {/* Section header */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <CheckCircle2 size={16} color="#34d399" />
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+            <span style={{
+              fontSize: 13, fontWeight: 700, color: "#94a3b8",
+              letterSpacing: "0.5px", textTransform: "uppercase",
+            }}>
               Currently In Library
             </span>
             <span style={{
@@ -1155,14 +930,13 @@ export default function KioskAttendance() {
             </span>
           </div>
 
-          {/* Grid */}
           <div style={{
             flex: 1, overflowY: "auto",
             display: "grid",
             gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
             gap: 10,
             alignContent: "start",
-            paddingBottom: 120, // space for tap card
+            paddingBottom: 120,
           }}>
             {active.length === 0 ? (
               <div style={{
@@ -1192,7 +966,7 @@ export default function KioskAttendance() {
         </div>
       </main>
 
-      {/* ── Tap result card (floats above everything) ────── */}
+      {/* ── Tap result card ──────────────────────────────── */}
       {tapResult && (
         <TapCard
           result={tapResult}
@@ -1200,7 +974,15 @@ export default function KioskAttendance() {
         />
       )}
 
-      {/* ── Not found banner ─────────────────────────────── */}
+      {/* ── Unregistered RFID banner ─────────────────────── */}
+      {unregistered && (
+        <UnregisteredBanner
+          rfidCode={unregistered}
+          onDone={() => setUnregistered(null)}
+        />
+      )}
+
+      {/* ── Student Not Found banner ──────────────────────── */}
       {notFound && (
         <NotFoundBanner
           studentId={notFound}
@@ -1208,30 +990,9 @@ export default function KioskAttendance() {
         />
       )}
 
-      {/* ── Register Student Modal ───────────────────────── */}
-      {registerModal && (
-        <RegisterStudentModal
-          scannedId={registerModal}
-          onClose={() => {
-            setRegisterModal(null);
-            setTimeout(() => inputRef.current?.focus(), 80);
-          }}
-          onRegistered={handleRegistered}
-        />
-      )}
-
       {/* ── Global keyframes ─────────────────────────────── */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap');
-
-        @keyframes overlayIn {
-          from { opacity: 0; }
-          to   { opacity: 1; }
-        }
-        @keyframes modalIn {
-          from { opacity: 0; transform: scale(0.94) translateY(12px); }
-          to   { opacity: 1; transform: scale(1) translateY(0); }
-        }
 
         @keyframes orbFloat {
           0%, 100% { transform: translate(0, 0) scale(1); }
@@ -1263,6 +1024,10 @@ export default function KioskAttendance() {
         }
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
         }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }

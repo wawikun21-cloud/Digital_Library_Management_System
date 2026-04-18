@@ -163,6 +163,7 @@ export default function Books() {
     setModalMode(modalMode === "edit" ? "edit" : "add");
   }, [selectedBook, modalMode]);
 
+// sourcery skip: avoid-function-declarations-in-blocks
   function validate() {
     const e = {};
     if (!form.title?.trim()) e.title = "Title is required";
@@ -301,6 +302,23 @@ const handleSubmit = useCallback(async () => {
 
   return (
     <div className="flex flex-col gap-5">
+      
+      {/* ── Page Header ──────────────────────────────── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
+            style={{ color: "var(--text-primary)" }}>
+            <PackageX size={22} style={{ color: "var(--accent-amber)" }} />
+            Books
+          </h1>
+          <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
+            Manage library catalog, copies, and availability
+          </p>
+        </div>
+
+
+      </div>
+
       <BookToolbar
         query={query}           setQuery={setQuery}
         genreFilter={collectionFilter} setGenreFilter={setCollectionFilter}

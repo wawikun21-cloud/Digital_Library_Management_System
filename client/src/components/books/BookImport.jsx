@@ -436,10 +436,13 @@ const BookImport = forwardRef(function BookImport({ onImportComplete, onStepChan
     const allFailed     = [];
     let   importedCount = 0;
     let   existingCount = 0;
+    let   errorCount    = 0;
 
     for (let offset = 0; offset < total; offset += CHUNK_SIZE) {
       const chunk    = parsed.slice(offset, offset + CHUNK_SIZE);
       const chunkEnd = Math.min(offset + CHUNK_SIZE, total);
+      const isFirst  = offset === 0;
+      const isLast   = offset + CHUNK_SIZE >= total;
 
       setProgress({ current: offset, total, title: chunk[0]?.title || "" });
 
@@ -447,7 +450,16 @@ const BookImport = forwardRef(function BookImport({ onImportComplete, onStepChan
         const res = await fetch(`${API_BASE}/books/bulk-import`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ books: chunk }),
+          body:    JSON.stringify({
+            books:          chunk,
+            is_first_chunk: isFirst,
+            is_last_chunk:  isLast,
+            // Running totals BEFORE this chunk — the server adds its own
+            // chunk counts on top so the final audit log reflects everything.
+            acc_imported:   importedCount,
+            acc_updated:    existingCount,
+            acc_errors:     errorCount,
+          }),
         });
         const data = await res.json();
 
@@ -456,14 +468,17 @@ const BookImport = forwardRef(function BookImport({ onImportComplete, onStepChan
           allImported.push(...imported);
           importedCount += data.imported  ?? imported.length;
           existingCount += data.existing  ?? data.updated ?? 0;
+          errorCount    += data.errors    ?? 0;
           if (data.errorsDetail?.length) allFailed.push(...data.errorsDetail);
         } else {
           chunk.forEach((b) =>
             allFailed.push({ title: b.title, error: data.error || "Unknown server error" }),
           );
+          errorCount += chunk.length;
         }
       } catch (err) {
         chunk.forEach((b) => allFailed.push({ title: b.title, error: err.message }));
+        errorCount += chunk.length;
       }
 
       setProgress({ current: chunkEnd, total, title: chunk[chunk.length - 1]?.title || "" });

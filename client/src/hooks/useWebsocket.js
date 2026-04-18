@@ -11,13 +11,8 @@ import { io }                from "socket.io-client";
 
 // ── Target ────────────────────────────────────────────────────────────────────
 //
-// Development:
-//   Use window.location.origin (same origin as the page = :5173).
-//   Vite proxies /socket.io → :5000, so the WS upgrade succeeds.
-//
-// Production:
-//   Set VITE_WS_URL=https://api.yourdomain.com in client/.env
-//
+// Vite proxy: /socket.io → localhost:3001 (server port)
+// WS connects via window.location.origin + "/socket.io" → proxies correctly
 const WS_URL = import.meta.env.VITE_WS_URL || window.location.origin;
 
 export function useWebSocket({
@@ -40,19 +35,30 @@ export function useWebSocket({
 
     socket.on("connect", () => {
       console.log("[WS] Connected:", socket.id);
+      // Join admin room if admin (passed from caller)
+      if (options?.isAdmin) {
+        socket.emit("join:admin");
+        console.log("[WS] Joined admin room");
+      }
     });
 
     socket.on("connect_error", (err) => {
       console.warn("[WS] Connection error (will retry):", err.message);
+      // Specific hint for common server-not-running case
+      if (err.message.includes("WebSocket connection failed") || err.message.includes("ECONNREFUSED")) {
+        console.warn("[WS] Tip: Make sure `server` is running on port 3001 (npm start in server/)");
+      }
     });
 
     socket.on("disconnect", (reason) => {
       console.log("[WS] Disconnected:", reason);
     });
 
-    socket.on("stats:update",          (data) => onStatsUpdate?.(data));
-    socket.on("transaction:new",       (data) => onTransactionNew?.(data));
-    socket.on("transaction:returned",  (data) => onTransactionReturned?.(data));
+    socket.on("stats:update",     (data) => onStatsUpdate?.(data));
+    socket.on("transaction:new",  (data) => onTransactionNew?.(data));
+    socket.on("transaction:returned", (data) => onTransactionReturned?.(data));
+    // Audit events for AuditLog.jsx
+    socket.on("audit:new", (data) => onAuditEvent?.(data));
 
     return () => { socket.disconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
