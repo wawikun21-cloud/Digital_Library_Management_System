@@ -220,7 +220,7 @@ export default function RecentlyDeleted() {
             onClick={() => setFilterType(tab.key)}
             className="px-2.5 py-1.5 rounded-full text-[11px] sm:text-[12px] font-semibold transition-colors duration-150 border-[1.5px] whitespace-nowrap"
             style={filterType === tab.key
-              ? { background: "var(--accent-amber)", borderColor: "var(--accent-amber)", color: "#132F45" }
+              ? { background: "#fffd17", color: "#2a3e82" }
               : { background: "var(--bg-surface)", borderColor: "var(--border)", color: "var(--text-secondary)" }
             }
           >
@@ -228,7 +228,7 @@ export default function RecentlyDeleted() {
             {counts[tab.key] > 0 && (
               <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold"
                 style={filterType === tab.key
-                  ? { background: "rgba(0,0,0,0.15)", color: "#132F45" }
+                  ? { background: "rgba(255,255,255,0.25)", color: "#ffffff" }
                   : { background: "var(--bg-hover)", color: "var(--text-muted)" }
                 }>
                 {counts[tab.key]}

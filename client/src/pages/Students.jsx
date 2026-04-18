@@ -409,8 +409,8 @@ export default function Students() {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-all hover:opacity-90 active:scale-[.98]"
             style={{
               background: "rgba(45,122,71,0.1)",
-              border: "1.5px solid rgba(45,122,71,0.35)",
-              color: "#2d7a47",
+              border: "1.5px solid rgba(45, 63, 122, 0.35)",
+              color: "var(--text-primary)",
             }}
           >
             <Upload size={14} />

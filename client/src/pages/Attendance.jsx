@@ -333,12 +333,12 @@ function RfidRegistrationModal({ onClose, onRegistered }) {
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
               style={{
-                background: "linear-gradient(135deg, rgba(45,122,71,0.2), rgba(238,162,58,0.15))",
-                border: "1.5px solid rgba(45,122,71,0.3)",
-                boxShadow: "0 2px 8px rgba(45,122,71,0.15)",
+                background: "linear-gradient(135deg, rgba(45, 53, 122, 0.2), rgba(70, 58, 238, 0.15))",
+                border: "1.5px solid rgba(45, 76, 122, 0.3)",
+                boxShadow: "0 2px 8px rgba(45, 76, 122, 0.15)",
               }}
             >
-              <CreditCard size={18} style={{ color: "#2d7a47" }} />
+              <CreditCard size={18} style={{ color: "#11004e" }} />
             </div>
             <div>
               <h2 className="text-[15px] font-bold leading-tight" style={{ color: "var(--text-primary)" }}>
@@ -351,8 +351,10 @@ function RfidRegistrationModal({ onClose, onRegistered }) {
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:bg-red-50 hover:text-red-500"
+            className="w-8 h-8 rounded-lg flex items-center justify-center transition-all"
             style={{ color: "var(--text-muted)" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(220,38,38,0.08)"; e.currentTarget.style.color = "#dc2626"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
           >
             <X size={16} />
           </button>
@@ -367,7 +369,7 @@ function RfidRegistrationModal({ onClose, onRegistered }) {
               <div className="flex items-center gap-2 mb-2">
                 <span
                   className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                  style={{ background: rfidCode.trim() ? "#2d7a47" : "var(--accent-amber)" }}
+                  style={{ background: rfidCode.trim() ? "#130b7e" : "var(--accent-amber)" }}
                 >
                   {rfidCode.trim() ? <CheckCircle2 size={12} /> : "1"}
                 </span>
@@ -380,7 +382,7 @@ function RfidRegistrationModal({ onClose, onRegistered }) {
                 <CreditCard
                   size={14}
                   className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{ color: rfidCode.trim() ? "#2d7a47" : "var(--text-muted)" }}
+                  style={{ color: rfidCode.trim() ? "#130b7e" : "var(--text-muted)" }}
                 />
                 <input
                   ref={rfidInputRef}
@@ -426,7 +428,7 @@ function RfidRegistrationModal({ onClose, onRegistered }) {
               <div className="flex items-center gap-2 mb-2">
                 <span
                   className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                  style={{ background: selectedStudent ? "#2d7a47" : "var(--accent-amber)" }}
+                  style={{ background: selectedStudent ? "#130b7e" : "var(--accent-amber)" }}
                 >
                   {selectedStudent ? <CheckCircle2 size={12} /> : "2"}
                 </span>
@@ -483,7 +485,9 @@ function RfidRegistrationModal({ onClose, onRegistered }) {
                         <button
                           key={student.student_id_number}
                           onClick={() => handleSelectStudent(student)}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-amber-50/30"
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors"
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                           style={{
                             borderBottom: idx < searchResults.length - 1 ? "1px solid var(--border-light)" : "none",
                           }}
@@ -536,7 +540,7 @@ function RfidRegistrationModal({ onClose, onRegistered }) {
                     <p className="text-[14px] font-bold truncate" style={{ color: "var(--text-primary)" }}>
                       {fullName}
                     </p>
-                    <p className="font-mono text-[12px] mt-0.5" style={{ color: "#2d7a47" }}>
+                    <p className="font-mono text-[12px] mt-0.5" style={{ color: "var(--text-primary)" }}>
                       {selectedStudent.student_id_number}
                     </p>
                   </div>
@@ -544,7 +548,7 @@ function RfidRegistrationModal({ onClose, onRegistered }) {
                     className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
                     style={{ background: "rgba(45,122,71,0.15)" }}
                   >
-                    <CheckCircle2 size={15} style={{ color: "#2d7a47" }} />
+                    <CheckCircle2 size={15} style={{ color: "var(--text-primary)" }} />
                   </div>
                 </div>
                 <div className="grid grid-cols-2"
@@ -564,7 +568,7 @@ function RfidRegistrationModal({ onClose, onRegistered }) {
                       }}
                     >
                       <p className="text-[10px] font-semibold uppercase tracking-wide mb-0.5"
-                        style={{ color: "rgba(45,122,71,0.6)" }}>
+                        style={{ color: "var(--text-primary)" }}>
                         {label}
                       </p>
                       <p className="text-[13px] font-semibold truncate" style={{ color: "var(--text-primary)" }}>
@@ -609,9 +613,9 @@ function RfidRegistrationModal({ onClose, onRegistered }) {
           {/* Progress dots */}
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full transition-all"
-              style={{ background: rfidCode.trim() ? "#2d7a47" : "var(--border)" }} />
+              style={{ background: rfidCode.trim() ? "#1c005c" : "var(--border)" }} />
             <div className="w-2 h-2 rounded-full transition-all"
-              style={{ background: selectedStudent ? "#2d7a47" : "var(--border)" }} />
+              style={{ background: selectedStudent ? "#1c005c" : "var(--border)" }} />
           </div>
 
           <div className="flex items-center gap-2.5">
@@ -628,9 +632,9 @@ function RfidRegistrationModal({ onClose, onRegistered }) {
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white transition-all hover:opacity-90 active:scale-[.98] disabled:opacity-40 disabled:cursor-not-allowed"
               style={{
                 background: isReady
-                  ? "linear-gradient(135deg, #2d7a47, #38a169)"
+                  ? "linear-gradient(135deg, #001844, #000caf)"
                   : "var(--accent-amber)",
-                boxShadow: isReady ? "0 3px 10px rgba(45,122,71,.35)" : "0 2px 8px rgba(238,162,58,.3)",
+                boxShadow: isReady ? "0 3px 10px rgba(26, 0, 141, 0.35)" : "0 2px 8px rgba(238,162,58,.3)",
                 transition: "all .2s ease",
               }}
             >
@@ -854,8 +858,10 @@ function StudentModal({ record, onClose }) {
             </button>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-black/5"
+              className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
               style={{ color: "var(--text-muted)" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
             >
               <X size={16} />
             </button>
@@ -906,7 +912,10 @@ function StudentModal({ record, onClose }) {
               <tbody>
                 {history.map((r, i) => (
                   <tr key={r.id} style={{ borderBottom: "1px solid var(--border-light)" }}
-                    className="hover:bg-amber-50/30 transition-colors">
+                    className="transition-colors"
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = ""; }}
+                  >
                     <td className="px-5 py-3 text-[12px]" style={{ color: "var(--text-muted)" }}>{i + 1}</td>
                     <td className="px-5 py-3 text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>
                       {fmtDate(r.check_in_time)}
@@ -940,12 +949,12 @@ function FilterField({ icon: Icon, children }) {
     <div className="relative flex items-center">
       <Icon size={13} className="absolute left-2.5 z-10 pointer-events-none"
         style={{ color: "var(--text-muted)" }} />
-      <div className="pl-7 relative">{children}</div>
+      {children}
     </div>
   );
 }
 
-const filterInputCls = "pl-0 pr-3 py-2 rounded-lg text-[12.5px] border outline-none transition-all focus:ring-2 focus:ring-amber-400/25 focus:border-amber-400";
+const filterInputCls = "pl-8 pr-3 py-2 rounded-lg text-[12.5px] border outline-none transition-all focus:ring-2 focus:ring-amber-400/25 focus:border-amber-400";
 const filterInputStyle = {
   background: "var(--bg-input)",
   borderColor: "var(--border)",
@@ -1114,8 +1123,8 @@ export default function Attendance() {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-all hover:opacity-90 active:scale-[.98]"
             style={{
               background: "rgba(45,122,71,0.1)",
-              border: "1.5px solid rgba(45,122,71,0.35)",
-              color: "#2d7a47",
+              border: "1.5px solid rgba(45, 53, 122, 0.35)",
+              color: "var(--tetx-primary)",
             }}
           >
             <CreditCard size={14} />
@@ -1280,35 +1289,44 @@ export default function Attendance() {
               {active.length}
             </span>
           </div>
-          <div className="overflow-x-auto rounded-lg border-t border-slate-200">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-emerald-50/50">
+          <div className="overflow-x-auto" style={{ borderTop: "1px solid var(--border)" }}>
+            <table className="min-w-full" style={{ borderCollapse: "collapse" }}>
+              <thead style={{ background: "var(--bg-subtle)", borderBottom: "1px solid var(--border)" }}>
                 <tr>
                   {["Student", "ID", "Course", "Year", "School Year", "Check In", "Action"].map((h) => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">{h}</th>
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider"
+                      style={{ color: "var(--text-muted)" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody style={{ background: "var(--bg-surface)" }}>
                 {active.map((s) => (
-                  <tr key={s.id} className="hover:bg-emerald-50/50 transition-colors group">
+                  <tr key={s.id} className="transition-colors group"
+                    style={{ borderBottom: "1px solid var(--border-light)" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = ""; }}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400/20 to-emerald-500/20 flex items-center justify-center border border-emerald-200/50">
-                          <span className="text-xs font-bold text-emerald-700">{getInitials(s.student_name)}</span>
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                          style={{ background: "rgba(45,122,71,0.15)", border: "1px solid rgba(45,122,71,0.25)" }}>
+                          <span className="text-xs font-bold" style={{ color: "#2d7a47" }}>{getInitials(s.student_name)}</span>
                         </div>
-                        <span className="font-semibold text-sm text-slate-900 group-hover:text-slate-700">{s.student_name}</span>
+                        <span className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>{s.student_name}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-sm text-slate-600 font-mono">{s.student_id_number}</td>
-                    <td className="px-4 py-4 text-sm text-slate-600 font-medium">{s.student_course || "—"}</td>
-                    <td className="px-4 py-4 text-sm text-slate-600">{s.student_yr_level || "—"}</td>
-                    <td className="px-4 py-4 text-sm text-slate-600">{s.school_year || "—"}</td>
-                    <td className="px-4 py-4 text-sm text-slate-600">{fmtDateTime(s.check_in_time)}</td>
+                    <td className="px-4 py-4 text-sm font-mono" style={{ color: "var(--text-secondary)" }}>{s.student_id_number}</td>
+                    <td className="px-4 py-4 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>{s.student_course || "—"}</td>
+                    <td className="px-4 py-4 text-sm" style={{ color: "var(--text-secondary)" }}>{s.student_yr_level || "—"}</td>
+                    <td className="px-4 py-4 text-sm" style={{ color: "var(--text-secondary)" }}>{s.school_year || "—"}</td>
+                    <td className="px-4 py-4 text-sm" style={{ color: "var(--text-secondary)" }}>{fmtDateTime(s.check_in_time)}</td>
                     <td className="px-4 py-4 whitespace-nowrap">
                       <button
                         onClick={() => handleCheckOut(s.student_id_number)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 transition-colors shadow-sm"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shadow-sm"
+                        style={{ background: "rgba(45,122,71,0.12)", color: "#2d7a47", border: "1px solid rgba(45,122,71,0.25)" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(45,122,71,0.22)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(45,122,71,0.12)"; }}
                       >
                         <ArrowLeft size={11} /> Check Out
                       </button>
@@ -1322,8 +1340,8 @@ export default function Attendance() {
       )}
 
       {/* ── Attendance History ────────────────────────── */}
-      <div className="rounded-xl overflow-hidden border border-slate-200/60 shadow-sm" style={{ background: "var(--bg-surface)" }}>
-        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-200"
+      <div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4"
           style={{ borderBottom: "1px solid var(--border-light)" }}>
           <div className="flex items-center gap-2">
             <FileText size={14} style={{ color: "var(--accent-amber)" }} />
@@ -1347,8 +1365,8 @@ export default function Attendance() {
           )}
         </div>
 
-        <div className="flex flex-wrap gap-2.5 p-5 bg-gradient-to-r from-slate-50/70 to-slate-50/30 backdrop-blur-sm"
-          style={{ borderBottom: "1px solid var(--border-light)" }}>
+        <div className="flex flex-wrap gap-2.5 p-5"
+          style={{ borderBottom: "1px solid var(--border-light)", background: "var(--bg-subtle)" }}>
           <FilterField icon={User}>
             <input
               type="text" placeholder="Search Name or ID…" value={fSearch}

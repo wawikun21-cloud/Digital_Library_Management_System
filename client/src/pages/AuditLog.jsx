@@ -47,7 +47,7 @@ function actionColor(action) {
     case "RETURN":       return { bg: "var(--audit-return-bg,#f0fdf4)",       text: "var(--audit-return-text,#166534)" };
     case "CHECK_IN":     return { bg: "var(--audit-checkin-bg,#fef9c3)",      text: "var(--audit-checkin-text,#713f12)" };
     case "CHECK_OUT":    return { bg: "var(--audit-checkout-bg,#fce7f3)",     text: "var(--audit-checkout-text,#831843)" };
-    default:             return { bg: "var(--bg-card,#f9fafb)",               text: "var(--text-secondary,#6b7280)" };
+    default:             return { bg: "var(--bg-subtle)",                     text: "var(--text-secondary)" };
   }
 }
 
@@ -95,7 +95,7 @@ function SkeletonRows({ count = 8 }) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
-        <tr key={i} style={{ borderBottom: "1px solid var(--border-color,#f3f4f6)" }}>
+        <tr key={i} style={{ borderBottom: "1px solid var(--border-light)" }}>
           {[48, 120, 96, 88, 64, 80, 88].map((w, j) => (
             <td key={j} style={{ padding: "14px 16px" }}>
               <div
@@ -123,25 +123,25 @@ function AuditToast({ toasts, onDismiss }) {
     }}>
       {toasts.map(t => (
         <div key={t.id} style={{
-          background: "var(--bg-card,#fff)", border: "1px solid var(--border-color,#e5e7eb)",
-          borderLeft: "4px solid #6366f1", borderRadius: "8px",
-          padding: "10px 14px", boxShadow: "0 4px 16px rgba(0,0,0,.12)",
+          background: "var(--bg-surface)", border: "1px solid var(--border)",
+          borderLeft: "4px solid var(--accent-amber)", borderRadius: "8px",
+          padding: "10px 14px", boxShadow: "var(--shadow-lg)",
           display: "flex", alignItems: "center", gap: "10px",
           minWidth: "260px", maxWidth: "340px",
           animation: "slideIn .25s ease",
         }}>
           <span style={{ fontSize: "18px" }}>{entityIcon(t.entity_type)}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-primary,#111)" }}>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-primary)" }}>
               New Audit Event
             </div>
-            <div style={{ fontSize: "11px", color: "var(--text-secondary,#6b7280)", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {actionIcon(t.action)} {t.user_username} · {t.action} · {t.entity_type}
             </div>
           </div>
           <button onClick={() => onDismiss(t.id)} style={{
             background: "none", border: "none", cursor: "pointer",
-            color: "var(--text-secondary,#9ca3af)", fontSize: "16px", lineHeight: 1,
+            color: "var(--text-muted)", fontSize: "16px", lineHeight: 1,
           }}>×</button>
         </div>
       ))}
@@ -158,7 +158,7 @@ function DetailModal({ entry, onClose }) {
 // sourcery skip: avoid-function-declarations-in-blocks
   function JsonBlock({ data, label }) {
     if (!data) return (
-      <div style={{ color: "var(--text-secondary,#9ca3af)", fontStyle: "italic", fontSize: "12px" }}>
+      <div style={{ color: "var(--text-muted)", fontStyle: "italic", fontSize: "12px" }}>
         {label}: none
       </div>
     );
@@ -166,14 +166,14 @@ function DetailModal({ entry, onClose }) {
     if (typeof data === "string") { try { parsed = JSON.parse(data); } catch (_) { parsed = data; } }
     return (
       <div>
-        <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary,#6b7280)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: ".04em" }}>
+        <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: ".04em" }}>
           {label}
         </div>
         <pre style={{
-          background: "var(--bg-page,#f9fafb)", border: "1px solid var(--border-color,#e5e7eb)",
+          background: "var(--bg-subtle)", border: "1px solid var(--border)",
           borderRadius: "6px", padding: "10px", fontSize: "11px", lineHeight: 1.6,
           overflowX: "auto", maxHeight: "220px", overflowY: "auto",
-          color: "var(--text-primary,#111)", margin: 0,
+          color: "var(--text-primary)", margin: 0,
         }}>
           {JSON.stringify(parsed, null, 2)}
         </pre>
@@ -188,8 +188,8 @@ function DetailModal({ entry, onClose }) {
       padding: "16px",
     }} onClick={onClose}>
       <div style={{
-        background: "var(--bg-card,#fff)", borderRadius: "14px",
-        boxShadow: "0 20px 60px rgba(0,0,0,.2)",
+        background: "var(--bg-surface)", borderRadius: "14px",
+        boxShadow: "var(--shadow-xl)",
         width: "100%", maxWidth: "640px", maxHeight: "90vh",
         overflow: "auto", padding: "28px",
       }} onClick={e => e.stopPropagation()}>
@@ -206,21 +206,21 @@ function DetailModal({ entry, onClose }) {
                 {actionIcon(entry.action)} {entry.action}
               </span>
             </div>
-            <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary,#111)" }}>
+            <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)" }}>
               {entry.entity_type} {entry.entity_id ? `#${entry.entity_id}` : ""}
             </div>
           </div>
           <button onClick={onClose} style={{
-            background: "var(--bg-page,#f3f4f6)", border: "none",
+            background: "var(--bg-subtle)", border: "none",
             borderRadius: "8px", padding: "6px 10px", cursor: "pointer",
-            fontSize: "18px", color: "var(--text-secondary,#6b7280)", lineHeight: 1,
+            fontSize: "18px", color: "var(--text-secondary)", lineHeight: 1,
           }}>×</button>
         </div>
 
         {/* Meta */}
         <div style={{
           display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px",
-          background: "var(--bg-page,#f9fafb)", borderRadius: "8px",
+          background: "var(--bg-subtle)", borderRadius: "8px",
           padding: "14px", marginBottom: "20px", fontSize: "13px",
         }}>
           {[
@@ -230,8 +230,8 @@ function DetailModal({ entry, onClose }) {
             ["IP Address", entry.ip_address || "—"],
           ].map(([label, val]) => (
             <div key={label}>
-              <div style={{ color: "var(--text-secondary,#6b7280)", fontSize: "11px", marginBottom: "2px" }}>{label}</div>
-              <div style={{ fontWeight: 600, color: "var(--text-primary,#111)" }}>{val}</div>
+              <div style={{ color: "var(--text-secondary)", fontSize: "11px", marginBottom: "2px" }}>{label}</div>
+              <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{val}</div>
             </div>
           ))}
         </div>
@@ -239,13 +239,13 @@ function DetailModal({ entry, onClose }) {
         {/* User Agent */}
         {entry.user_agent && (
           <div style={{ marginBottom: "20px" }}>
-            <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary,#6b7280)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: ".04em" }}>
+            <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: ".04em" }}>
               User Agent
             </div>
             <div style={{
-              fontSize: "11px", color: "var(--text-secondary,#6b7280)",
-              background: "var(--bg-page,#f9fafb)", padding: "8px", borderRadius: "6px",
-              wordBreak: "break-all", border: "1px solid var(--border-color,#e5e7eb)",
+              fontSize: "11px", color: "var(--text-secondary)",
+              background: "var(--bg-subtle)", padding: "8px", borderRadius: "6px",
+              wordBreak: "break-all", border: "1px solid var(--border)",
             }}>
               {entry.user_agent}
             </div>
@@ -398,14 +398,15 @@ export default function AuditLog() {
         /* ── Animations ── */
         @keyframes slideIn   { from { opacity:0; transform:translateX(24px); } to { opacity:1; transform:translateX(0); } }
         @keyframes shimmer   { 0%,100% { opacity:.45; } 50% { opacity:1; } }
-        @keyframes rowPulse  { 0% { background:rgba(99,102,241,.08); } 100% { background:transparent; } }
+        @keyframes rowPulse  { 0% { background:rgba(238,162,58,.12); } 100% { background:transparent; } }
+        @keyframes spin      { to { transform: rotate(360deg); } }
 
         /* ── Shimmer skeleton ── */
         .audit-shimmer {
           background: linear-gradient(90deg,
-            var(--border-color,#e5e7eb) 25%,
-            var(--bg-page,#f3f4f6)     50%,
-            var(--border-color,#e5e7eb) 75%
+            var(--border)       25%,
+            var(--bg-subtle)    50%,
+            var(--border)       75%
           );
           background-size: 200% 100%;
           animation: shimmer 1.4s ease-in-out infinite;
@@ -413,7 +414,7 @@ export default function AuditLog() {
 
         /* ── Table ── */
         .audit-row { transition: background .12s; cursor: pointer; }
-        .audit-row:hover { background: var(--bg-hover,#f3f4f6) !important; }
+        .audit-row:hover { background: var(--bg-hover) !important; }
         .audit-row-new   { animation: rowPulse 1.8s ease forwards; }
 
         /* ── Sticky header ── */
@@ -421,21 +422,26 @@ export default function AuditLog() {
           position: sticky;
           top: 0;
           z-index: 2;
-          background: var(--bg-page,#f9fafb);
-          box-shadow: 0 1px 0 var(--border-color,#e5e7eb);
+          background: var(--bg-subtle);
+          box-shadow: 0 1px 0 var(--border);
         }
 
         /* ── Filter inputs ── */
         .audit-filter-input {
-          background: var(--bg-card,#fff); border: 1px solid var(--border-color,#e5e7eb);
+          background: var(--bg-surface); border: 1px solid var(--border);
           border-radius: 8px; padding: 7px 11px; font-size: 13px;
-          color: var(--text-primary,#111); outline: none; width: 100%;
+          color: var(--text-primary); outline: none; width: 100%;
           transition: border-color .15s, box-shadow .15s;
           box-sizing: border-box;
         }
         .audit-filter-input:focus {
-          border-color: var(--primary,#6366f1);
-          box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+          border-color: var(--accent-amber);
+          box-shadow: 0 0 0 3px rgba(238,162,58,.15);
+        }
+        /* Ensure native select/date pickers inherit colours in dark mode */
+        .audit-filter-input option {
+          background: var(--bg-surface);
+          color: var(--text-primary);
         }
 
         /* ── Fetch indicator on filter input ── */
@@ -448,18 +454,18 @@ export default function AuditLog() {
         }
         .audit-btn:hover  { opacity: .85; }
         .audit-btn:active { transform: scale(.97); }
-        .audit-btn-primary   { background: var(--primary,#6366f1); color: #fff; }
-        .audit-btn-secondary { background: var(--bg-card,#fff); color: var(--text-primary,#111); border: 1px solid var(--border-color,#e5e7eb) !important; }
-        .audit-btn-ghost     { background: transparent; color: var(--text-secondary,#6b7280); border: 1px solid var(--border-color,#e5e7eb) !important; }
+        .audit-btn-primary   { background: var(--accent-amber); color: #fff; }
+        .audit-btn-secondary { background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border) !important; }
+        .audit-btn-ghost     { background: transparent; color: var(--text-secondary); border: 1px solid var(--border) !important; }
 
         /* ── Pagination ── */
         .audit-page-btn {
           padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
-          border: 1px solid var(--border-color,#e5e7eb); cursor: pointer;
-          background: var(--bg-card,#fff); color: var(--text-primary,#111);
+          border: 1px solid var(--border); cursor: pointer;
+          background: var(--bg-surface); color: var(--text-primary);
           transition: background .12s, color .12s;
         }
-        .audit-page-btn.active  { background: var(--primary,#6366f1); color: #fff; border-color: var(--primary,#6366f1); }
+        .audit-page-btn.active  { background: var(--accent-amber); color: #fff; border-color: var(--accent-amber); }
         .audit-page-btn:disabled { opacity: .4; cursor: not-allowed; }
 
         /* ── Scrollable table wrapper (enables sticky head) ── */
@@ -481,11 +487,11 @@ export default function AuditLog() {
         {/* ── Page Header ── */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "12px", marginBottom: "24px" }}>
           <div>
-            <h1 style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "22px", fontWeight: 700, color: "var(--text-primary,#111)", margin: 0 }}>
+            <h1 style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
               Audit Trail
               {newBadge > 0 && (
                 <button onClick={handleRefresh} style={{
-                  background: "#6366f1", color: "#fff", border: "none",
+                  background: "var(--accent-amber)", color: "#fff", border: "none",
                   borderRadius: "20px", padding: "3px 10px", fontSize: "11px",
                   fontWeight: 700, cursor: "pointer",
                 }}>
@@ -493,7 +499,7 @@ export default function AuditLog() {
                 </button>
               )}
             </h1>
-            <p style={{ fontSize: "13px", color: "var(--text-secondary,#6b7280)", margin: "2px 0 0" }}>
+            <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "2px 0 0" }}>
               Immutable history of all admin and staff actions across the library system.
             </p>
           </div>
@@ -510,18 +516,18 @@ export default function AuditLog() {
 
         {/* ── Filter Bar ── */}
         <div style={{
-          background: "var(--bg-card,#fff)", border: "1px solid var(--border-color,#e5e7eb)",
+          background: "var(--bg-surface)", border: "1px solid var(--border)",
           borderRadius: "12px", padding: "16px 20px", marginBottom: "20px",
         }}>
           {/* Filter bar header */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary,#111)" }}>
+              <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)" }}>
                 Filters
               </span>
               {activeFilterCount > 0 && (
                 <span style={{
-                  background: "var(--primary,#6366f1)", color: "#fff",
+                  background: "var(--accent-amber)", color: "#fff",
                   borderRadius: "20px", padding: "1px 7px", fontSize: "11px", fontWeight: 700,
                 }}>{activeFilterCount}</span>
               )}
@@ -529,16 +535,15 @@ export default function AuditLog() {
               {loading && (
                 <span style={{
                   display: "inline-flex", alignItems: "center", gap: "5px",
-                  fontSize: "11px", color: "var(--text-secondary,#9ca3af)",
+                  fontSize: "11px", color: "var(--text-muted)",
                 }}>
                   <span style={{
                     display: "inline-block", width: "10px", height: "10px",
-                    border: "2px solid var(--border-color,#e5e7eb)",
-                    borderTop: "2px solid var(--primary,#6366f1)",
+                    border: "2px solid var(--border)",
+                    borderTop: "2px solid var(--accent-amber)",
                     borderRadius: "50%", animation: "spin .6s linear infinite",
                   }} />
                   Searching…
-                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                 </span>
               )}
             </div>
@@ -557,7 +562,7 @@ export default function AuditLog() {
 
             {/* Entity Type — instant fetch on change */}
             <div>
-              <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary,#6b7280)", display: "block", marginBottom: "4px" }}>
+              <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
                 Entity Type
               </label>
               <select
@@ -574,7 +579,7 @@ export default function AuditLog() {
 
             {/* Action — instant fetch on change */}
             <div>
-              <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary,#6b7280)", display: "block", marginBottom: "4px" }}>
+              <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
                 Action
               </label>
               <select
@@ -591,7 +596,7 @@ export default function AuditLog() {
 
             {/* User — debounced */}
             <div>
-              <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary,#6b7280)", display: "block", marginBottom: "4px" }}>
+              <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
                 User
               </label>
               <div style={{ position: "relative" }}>
@@ -610,7 +615,7 @@ export default function AuditLog() {
                     style={{
                       position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)",
                       background: "none", border: "none", cursor: "pointer",
-                      color: "var(--text-secondary,#9ca3af)", fontSize: "14px", lineHeight: 1,
+                      color: "var(--text-muted)", fontSize: "14px", lineHeight: 1,
                       padding: 0,
                     }}
                     title="Clear"
@@ -621,7 +626,7 @@ export default function AuditLog() {
 
             {/* Date From — debounced */}
             <div>
-              <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary,#6b7280)", display: "block", marginBottom: "4px" }}>
+              <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
                 Date From
               </label>
               <input
@@ -634,7 +639,7 @@ export default function AuditLog() {
 
             {/* Date To — debounced */}
             <div>
-              <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary,#6b7280)", display: "block", marginBottom: "4px" }}>
+              <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
                 Date To
               </label>
               <input
@@ -649,20 +654,20 @@ export default function AuditLog() {
 
         {/* ── Table Card ── */}
         <div style={{
-          background: "var(--bg-card,#fff)", border: "1px solid var(--border-color,#e5e7eb)",
+          background: "var(--bg-surface)", border: "1px solid var(--border)",
           borderRadius: "12px", overflow: "hidden",
         }}>
           {/* Table header info */}
           <div style={{
-            padding: "14px 20px", borderBottom: "1px solid var(--border-color,#e5e7eb)",
+            padding: "14px 20px", borderBottom: "1px solid var(--border)",
             display: "flex", alignItems: "center", justifyContent: "space-between",
           }}>
-            <span style={{ fontSize: "13px", color: "var(--text-secondary,#6b7280)" }}>
+            <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
               {loading
                 ? "Fetching records…"
                 : `${pagination.total.toLocaleString()} total record${pagination.total !== 1 ? "s" : ""}`}
             </span>
-            <span style={{ fontSize: "12px", color: "var(--text-secondary,#9ca3af)" }}>
+            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
               Page {pagination.page} of {pagination.totalPages}
             </span>
           </div>
@@ -678,8 +683,8 @@ export default function AuditLog() {
           {!loading && !error && logs.length === 0 && (
             <div style={{ padding: "60px 32px", textAlign: "center" }}>
               <div style={{ fontSize: "40px", marginBottom: "12px" }}>🔍</div>
-              <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary,#111)", marginBottom: "6px" }}>No audit records found</div>
-              <div style={{ fontSize: "13px", color: "var(--text-secondary,#6b7280)" }}>
+              <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "6px" }}>No audit records found</div>
+              <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
                 {activeFilterCount > 0 ? "Try adjusting your filters." : "Audit events will appear here as actions are taken."}
               </div>
             </div>
@@ -694,7 +699,7 @@ export default function AuditLog() {
                     {["ID", "Timestamp", "User", "Entity", "Record ID", "Action", "IP Address"].map(h => (
                       <th key={h} style={{
                         padding: "10px 16px", textAlign: "left", fontSize: "11px",
-                        fontWeight: 700, color: "var(--text-secondary,#6b7280)",
+                        fontWeight: 700, color: "var(--text-secondary)",
                         textTransform: "uppercase", letterSpacing: ".04em",
                         whiteSpace: "nowrap",
                       }}>{h}</th>
@@ -713,17 +718,17 @@ export default function AuditLog() {
                         key={log.id}
                         className="audit-row"
                         style={{
-                          borderBottom: i < logs.length - 1 ? "1px solid var(--border-color,#f3f4f6)" : "none",
+                          borderBottom: i < logs.length - 1 ? "1px solid var(--border-light)" : "none",
                         }}
                         onClick={() => setSelectedEntry(log)}
                       >
                         {/* ID */}
-                        <td style={{ padding: "12px 16px", color: "var(--text-secondary,#9ca3af)", fontFamily: "monospace", fontSize: "12px" }}>
+                        <td style={{ padding: "12px 16px", color: "var(--text-muted)", fontFamily: "monospace", fontSize: "12px" }}>
                           #{log.id}
                         </td>
 
                         {/* Timestamp */}
-                        <td style={{ padding: "12px 16px", whiteSpace: "nowrap", color: "var(--text-secondary,#6b7280)", fontSize: "12px" }}>
+                        <td style={{ padding: "12px 16px", whiteSpace: "nowrap", color: "var(--text-secondary)", fontSize: "12px" }}>
                           {formatDate(log.created_at)}
                         </td>
 
@@ -732,14 +737,14 @@ export default function AuditLog() {
                           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                             <div style={{
                               width: "24px", height: "24px", borderRadius: "50%",
-                              background: log.user_username === "system" ? "#94a3b8" : "var(--primary,#6366f1)",
+                              background: log.user_username === "system" ? "var(--text-muted)" : "var(--accent-amber)",
                               color: "#fff",
                               display: "flex", alignItems: "center", justifyContent: "center",
                               fontSize: "10px", fontWeight: 700, flexShrink: 0,
                             }}>
                               {(log.user_username || "?")[0].toUpperCase()}
                             </div>
-                            <span style={{ fontWeight: 600, color: "var(--text-primary,#111)" }}>
+                            <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>
                               {log.user_username}
                             </span>
                           </div>
@@ -749,14 +754,14 @@ export default function AuditLog() {
                         <td style={{ padding: "12px 16px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                             <span>{entityIcon(log.entity_type)}</span>
-                            <span style={{ color: "var(--text-primary,#111)", textTransform: "capitalize" }}>
+                            <span style={{ color: "var(--text-primary)", textTransform: "capitalize" }}>
                               {log.entity_type.replace(/_/g, " ")}
                             </span>
                           </div>
                         </td>
 
                         {/* Record ID */}
-                        <td style={{ padding: "12px 16px", fontFamily: "monospace", fontSize: "12px", color: "var(--text-secondary,#9ca3af)" }}>
+                        <td style={{ padding: "12px 16px", fontFamily: "monospace", fontSize: "12px", color: "var(--text-muted)" }}>
                           {log.entity_id ?? <span style={{ fontStyle: "italic" }}>—</span>}
                         </td>
 
@@ -772,7 +777,7 @@ export default function AuditLog() {
                         </td>
 
                         {/* IP */}
-                        <td style={{ padding: "12px 16px", fontFamily: "monospace", fontSize: "11px", color: "var(--text-secondary,#9ca3af)" }}>
+                        <td style={{ padding: "12px 16px", fontFamily: "monospace", fontSize: "11px", color: "var(--text-muted)" }}>
                           {log.ip_address || "—"}
                         </td>
                       </tr>
@@ -786,10 +791,10 @@ export default function AuditLog() {
           {/* ── Pagination ── */}
           {!loading && !error && pagination.totalPages > 1 && (
             <div style={{
-              padding: "14px 20px", borderTop: "1px solid var(--border-color,#e5e7eb)",
+              padding: "14px 20px", borderTop: "1px solid var(--border)",
               display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px",
             }}>
-              <span style={{ fontSize: "12px", color: "var(--text-secondary,#6b7280)" }}>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
                 Showing {((pagination.page - 1) * PAGE_SIZE) + 1}–{Math.min(pagination.page * PAGE_SIZE, pagination.total)} of {pagination.total.toLocaleString()}
               </span>
               <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
@@ -822,7 +827,7 @@ export default function AuditLog() {
         </div>
 
         {/* ── Footer note ── */}
-        <p style={{ fontSize: "11px", color: "var(--text-secondary,#9ca3af)", textAlign: "center", marginTop: "16px" }}>
+        <p style={{ fontSize: "11px", color: "var(--text-muted)", textAlign: "center", marginTop: "16px" }}>
           Audit logs are retained for 1 year and purged automatically every day at 02:00.
           Records are immutable and cannot be manually edited or deleted.
         </p>

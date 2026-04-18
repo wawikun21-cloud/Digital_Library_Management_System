@@ -189,7 +189,7 @@ const SessionActions = ({ sessionId, onDelete }) => {
       <button
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
         className="p-1 rounded transition-colors hover:opacity-60"
-        style={{ color: '#94a3b8' }}
+        style={{ color: 'var(--text-muted)' }}
       >
         <MoreVertical size={13} />
       </button>
@@ -200,7 +200,10 @@ const SessionActions = ({ sessionId, onDelete }) => {
         >
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(e, sessionId); setOpen(false); }}
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] font-medium text-red-600 hover:bg-red-50 transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] font-medium transition-colors"
+            style={{ color: '#dc2626' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(220,38,38,0.08)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
           >
             <Trash2 size={12} /> Delete Session
           </button>
@@ -407,7 +410,7 @@ const StudentHistoryModal = ({ student, onClose, onDelete }) => {
                       <td className="px-4 py-3">
                         <span
                           className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[10px] font-bold"
-                          style={{ background: '#e2e8f0', color: '#64748b' }}
+                          style={{ background: 'var(--border)', color: 'var(--text-muted)' }}
                         >
                           {idx + 1}
                         </span>
@@ -597,7 +600,7 @@ const AttendanceTable = React.memo(({
     return (
       <div className="overflow-x-auto">
         <table className="min-w-full" style={{ background: 'var(--bg-surface)' }}>
-          <thead style={{ background: 'var(--bg-topbar)', borderBottom: '2px solid var(--border)' }}>
+          <thead style={{ background: 'var(--bg-subtle)', borderBottom: '2px solid var(--border)' }}>
             <tr>
               {headers.map((h) => (
                 <th
@@ -628,7 +631,7 @@ const AttendanceTable = React.memo(({
           <thead
             className="sticky top-0 z-10"
             style={{
-              background: 'var(--bg-topbar)',
+              background: 'var(--bg-subtle)',
               backdropFilter: 'blur(8px)',
               borderBottom: '2px solid var(--border)',
             }}
