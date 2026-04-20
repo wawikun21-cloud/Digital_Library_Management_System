@@ -13,7 +13,7 @@ const AttendanceModel = {
     try {
       const [rows] = await pool.query(`
         SELECT * FROM attendance 
-        WHERE deleted_at IS NULL
+        WHERE is_deleted = 0
         ORDER BY check_in_time DESC
       `);
       return { success: true, data: rows };
@@ -29,7 +29,7 @@ const AttendanceModel = {
   async getById(id) {
     try {
       const [rows] = await pool.query(`
-        SELECT * FROM attendance WHERE id = ?
+        SELECT * FROM attendance WHERE id = ? AND is_deleted = 0
       `, [id]);
       if (rows.length === 0) {
         return { success: false, error: "Attendance record not found" };
@@ -48,7 +48,7 @@ const AttendanceModel = {
     try {
       const [rows] = await pool.query(`
         SELECT * FROM attendance 
-        WHERE status = 'checked_in'
+        WHERE status = 'checked_in' AND is_deleted = 0
         ORDER BY check_in_time DESC
       `);
       return { success: true, data: rows };
@@ -65,7 +65,7 @@ const AttendanceModel = {
     try {
       const [rows] = await pool.query(`
         SELECT * FROM attendance 
-        WHERE student_id_number = ?
+        WHERE student_id_number = ? AND is_deleted = 0
         ORDER BY check_in_time DESC
       `, [studentIdNumber]);
       return { success: true, data: rows };
@@ -76,53 +76,137 @@ const AttendanceModel = {
   },
 
   /**
-   * Check in a student
+   * Tap logic: first tap = check in, second tap = check out.
+   * Looks up student from the master `students` table automatically.
+   * Returns { action: 'checked_in' | 'checked_out', data } on success.
+   */
+  async tap(studentIdNumber) {
+    try {
+      // ── 1. Verify student exists in master table ─────────────────────
+      const [studentRecords] = await pool.query(`
+        SELECT 
+          student_name,
+          display_name,
+          student_course,
+          student_yr_level,
+          student_school_year
+        FROM students 
+        WHERE student_id_number = ? AND is_active = 1
+        LIMIT 1
+      `, [studentIdNumber]);
+
+      if (studentRecords.length === 0) {
+        return { success: false, error: "Student ID not found in the system." };
+      }
+
+      const student = studentRecords[0];
+      const studentName   = student.display_name || student.student_name;
+      const studentCourse = student.student_course    || '';
+      const studentYrLevel= student.student_yr_level  || '';
+      const schoolYear    = student.student_school_year || '';
+
+      // ── 2. Check for an open (checked_in) record today ───────────────
+      const [existing] = await pool.query(`
+        SELECT * FROM attendance 
+        WHERE student_id_number = ? 
+          AND status = 'checked_in'
+          AND is_deleted = 0
+        ORDER BY check_in_time DESC
+        LIMIT 1
+      `, [studentIdNumber]);
+
+      // ── 3a. Already checked in → check out ──────────────────────────
+      if (existing.length > 0) {
+        const record       = existing[0];
+        const checkOutTime = new Date();
+        const checkInTime  = new Date(record.check_in_time);
+        const duration     = Math.max(0, Math.floor((checkOutTime - checkInTime) / 1000 / 60));
+
+        await pool.query(`
+          UPDATE attendance 
+          SET check_out_time = ?, duration = ?, status = 'checked_out'
+          WHERE id = ?
+        `, [checkOutTime, duration, record.id]);
+
+        const [updated] = await pool.query(
+          `SELECT * FROM attendance WHERE id = ?`, [record.id]
+        );
+
+        console.log(`✅ Checked OUT: ${studentName} (${studentIdNumber}) — ${duration} min`);
+        return { success: true, action: 'checked_out', data: updated[0] };
+      }
+
+      // ── 3b. Not checked in → check in ───────────────────────────────
+      const [result] = await pool.query(`
+        INSERT INTO attendance 
+          (student_name, student_id_number, student_course, student_yr_level, school_year, check_in_time, status)
+        VALUES (?, ?, ?, ?, ?, NOW(), 'checked_in')
+      `, [studentName, studentIdNumber, studentCourse, studentYrLevel, schoolYear]);
+
+      const [inserted] = await pool.query(
+        `SELECT * FROM attendance WHERE id = ?`, [result.insertId]
+      );
+
+      console.log(`✅ Checked IN: ${studentName} (${studentIdNumber})`);
+      return { success: true, action: 'checked_in', data: inserted[0] };
+
+    } catch (error) {
+      console.error("[AttendanceModel.tap] Error:", error.message);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * Explicit check-in (kept for compatibility / direct API use)
    */
   async checkIn(attendanceData) {
     try {
-      const {
-        student_id_number,
-        student_name = '',
-        student_course = '',
-        student_yr_level = ''
-      } = attendanceData;
+      const { student_id_number } = attendanceData;
 
-      // Check if student is already checked in
-      const [existing] = await pool.query(`
-        SELECT * FROM attendance 
-        WHERE student_id_number = ? AND status = 'checked_in'
-      `, [student_id_number]);
-
-      if (existing.length > 0) {
-        return { success: false, error: "Student is already checked in" };
-      }
-
-      // Validate that student exists in students table
       const [studentRecords] = await pool.query(`
-        SELECT student_name, student_course, student_yr_level FROM students 
-        WHERE student_id_number = ? AND is_active = true
+        SELECT 
+          student_name,
+          display_name,
+          student_course,
+          student_yr_level,
+          student_school_year
+        FROM students 
+        WHERE student_id_number = ? AND is_active = 1
+        LIMIT 1
       `, [student_id_number]);
 
       if (studentRecords.length === 0) {
-        return { success: false, error: "Student does not exist" };
+        return { success: false, error: "Student ID not found in the system." };
       }
 
-      // Use student information from students table
-      let studentName = student_name || studentRecords[0].student_name;
-      let studentCourse = student_course || studentRecords[0].student_course || '';
-      let studentYrLevel = student_yr_level || studentRecords[0].student_yr_level || '';
+      const student = studentRecords[0];
+      const studentName    = student.display_name || student.student_name;
+      const studentCourse  = student.student_course    || '';
+      const studentYrLevel = student.student_yr_level  || '';
+      const schoolYear     = student.student_school_year || '';
 
-      const [result] = await pool.query(
-        `INSERT INTO attendance (student_name, student_id_number, student_course, student_yr_level, check_in_time, status)
-         VALUES (?, ?, ?, ?, NOW(), 'checked_in')`,
-        [studentName, student_id_number, studentCourse, studentYrLevel]
+      // Prevent double check-in
+      const [existing] = await pool.query(`
+        SELECT id FROM attendance 
+        WHERE student_id_number = ? AND status = 'checked_in' AND is_deleted = 0
+        LIMIT 1
+      `, [student_id_number]);
+
+      if (existing.length > 0) {
+        return { success: false, error: "Student is already checked in." };
+      }
+
+      const [result] = await pool.query(`
+        INSERT INTO attendance 
+          (student_name, student_id_number, student_course, student_yr_level, school_year, check_in_time, status)
+        VALUES (?, ?, ?, ?, ?, NOW(), 'checked_in')
+      `, [studentName, student_id_number, studentCourse, studentYrLevel, schoolYear]);
+
+      const [rows] = await pool.query(
+        `SELECT * FROM attendance WHERE id = ?`, [result.insertId]
       );
 
-      const [rows] = await pool.query(`
-        SELECT * FROM attendance WHERE id = ?
-      `, [result.insertId]);
-
-      console.log(`✅ Student checked in: ${studentName} (${student_id_number})`);
+      console.log(`✅ Checked IN: ${studentName} (${student_id_number})`);
       return { success: true, data: rows[0] };
     } catch (error) {
       console.error("[AttendanceModel.checkIn] Error:", error.message);
@@ -131,38 +215,37 @@ const AttendanceModel = {
   },
 
   /**
-   * Check out a student
+   * Explicit check-out by student ID
    */
   async checkOut(studentIdNumber) {
     try {
-      // Find active attendance record
       const [attendance] = await pool.query(`
         SELECT * FROM attendance 
-        WHERE student_id_number = ? AND status = 'checked_in'
+        WHERE student_id_number = ? AND status = 'checked_in' AND is_deleted = 0
+        ORDER BY check_in_time DESC
+        LIMIT 1
       `, [studentIdNumber]);
 
       if (attendance.length === 0) {
-        return { success: false, error: "Student is not checked in" };
+        return { success: false, error: "Student is not currently checked in." };
       }
 
+      const record       = attendance[0];
       const checkOutTime = new Date();
-      const checkInTime = new Date(attendance[0].check_in_time);
-      const duration = Math.floor((checkOutTime - checkInTime) / 1000 / 60); // in minutes
+      const checkInTime  = new Date(record.check_in_time);
+      const duration     = Math.max(0, Math.floor((checkOutTime - checkInTime) / 1000 / 60));
 
-      await pool.query(
-        `UPDATE attendance 
-         SET check_out_time = ?, duration = ?, status = 'checked_out' 
-         WHERE id = ?`,
-        [checkOutTime, duration, attendance[0].id]
+      await pool.query(`
+        UPDATE attendance 
+        SET check_out_time = ?, duration = ?, status = 'checked_out'
+        WHERE id = ?
+      `, [checkOutTime, duration, record.id]);
+
+      const [rows] = await pool.query(
+        `SELECT * FROM attendance WHERE id = ?`, [record.id]
       );
 
-      const [rows] = await pool.query(`
-        SELECT * FROM attendance WHERE id = ?
-      `, [attendance[0].id]);
-
-      console.log(`✅ Student checked out: ${rows[0].student_name} (${studentIdNumber})`);
-      console.log(`⏱️ Duration: ${duration} minutes`);
-      
+      console.log(`✅ Checked OUT: ${rows[0].student_name} (${studentIdNumber}) — ${duration} min`);
       return { success: true, data: rows[0] };
     } catch (error) {
       console.error("[AttendanceModel.checkOut] Error:", error.message);
@@ -171,27 +254,26 @@ const AttendanceModel = {
   },
 
   /**
-   * Get attendance statistics
+   * Attendance statistics
    */
   async getStats() {
     try {
-      const [total] = await pool.query("SELECT COUNT(*) as count FROM attendance");
-      const [active] = await pool.query("SELECT COUNT(*) as count FROM attendance WHERE status = 'checked_in'");
-      const [checkedOut] = await pool.query("SELECT COUNT(*) as count FROM attendance WHERE status = 'checked_out'");
-      
-      const [totalDuration] = await pool.query(`
+      const [total]     = await pool.query("SELECT COUNT(*) as count FROM attendance WHERE is_deleted = 0");
+      const [active]    = await pool.query("SELECT COUNT(*) as count FROM attendance WHERE status = 'checked_in' AND is_deleted = 0");
+      const [checkedOut]= await pool.query("SELECT COUNT(*) as count FROM attendance WHERE status = 'checked_out' AND is_deleted = 0");
+      const [totalDur]  = await pool.query(`
         SELECT SUM(duration) as total FROM attendance 
-        WHERE status = 'checked_out' AND duration IS NOT NULL
+        WHERE status = 'checked_out' AND duration IS NOT NULL AND is_deleted = 0
       `);
 
-      return { 
-        success: true, 
+      return {
+        success: true,
         data: {
-          total: total[0].count,
-          active: active[0].count,
-          checkedOut: checkedOut[0].count,
-          totalDuration: totalDuration[0].total || 0
-        }
+          total:         total[0].count,
+          active:        active[0].count,
+          checkedOut:    checkedOut[0].count,
+          totalDuration: totalDur[0].total || 0,
+        },
       };
     } catch (error) {
       console.error("[AttendanceModel.getStats] Error:", error.message);
@@ -200,12 +282,14 @@ const AttendanceModel = {
   },
 
   /**
-   * Delete an attendance record
+   * Soft-delete an attendance record
    */
   async delete(id) {
     try {
       const TrashModel = require("./Trash");
-      const [attendance] = await pool.query("SELECT * FROM attendance WHERE id = ?", [id]);
+      const [attendance] = await pool.query(
+        "SELECT * FROM attendance WHERE id = ? AND is_deleted = 0", [id]
+      );
       if (attendance.length === 0) {
         return { success: false, error: "Attendance record not found" };
       }

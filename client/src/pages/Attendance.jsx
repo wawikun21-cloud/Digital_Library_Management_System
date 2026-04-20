@@ -1,17 +1,18 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import AttendanceTable from "../components/AttendanceTable";
+import { useNavigate } from "react-router-dom";
 import {
   Search, Clock, ArrowRight, ArrowLeft, Trash2, Users,
   AlertCircle, X, Download, Calendar, Filter, ChevronDown,
   User, Hash, GraduationCap, CheckCircle2, XCircle,
-  FileText, Timer, BookOpen, LogIn,
+  FileText, Timer, BookOpen, LogIn, AlertTriangle,
 } from "lucide-react";
 import {
   getAllAttendance,
   getActiveAttendance,
   getAttendanceStats,
   getAttendanceByStudentId,
-  checkIn,
+  tapAttendance,
   checkOut,
   deleteAttendance,
 } from "../services/api/attendanceApi";
@@ -55,10 +56,10 @@ function getInitials(name = "") {
 //  Sub-components
 // ─────────────────────────────────────────────────────────
 
-/** Colored initials avatar */
 function Avatar({ name, size = 32 }) {
   const COLORS = ["#32667F", "#EEA23A", "#2d7a47", "#7c3aed", "#EA8B33"];
   const bg = COLORS[(name?.charCodeAt(0) || 0) % COLORS.length];
+  const navigate = useNavigate();
   return (
     <div
       className="rounded-full flex items-center justify-center font-bold shrink-0 text-white"
@@ -69,7 +70,6 @@ function Avatar({ name, size = 32 }) {
   );
 }
 
-/** Checked-in / Checked-out pill */
 function StatusPill({ status }) {
   const isIn = status === "checked_in";
   return (
@@ -86,7 +86,6 @@ function StatusPill({ status }) {
   );
 }
 
-/** Live ticking timer */
 function LiveDuration({ checkInTime }) {
   const [elapsed, setElapsed] = useState(() =>
     Math.floor((Date.now() - new Date(checkInTime).getTime()) / 1000)
@@ -110,7 +109,6 @@ function LiveDuration({ checkInTime }) {
   );
 }
 
-/** Reusable spinner */
 function Spinner({ size = 18 }) {
   return (
     <svg
@@ -125,7 +123,137 @@ function Spinner({ size = 18 }) {
 }
 
 // ─────────────────────────────────────────────────────────
-//  PDF Generator — opens browser print dialog
+//  Student-Not-Found Error Modal
+// ─────────────────────────────────────────────────────────
+function StudentNotFoundModal({ studentId, onClose }) {
+  const overlayRef = useRef(null);
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handler = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={overlayRef}
+      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(10,22,34,0.65)", backdropFilter: "blur(4px)", animation: "overlayIn .18s ease" }}
+    >
+      <div
+        className="w-full flex flex-col items-center text-center gap-5 p-8 rounded-2xl"
+        style={{
+          maxWidth: 400,
+          background: "var(--bg-surface)",
+          border: "1px solid var(--border)",
+          boxShadow: "0 24px 60px rgba(0,0,0,0.28)",
+          animation: "modalIn .22s cubic-bezier(.34,1.56,.64,1)",
+        }}
+      >
+        {/* Icon */}
+        <div className="w-16 h-16 rounded-full flex items-center justify-center"
+          style={{ background: "rgba(220,38,38,0.1)", border: "1.5px solid rgba(220,38,38,0.25)" }}>
+          <AlertTriangle size={30} style={{ color: "#dc2626" }} />
+        </div>
+
+        {/* Text */}
+        <div className="flex flex-col gap-1.5">
+          <h2 className="text-[17px] font-bold" style={{ color: "var(--text-primary)" }}>
+            Student ID Not Found
+          </h2>
+          <p className="text-[13px]" style={{ color: "var(--text-secondary)" }}>
+            The ID{" "}
+            <span className="font-mono font-bold px-1.5 py-0.5 rounded"
+              style={{ background: "var(--bg-subtle)", color: "var(--text-primary)" }}>
+              {studentId}
+            </span>{" "}
+            does not match any registered student in the system.
+          </p>
+          <p className="text-[12px] mt-1" style={{ color: "var(--text-muted)" }}>
+            Please verify the ID and try again, or contact the librarian.
+          </p>
+        </div>
+
+        {/* Action */}
+        <button
+          onClick={onClose}
+          className="w-full py-2.5 rounded-xl text-[13px] font-semibold text-white transition-all hover:opacity-90 active:scale-[.98]"
+          style={{ background: "#dc2626", boxShadow: "0 2px 8px rgba(220,38,38,0.3)" }}
+        >
+          OK, Try Again
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+//  Tap-result feedback card
+// ─────────────────────────────────────────────────────────
+function TapResult({ result, onDismiss }) {
+  const isIn = result.action === "checked_in";
+
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 4000);
+    return () => clearTimeout(t);
+  }, [onDismiss]);
+
+  return (
+    <div
+      className="flex items-center gap-4 px-5 py-4 rounded-xl"
+      style={{
+        background: isIn ? "rgba(45,122,71,0.08)" : "rgba(238,162,58,0.10)",
+        border: `1px solid ${isIn ? "rgba(45,122,71,0.3)" : "rgba(238,162,58,0.4)"}`,
+        animation: "modalIn .22s cubic-bezier(.34,1.56,.64,1)",
+      }}
+    >
+      <div
+        className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+        style={{ background: isIn ? "rgba(45,122,71,0.15)" : "rgba(238,162,58,0.2)" }}
+      >
+        {isIn ? <CheckCircle2 size={20} style={{ color: "#2d7a47" }} /> : <XCircle size={20} style={{ color: "#b87a1a" }} />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[13px] font-bold truncate" style={{ color: isIn ? "#2d7a47" : "#b87a1a" }}>
+          {isIn ? "Checked In" : "Checked Out"} — {result.data?.student_name}
+        </p>
+        <div className="flex flex-wrap gap-1.5 mt-0.5">
+          {result.data?.student_course && (
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+              style={{ background: "rgba(50,102,127,.12)", color: "#32667F" }}>
+              {result.data.student_course}
+            </span>
+          )}
+          {result.data?.student_yr_level && (
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+              style={{ background: "rgba(124,58,237,.1)", color: "#7c3aed" }}>
+              {result.data.student_yr_level}
+            </span>
+          )}
+          {result.data?.school_year && (
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+              style={{ background: "rgba(16,185,129,.1)", color: "#059669" }}>
+              SY {result.data.school_year}
+            </span>
+          )}
+        </div>
+      </div>
+      <button onClick={onDismiss} className="shrink-0 opacity-50 hover:opacity-100 transition-opacity">
+        <X size={14} style={{ color: "var(--text-secondary)" }} />
+      </button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+//  PDF Generator
 // ─────────────────────────────────────────────────────────
 function printToPDF({ title, subtitle, columns, rows, footer }) {
   const e = (v) => String(v ?? "—").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -163,10 +291,10 @@ function downloadGeneralPDF(records) {
   printToPDF({
     title: "Library Attendance Report",
     subtitle: `Generated: ${new Date().toLocaleString("en-US")} · Total records: ${records.length}`,
-    columns: ["#", "Student Name", "ID Number", "Course", "Year Level", "Check In", "Check Out", "Duration", "Status"],
+    columns: ["#", "Student Name", "ID Number", "Course", "Year Level", "School Year", "Check In", "Check Out", "Duration", "Status"],
     rows: records.map((r, i) => [
       i + 1, r.student_name, r.student_id_number,
-      r.student_course || "—", r.student_yr_level || "—",
+      r.student_course || "—", r.student_yr_level || "—", r.school_year || "—",
       fmtDateTime(r.check_in_time),
       r.check_out_time ? fmtDateTime(r.check_out_time) : "—",
       r.status === "checked_in" ? "Still Inside" : fmtDuration(r.duration),
@@ -179,7 +307,7 @@ function downloadGeneralPDF(records) {
 function downloadIndividualPDF(person, history) {
   printToPDF({
     title: `Attendance History — ${person.student_name}`,
-    subtitle: `ID: ${person.student_id_number} · ${[person.student_course, person.student_yr_level].filter(Boolean).join(" ")} · Visits: ${history.length}`,
+    subtitle: `ID: ${person.student_id_number} · ${[person.student_course, person.student_yr_level, person.school_year ? `SY ${person.school_year}` : ""].filter(Boolean).join(" · ")} · Visits: ${history.length}`,
     columns: ["#", "Date", "Check In", "Check Out", "Duration", "Status"],
     rows: history.map((r, i) => [
       i + 1, fmtDate(r.check_in_time),
@@ -200,13 +328,11 @@ function StudentModal({ record, onClose }) {
   const [loading, setLoading] = useState(true);
   const overlayRef = useRef(null);
 
-  // Lock body scroll
   useEffect(() => {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = ""; };
   }, []);
 
-  // Fetch this student's full visit history
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -219,7 +345,6 @@ function StudentModal({ record, onClose }) {
 
   const totalMins  = history.reduce((a, r) => a + (r.duration || 0), 0);
   const totalHours = (totalMins / 60).toFixed(1);
-
   const handleOverlay = (e) => { if (e.target === overlayRef.current) onClose(); };
 
   return (
@@ -232,7 +357,7 @@ function StudentModal({ record, onClose }) {
       <div
         className="flex flex-col w-full overflow-hidden"
         style={{
-          maxWidth: 680, maxHeight: "90vh",
+          maxWidth: 700, maxHeight: "90vh",
           background: "var(--bg-surface)",
           border: "1px solid var(--border)",
           borderRadius: 16,
@@ -240,57 +365,57 @@ function StudentModal({ record, onClose }) {
           animation: "modalIn .22s cubic-bezier(.34,1.56,.64,1)",
         }}
       >
-        {/* ── Header ─────────────────────────────────────── */}
-        <div className="flex items-center justify-between px-6 py-4 shrink-0"
-          style={{ borderBottom: "1px solid var(--border-light)" }}>
-          <div className="flex items-center gap-3">
-            <Avatar name={record.student_name} size={44} />
-            <div>
-              <h2 className="text-base font-bold leading-snug" style={{ color: "var(--text-primary)" }}>
-                {record.student_name}
-              </h2>
-              <p className="text-[12px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
-                {[record.student_id_number, record.student_course, record.student_yr_level]
-                  .filter(Boolean).join(" · ")}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Individual PDF */}
-            <button
-              onClick={() => downloadIndividualPDF(record, history)}
-              disabled={loading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-colors disabled:opacity-50"
-              style={{ background: "var(--accent-amber)", boxShadow: "0 2px 6px rgba(238,162,58,.3)" }}
-            >
-              <Download size={13} /> Download PDF
-            </button>
-            {/* Close */}
-            <button
-              onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
-              style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
-            >
-              <X size={15} />
-            </button>
-          </div>
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+  <div>
+    <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
+      style={{ color: "var(--text-primary)" }}>
+      <Users size={22} style={{ color: "var(--accent-amber)" }} />
+      Attendance Management
+    </h1>
+    <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
+      Track student check-in / check-out and library visit history
+    </p>
+  </div>
+ 
+        <div className="flex items-center gap-2">
+          {/* Kiosk button */}
+          <button
+            onClick={() => navigate("/dashboard/attendance/kiosk")}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-colors"
+            style={{
+              background: "var(--bg-surface)",
+              border: "1.5px solid var(--border)",
+              color: "var(--text-primary)",
+            }}
+          >
+            <Monitor size={14} style={{ color: "var(--accent-amber)" }} />
+            Kiosk View
+          </button>
+      
+          {/* Existing PDF button */}
+          <button
+            onClick={() => downloadGeneralPDF(filtered)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors"
+            style={{ background: "var(--accent-amber)", boxShadow: "0 2px 8px rgba(238,162,58,.3)" }}
+          >
+            <Download size={14} /> Download PDF
+          </button>
         </div>
+      </div>
 
-        {/* ── Summary strip ───────────────────────────────── */}
+        {/* Summary strip */}
         <div className="grid grid-cols-3 gap-3 px-6 py-4 shrink-0"
           style={{ borderBottom: "1px solid var(--border-light)" }}>
           {[
-            { icon: BookOpen, label: "Total Visits",  value: history.length, color: "#32667F" },
-            { icon: Timer,    label: "Total Hours",   value: `${totalHours}h`, color: "#EEA23A" },
+            { icon: BookOpen, label: "Total Visits",   value: history.length, color: "#32667F" },
+            { icon: Timer,    label: "Total Hours",    value: `${totalHours}h`, color: "#EEA23A" },
             { icon: null,     label: "Current Status", value: null, status: record.status },
           ].map(({ icon: Icon, label, value, color, status }, i) => (
             <div key={i} className="flex flex-col gap-1 px-4 py-3 rounded-xl"
               style={{ background: "var(--bg-subtle)", border: "1px solid var(--border-light)" }}>
               <span className="text-[10.5px] font-semibold uppercase tracking-wide"
-                style={{ color: "var(--text-muted)" }}>
-                {label}
-              </span>
+                style={{ color: "var(--text-muted)" }}>{label}</span>
               {value !== null
                 ? <span className="text-[22px] font-bold leading-none" style={{ color }}>{value}</span>
                 : <StatusPill status={status} />
@@ -299,21 +424,18 @@ function StudentModal({ record, onClose }) {
           ))}
         </div>
 
-        {/* ── History table ────────────────────────────────── */}
+        {/* History table */}
         <div className="flex-1 overflow-y-auto px-6 pb-5">
           <p className="text-[10.5px] font-bold uppercase tracking-wider mt-4 mb-3"
             style={{ color: "var(--text-muted)" }}>
             Visit History
           </p>
-
           {loading ? (
-            <div className="flex items-center justify-center gap-2.5 py-12"
-              style={{ color: "var(--text-secondary)" }}>
+            <div className="flex items-center justify-center gap-2.5 py-12" style={{ color: "var(--text-secondary)" }}>
               <Spinner /> <span className="text-[13px]">Loading history…</span>
             </div>
           ) : history.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-2"
-              style={{ color: "var(--text-muted)" }}>
+            <div className="flex flex-col items-center justify-center py-12 gap-2" style={{ color: "var(--text-muted)" }}>
               <AlertCircle size={32} className="opacity-30" />
               <span className="text-[13px]">No visit history found.</span>
             </div>
@@ -322,12 +444,9 @@ function StudentModal({ record, onClose }) {
               <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">#</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Check In</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Check Out</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Duration</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
+                    {["#", "Date", "Check In", "Check Out", "Duration", "Status"].map((h) => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">{h}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
@@ -338,13 +457,10 @@ function StudentModal({ record, onClose }) {
                       <td className="px-4 py-3 text-sm text-slate-600">{fmtDateTime(r.check_in_time)}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{r.check_out_time ? fmtDateTime(r.check_out_time) : "—"}</td>
                       <td className="px-4 py-3">
-                        {r.status === "checked_in" ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600">
-                            <Clock size={12} className="animate-pulse" /> Live
-                          </span>
-                        ) : (
-                          <span className="text-sm font-mono text-slate-900">{fmtDuration(r.duration)}</span>
-                        )}
+                        {r.status === "checked_in"
+                          ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600"><Clock size={12} className="animate-pulse" /> Live</span>
+                          : <span className="text-sm font-mono text-slate-900">{fmtDuration(r.duration)}</span>
+                        }
                       </td>
                       <td className="px-4 py-3"><StatusPill status={r.status} /></td>
                     </tr>
@@ -363,26 +479,30 @@ function StudentModal({ record, onClose }) {
 //  Main Page
 // ─────────────────────────────────────────────────────────
 export default function Attendance() {
-  // ── Data state ────────────────────────────────────────
-  const [records, setRecords]       = useState([]);
-  const [active, setActive]         = useState([]);
-  const [stats, setStats]           = useState(null);
-  const [isLoading, setIsLoading]   = useState(true);
+  // ── Data ──────────────────────────────────────────────
+  const [records, setRecords]     = useState([]);
+  const [active, setActive]       = useState([]);
+  const [stats, setStats]         = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // ── Smart filter state ────────────────────────────────
+  // ── Filter state ──────────────────────────────────────
   const [fSearch, setFSearch] = useState("");
   const [fCourse, setFCourse] = useState("");
   const [fDate,   setFDate]   = useState("");
   const [fStatus, setFStatus] = useState("all");
 
-  // ── Check-in form ─────────────────────────────────────
+  // ── Tap / check-in form ───────────────────────────────
   const [idInput,     setIdInput]     = useState("");
-  const [studentInfo, setStudentInfo] = useState(null);
+  const [tapping,     setTapping]     = useState(false);  // request in-flight
+  const [tapResult,   setTapResult]   = useState(null);   // last successful tap
+  const [studentInfo, setStudentInfo] = useState(null);   // live lookup preview
   const [lookingUp,   setLookingUp]   = useState(false);
-  const debouncedId = useDebounce(idInput, 500);
+  const debouncedId = useDebounce(idInput, 400);
+  const inputRef = useRef(null);
 
-  // ── Modal ─────────────────────────────────────────────
-  const [selectedRecord, setSelectedRecord] = useState(null);
+  // ── Modals ────────────────────────────────────────────
+  const [selectedRecord,    setSelectedRecord]    = useState(null);
+  const [notFoundStudentId, setNotFoundStudentId] = useState(null); // error modal
 
   // ── Toast ─────────────────────────────────────────────
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
@@ -409,33 +529,59 @@ export default function Attendance() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ── Student lookup ────────────────────────────────────
+  // ── Live student lookup as user types ─────────────────
   useEffect(() => {
     if (!debouncedId?.trim()) { setStudentInfo(null); return; }
     let cancelled = false;
     setLookingUp(true);
-    getStudentByStudentIdNumber(debouncedId)
-      .then((res) => { if (!cancelled) setStudentInfo(res.success ? res.data : null); })
+    getStudentByStudentIdNumber(debouncedId.trim())
+      .then((res) => {
+        if (!cancelled) setStudentInfo(res.success ? res.data : null);
+      })
       .catch(() => { if (!cancelled) setStudentInfo(null); })
       .finally(() => { if (!cancelled) setLookingUp(false); });
     return () => { cancelled = true; };
   }, [debouncedId]);
 
-  // ── Check-in ──────────────────────────────────────────
-  const handleCheckIn = async (e) => {
-    e.preventDefault();
-    if (!idInput.trim()) { showToast("Please enter a student ID", "error"); return; }
-    if (!studentInfo)    { showToast("Student does not exist", "error"); return; }
+  // ── Tap handler (check-in / check-out toggle) ─────────
+  const handleTap = useCallback(async (e) => {
+    e?.preventDefault();
+    const id = idInput.trim();
+    if (!id) return;
+
+    setTapping(true);
     try {
-      const res = await checkIn({ student_id_number: idInput });
+      const res = await tapAttendance(id);
+
       if (res.success) {
-        showToast("Student checked in successfully");
-        setIdInput(""); setStudentInfo(null); fetchData();
-      } else showToast(res.error || "Check-in failed", "error");
-    } catch { showToast("Failed to check in student", "error"); }
+        setTapResult(res);
+        setIdInput("");
+        setStudentInfo(null);
+        fetchData();
+        // Re-focus the input for rapid scanning
+        setTimeout(() => inputRef.current?.focus(), 50);
+      } else {
+        // Student not found → show error modal
+        if (res.error?.toLowerCase().includes("not found")) {
+          setNotFoundStudentId(id);
+          setIdInput("");
+        } else {
+          showToast(res.error || "Action failed", "error");
+        }
+      }
+    } catch {
+      showToast("Network error — please try again", "error");
+    } finally {
+      setTapping(false);
+    }
+  }, [idInput, fetchData, showToast]);
+
+  // Support barcode scanners: submit on Enter key
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") handleTap(e);
   };
 
-  // ── Check-out ─────────────────────────────────────────
+  // ── Manual check-out from active table ────────────────
   const handleCheckOut = async (idNumber) => {
     try {
       const res = await checkOut(idNumber);
@@ -455,27 +601,26 @@ export default function Attendance() {
     } catch { showToast("Failed to delete record", "error"); }
   };
 
-  // ── Derived values ────────────────────────────────────
+  // ── Derived ───────────────────────────────────────────
   const courses = useMemo(
     () => [...new Set(records.map((r) => r.student_course).filter(Boolean))].sort(),
     [records]
   );
 
   const filtered = useMemo(() => {
-    const searchQ = fSearch.toLowerCase().trim();
+    const q = fSearch.toLowerCase().trim();
     return records.filter((r) => {
-      if (searchQ && !r.student_name.toLowerCase().includes(searchQ) && !r.student_id_number.toLowerCase().includes(searchQ)) return false;
-      if (fCourse  && r.student_course !== fCourse) return false;
-      if (fDate    && new Date(r.check_in_time).toISOString().slice(0, 10) !== fDate) return false;
-      if (fStatus !== "all" && r.status !== fStatus) return false;
+      if (q && !r.student_name.toLowerCase().includes(q) && !r.student_id_number.toLowerCase().includes(q)) return false;
+      if (fCourse  && r.student_course !== fCourse)                                         return false;
+      if (fDate    && new Date(r.check_in_time).toISOString().slice(0, 10) !== fDate)       return false;
+      if (fStatus !== "all" && r.status !== fStatus)                                        return false;
       return true;
     });
   }, [records, fSearch, fCourse, fDate, fStatus]);
 
-  const hasFilters = fSearch || fCourse || fDate || fStatus !== "all";
+  const hasFilters  = fSearch || fCourse || fDate || fStatus !== "all";
   const clearFilters = () => { setFSearch(""); setFCourse(""); setFDate(""); setFStatus("all"); };
 
-  // ── Shared field wrapper ──────────────────────────────
   const FilterField = ({ icon: Icon, children }) => (
     <div className="relative flex items-center">
       {Icon && (
@@ -500,7 +645,7 @@ export default function Attendance() {
   return (
     <div className="flex flex-col gap-5">
 
-      {/* ── Page Header ──────────────────────────────────── */}
+      {/* ── Page Header ────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
@@ -512,8 +657,6 @@ export default function Attendance() {
             Track student check-in / check-out and library visit history
           </p>
         </div>
-
-        {/* General PDF download */}
         <button
           onClick={() => downloadGeneralPDF(filtered)}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors"
@@ -523,13 +666,13 @@ export default function Attendance() {
         </button>
       </div>
 
-      {/* ── Stats Cards ──────────────────────────────────── */}
+      {/* ── Stats Cards ────────────────────────────────── */}
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Total Visits",      value: stats.total,                                        color: "#3b82f6", icon: BookOpen    },
-            { label: "In Library Now",    value: stats.active,                                       color: "#22c55e", icon: Users       },
-            { label: "Total Hours",       value: `${Math.round((stats.totalDuration || 0) / 60)}h`,  color: "#EEA23A", icon: Timer       },
+            { label: "Total Visits",      value: stats.total,                                        color: "#3b82f6", icon: BookOpen     },
+            { label: "In Library Now",    value: stats.active,                                       color: "#22c55e", icon: Users        },
+            { label: "Total Hours",       value: `${Math.round((stats.totalDuration || 0) / 60)}h`,  color: "#EEA23A", icon: Timer        },
             { label: "Checked Out Today", value: stats.checkedOut,                                   color: "#a855f7", icon: CheckCircle2 },
           ].map(({ label, value, color, icon: Icon }) => (
             <div key={label}
@@ -548,34 +691,48 @@ export default function Attendance() {
         </div>
       )}
 
-      {/* ── Check-In Form ─────────────────────────────────── */}
+      {/* ── Check-In / Tap Form ────────────────────────── */}
       <div className="rounded-xl px-5 py-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
         <p className="flex items-center gap-2 text-[13px] font-semibold mb-3"
           style={{ color: "var(--text-primary)" }}>
           <LogIn size={14} style={{ color: "var(--accent-amber)" }} />
-          Check In Student
+          Student ID Tap — Check In / Check Out
         </p>
 
-        <form onSubmit={handleCheckIn} className="flex flex-col sm:flex-row gap-3 items-start">
-          {/* ID input + preview */}
+        {/* Helper text */}
+        <p className="text-[11.5px] mb-3" style={{ color: "var(--text-muted)" }}>
+          Enter or scan a student ID. First tap checks in, second tap checks out automatically.
+        </p>
+
+        <div className="flex flex-col sm:flex-row gap-3 items-start">
+          {/* ID input */}
           <div className="flex-1 w-full">
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
                 style={{ color: "var(--text-muted)" }} />
               <input
+                ref={inputRef}
                 type="text"
                 value={idInput}
                 onChange={(e) => setIdInput(e.target.value)}
-                placeholder="Enter student ID number…"
-                className="w-full pl-9 pr-4 py-2.5 rounded-lg text-[13px] outline-none transition-all focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400"
+                onKeyDown={handleKeyDown}
+                placeholder="Enter or scan Student ID…"
+                disabled={tapping}
+                autoFocus
+                className="w-full pl-9 pr-4 py-2.5 rounded-lg text-[13px] outline-none transition-all focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 disabled:opacity-60"
                 style={{
                   background: "var(--bg-input)", border: "1.5px solid var(--border)",
                   color: "var(--text-primary)",
                 }}
               />
+              {tapping && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <Spinner size={15} />
+                </div>
+              )}
             </div>
 
-            {/* Feedback rows */}
+            {/* Live lookup feedback */}
             {lookingUp && (
               <div className="flex items-center gap-2 mt-2 text-[12px]"
                 style={{ color: "var(--text-secondary)" }}>
@@ -601,9 +758,13 @@ export default function Attendance() {
                     {studentInfo.student_yr_level && (
                       <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
                         style={{ background: "rgba(124,58,237,.1)", color: "#7c3aed" }}>
-                        {studentInfo.student_yr_level.toLowerCase().includes("year")
-                          ? studentInfo.student_yr_level
-                          : `Year ${studentInfo.student_yr_level}`}
+                        {studentInfo.student_yr_level}
+                      </span>
+                    )}
+                    {studentInfo.student_school_year && (
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                        style={{ background: "rgba(16,185,129,.1)", color: "#059669" }}>
+                        SY {studentInfo.student_school_year}
                       </span>
                     )}
                   </div>
@@ -611,29 +772,36 @@ export default function Attendance() {
               </div>
             )}
 
-            {!studentInfo && !lookingUp && idInput.trim() !== "" && (
+            {!studentInfo && !lookingUp && idInput.trim() !== "" && !tapping && (
               <p className="mt-1.5 text-[12px] font-medium" style={{ color: "#dc2626" }}>
                 Student not found in the system.
               </p>
+            )}
+
+            {/* Last tap result feedback */}
+            {tapResult && (
+              <div className="mt-2">
+                <TapResult result={tapResult} onDismiss={() => setTapResult(null)} />
+              </div>
             )}
           </div>
 
           {/* Submit */}
           <button
-            type="submit"
-            disabled={!studentInfo}
+            onClick={handleTap}
+            disabled={!idInput.trim() || tapping}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
             style={{
               background: "var(--accent-amber)",
-              boxShadow: studentInfo ? "0 2px 6px rgba(238,162,58,.3)" : "none",
+              boxShadow: idInput.trim() ? "0 2px 6px rgba(238,162,58,.3)" : "none",
             }}
           >
             <ArrowRight size={15} /> Check In
           </button>
-        </form>
+        </div>
       </div>
 
-      {/* ── Currently Active Students ──────────────────────── */}
+      {/* ── Currently Active Students ───────────────────── */}
       {active.length > 0 && (
         <div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
           <div className="flex items-center gap-2 px-5 py-3.5"
@@ -652,13 +820,9 @@ export default function Attendance() {
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-emerald-50/50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Student</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Course</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Year</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Check In</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Duration</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">Action</th>
+                  {["Student", "ID", "Course", "Year", "School Year", "Check In", "Duration", "Action"].map((h) => (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
@@ -674,18 +838,15 @@ export default function Attendance() {
                         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400/20 to-emerald-500/20 flex items-center justify-center border border-emerald-200/50">
                           <span className="text-xs font-bold text-emerald-700">{getInitials(s.student_name)}</span>
                         </div>
-                        <div>
-                          <span className="font-semibold text-sm text-slate-900 group-hover:text-slate-700">{s.student_name}</span>
-                        </div>
+                        <span className="font-semibold text-sm text-slate-900 group-hover:text-slate-700">{s.student_name}</span>
                       </div>
                     </td>
                     <td className="px-4 py-4 text-sm text-slate-600 font-mono">{s.student_id_number}</td>
                     <td className="px-4 py-4 text-sm text-slate-600 font-medium">{s.student_course || "—"}</td>
                     <td className="px-4 py-4 text-sm text-slate-600">{s.student_yr_level || "—"}</td>
+                    <td className="px-4 py-4 text-sm text-slate-600">{s.school_year || "—"}</td>
                     <td className="px-4 py-4 text-sm text-slate-600">{fmtDateTime(s.check_in_time)}</td>
-                    <td className="px-4 py-4">
-                      <LiveDuration checkInTime={s.check_in_time} />
-                    </td>
+                    <td className="px-4 py-4"><LiveDuration checkInTime={s.check_in_time} /></td>
                     <td className="px-4 py-4 whitespace-nowrap">
                       <button
                         onClick={(e) => { e.stopPropagation(); handleCheckOut(s.student_id_number); }}
@@ -702,9 +863,8 @@ export default function Attendance() {
         </div>
       )}
 
-{/* ── Attendance History ─────────────────────────────── */}
+      {/* ── Attendance History ──────────────────────────── */}
       <div className="rounded-xl overflow-hidden border border-slate-200/60 shadow-sm" style={{ background: "var(--bg-surface)" }}>
-        {/* Card header - unchanged */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-200"
           style={{ borderBottom: "1px solid var(--border-light)" }}>
           <div className="flex items-center gap-2">
@@ -718,7 +878,6 @@ export default function Attendance() {
               </span>
             )}
           </div>
-
           {hasFilters && (
             <button
               onClick={clearFilters}
@@ -730,22 +889,19 @@ export default function Attendance() {
           )}
         </div>
 
-        {/* ── Smart Filters Row - unchanged */}
+        {/* Filters Row */}
         <div className="flex flex-wrap gap-2.5 p-5 bg-gradient-to-r from-slate-50/70 to-slate-50/30 backdrop-blur-sm"
           style={{ borderBottom: "1px solid var(--border-light)" }}>
 
-          {/* Unified Search */}
           <FilterField icon={User}>
             <input
-              type="text" placeholder="Search Name or ID Number..." value={fSearch}
+              type="text" placeholder="Search Name or ID…" value={fSearch}
               onChange={(e) => setFSearch(e.target.value)}
               className={`${filterInputCls} pr-8`}
               style={{ ...filterInputStyle, minWidth: 220 }}
             />
-            <Hash size={12} className="absolute right-9 pointer-events-none" style={{ color: "var(--text-muted)" }} />
           </FilterField>
 
-          {/* Course */}
           <FilterField icon={GraduationCap}>
             <select
               value={fCourse} onChange={(e) => setFCourse(e.target.value)}
@@ -759,7 +915,6 @@ export default function Attendance() {
               style={{ color: "var(--text-muted)" }} />
           </FilterField>
 
-          {/* Date */}
           <FilterField icon={Calendar}>
             <input
               type="date" value={fDate}
@@ -769,7 +924,6 @@ export default function Attendance() {
             />
           </FilterField>
 
-          {/* Status */}
           <FilterField icon={Filter}>
             <select
               value={fStatus} onChange={(e) => setFStatus(e.target.value)}
@@ -785,7 +939,6 @@ export default function Attendance() {
           </FilterField>
         </div>
 
-        {/* Enhanced Table Component */}
         <AttendanceTable
           data={filtered}
           loading={isLoading}
@@ -797,12 +950,22 @@ export default function Attendance() {
         />
       </div>
 
-      {/* ── Student History Modal ─────────────────────────── */}
+      {/* ── Modals ─────────────────────────────────────── */}
       {selectedRecord && (
         <StudentModal record={selectedRecord} onClose={() => setSelectedRecord(null)} />
       )}
 
-      {/* ── Toast ────────────────────────────────────────── */}
+      {notFoundStudentId && (
+        <StudentNotFoundModal
+          studentId={notFoundStudentId}
+          onClose={() => {
+            setNotFoundStudentId(null);
+            setTimeout(() => inputRef.current?.focus(), 50);
+          }}
+        />
+      )}
+
+      {/* ── Toast ──────────────────────────────────────── */}
       {toast.show && (
         <Toast
           message={toast.message} type={toast.type}
@@ -810,7 +973,6 @@ export default function Attendance() {
         />
       )}
 
-      {/* Animation keyframes */}
       <style>{`
         @keyframes overlayIn { from { opacity: 0 } to { opacity: 1 } }
         @keyframes modalIn   { from { opacity: 0; transform: scale(.94) translateY(10px) } to { opacity: 1; transform: scale(1) translateY(0) } }

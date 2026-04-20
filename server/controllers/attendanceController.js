@@ -6,198 +6,147 @@
 const AttendanceModel = require("../models/Attendance");
 
 const AttendanceController = {
-  /**
-   * Get all attendance records
-   */
+
+  /** GET /api/attendance — all records */
   async getAllAttendance(req, res) {
     try {
       const result = await AttendanceModel.getAll();
       if (result.success) {
-        res.status(200).json({
-          success: true,
-          data: result.data,
-          message: "Attendance records retrieved successfully"
-        });
-      } else {
-        res.status(400).json({
-          success: false,
-          error: result.error
-        });
+        return res.status(200).json({ success: true, data: result.data, message: "Attendance records retrieved successfully" });
       }
+      return res.status(400).json({ success: false, error: result.error });
     } catch (error) {
-      console.error("[AttendanceController.getAllAttendance] Error:", error);
-      res.status(500).json({
-        success: false,
-        error: "Internal server error"
-      });
+      console.error("[AttendanceController.getAllAttendance]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
     }
   },
 
-  /**
-   * Get active attendance records (checked in)
-   */
+  /** GET /api/attendance/active — currently checked-in */
   async getActiveAttendance(req, res) {
     try {
       const result = await AttendanceModel.getActiveAttendance();
       if (result.success) {
-        res.status(200).json({
-          success: true,
-          data: result.data,
-          message: "Active attendance records retrieved successfully"
-        });
-      } else {
-        res.status(400).json({
-          success: false,
-          error: result.error
-        });
+        return res.status(200).json({ success: true, data: result.data, message: "Active attendance records retrieved successfully" });
       }
+      return res.status(400).json({ success: false, error: result.error });
     } catch (error) {
-      console.error("[AttendanceController.getActiveAttendance] Error:", error);
-      res.status(500).json({
-        success: false,
-        error: "Internal server error"
-      });
+      console.error("[AttendanceController.getActiveAttendance]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
     }
   },
 
-  /**
-   * Get attendance by student ID
-   */
+  /** GET /api/attendance/student/:studentIdNumber */
   async getAttendanceByStudentId(req, res) {
     try {
       const { studentIdNumber } = req.params;
       const result = await AttendanceModel.getByStudentId(studentIdNumber);
       if (result.success) {
-        res.status(200).json({
-          success: true,
-          data: result.data,
-          message: "Student attendance records retrieved successfully"
-        });
-      } else {
-        res.status(400).json({
-          success: false,
-          error: result.error
-        });
+        return res.status(200).json({ success: true, data: result.data, message: "Student attendance records retrieved successfully" });
       }
+      return res.status(400).json({ success: false, error: result.error });
     } catch (error) {
-      console.error("[AttendanceController.getAttendanceByStudentId] Error:", error);
-      res.status(500).json({
-        success: false,
-        error: "Internal server error"
-      });
+      console.error("[AttendanceController.getAttendanceByStudentId]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  /** GET /api/attendance/stats */
+  async getAttendanceStats(req, res) {
+    try {
+      const result = await AttendanceModel.getStats();
+      if (result.success) {
+        return res.status(200).json({ success: true, data: result.data, message: "Attendance statistics retrieved successfully" });
+      }
+      return res.status(400).json({ success: false, error: result.error });
+    } catch (error) {
+      console.error("[AttendanceController.getAttendanceStats]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
     }
   },
 
   /**
-   * Check in a student
+   * POST /api/attendance/tap/:studentIdNumber
+   * First tap → check in. Second tap → check out.
+   * All student info is pulled automatically from the students table.
    */
+  async tap(req, res) {
+    try {
+      const { studentIdNumber } = req.params;
+
+      if (!studentIdNumber?.trim()) {
+        return res.status(400).json({ success: false, error: "Student ID is required." });
+      }
+
+      const result = await AttendanceModel.tap(studentIdNumber.trim());
+
+      if (result.success) {
+        const statusCode = result.action === 'checked_in' ? 201 : 200;
+        const message    = result.action === 'checked_in'
+          ? `${result.data.student_name} checked in successfully`
+          : `${result.data.student_name} checked out successfully`;
+
+        return res.status(statusCode).json({
+          success: true,
+          action:  result.action,
+          data:    result.data,
+          message,
+        });
+      }
+
+      // "Student ID not found" → 404, anything else → 400
+      const statusCode = result.error?.toLowerCase().includes("not found") ? 404 : 400;
+      return res.status(statusCode).json({ success: false, error: result.error });
+
+    } catch (error) {
+      console.error("[AttendanceController.tap]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  /** POST /api/attendance/check-in (explicit, kept for compatibility) */
   async checkIn(req, res) {
     try {
-      const attendanceData = req.body;
-      const result = await AttendanceModel.checkIn(attendanceData);
+      const result = await AttendanceModel.checkIn(req.body);
       if (result.success) {
-        res.status(201).json({
-          success: true,
-          data: result.data,
-          message: "Student checked in successfully"
-        });
-      } else {
-        res.status(400).json({
-          success: false,
-          error: result.error
-        });
+        return res.status(201).json({ success: true, data: result.data, message: "Student checked in successfully" });
       }
+      const statusCode = result.error?.toLowerCase().includes("not found") ? 404 : 400;
+      return res.status(statusCode).json({ success: false, error: result.error });
     } catch (error) {
-      console.error("[AttendanceController.checkIn] Error:", error);
-      res.status(500).json({
-        success: false,
-        error: "Internal server error"
-      });
+      console.error("[AttendanceController.checkIn]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
     }
   },
 
-  /**
-   * Check out a student
-   */
+  /** POST /api/attendance/check-out/:studentIdNumber (explicit) */
   async checkOut(req, res) {
     try {
       const { studentIdNumber } = req.params;
       const result = await AttendanceModel.checkOut(studentIdNumber);
       if (result.success) {
-        res.status(200).json({
-          success: true,
-          data: result.data,
-          message: "Student checked out successfully"
-        });
-      } else {
-        res.status(400).json({
-          success: false,
-          error: result.error
-        });
+        return res.status(200).json({ success: true, data: result.data, message: "Student checked out successfully" });
       }
+      return res.status(400).json({ success: false, error: result.error });
     } catch (error) {
-      console.error("[AttendanceController.checkOut] Error:", error);
-      res.status(500).json({
-        success: false,
-        error: "Internal server error"
-      });
+      console.error("[AttendanceController.checkOut]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
     }
   },
 
-  /**
-   * Get attendance statistics
-   */
-  async getAttendanceStats(req, res) {
-    try {
-      const result = await AttendanceModel.getStats();
-      if (result.success) {
-        res.status(200).json({
-          success: true,
-          data: result.data,
-          message: "Attendance statistics retrieved successfully"
-        });
-      } else {
-        res.status(400).json({
-          success: false,
-          error: result.error
-        });
-      }
-    } catch (error) {
-      console.error("[AttendanceController.getAttendanceStats] Error:", error);
-      res.status(500).json({
-        success: false,
-        error: "Internal server error"
-      });
-    }
-  },
-
-  /**
-   * Delete an attendance record
-   */
+  /** DELETE /api/attendance/:id */
   async deleteAttendance(req, res) {
     try {
       const { id } = req.params;
       const result = await AttendanceModel.delete(id);
       if (result.success) {
-        res.status(200).json({
-          success: true,
-          data: result.data,
-          message: "Attendance record deleted successfully"
-        });
-      } else {
-        res.status(400).json({
-          success: false,
-          error: result.error
-        });
+        return res.status(200).json({ success: true, data: result.data, message: "Attendance record deleted successfully" });
       }
+      return res.status(400).json({ success: false, error: result.error });
     } catch (error) {
-      console.error("[AttendanceController.deleteAttendance] Error:", error);
-      res.status(500).json({
-        success: false,
-        error: "Internal server error"
-      });
+      console.error("[AttendanceController.deleteAttendance]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
     }
-  }
+  },
 };
 
 module.exports = AttendanceController;

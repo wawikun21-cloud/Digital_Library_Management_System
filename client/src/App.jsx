@@ -6,8 +6,6 @@ import { useLocalStorage } from "./hooks/useLocalStorage";
 import { STORAGE_KEYS } from "./constants/index.js";
 
 // ── Lazy-loaded pages — each becomes its own JS chunk ────────────────────────
-// The xlsx library (≈500 KB) lives only in the Students / Faculty / Books
-// import chunks, so it is never downloaded on the initial page load.
 const Dashboard       = lazy(() => import("./pages/Dashboard"));
 const Books           = lazy(() => import("./pages/Books"));
 const Borrowed        = lazy(() => import("./pages/Borrowed"));
@@ -18,6 +16,7 @@ const RecentlyDeleted = lazy(() => import("./pages/RecentlyDeleted"));
 const LexoraBooks     = lazy(() => import("./pages/LexoraBooks"));
 const Login           = lazy(() => import("./pages/Login"));
 const LandingPage     = lazy(() => import("./landing/landingpage"));
+const KioskAttendance = lazy(() => import("./pages/KioskAttendance"));
 
 // ── Apply theme to <html> immediately on first paint ─────────────────────────
 const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
@@ -28,8 +27,38 @@ if (savedTheme) {
   );
 }
 
-// ── Minimal full-screen loader shown while lazy chunks download ──────────────
+// ── Spinner shown inside the content area while a lazy chunk loads ────────────
+// This intentionally does NOT fill the whole screen so the sidebar/topbar
+// remain visible and it never looks like a full page reload.
 function PageLoader() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100%",
+        minHeight: "60vh",
+        background: "transparent",
+      }}
+    >
+      <div
+        style={{
+          width: "32px",
+          height: "32px",
+          border: "3px solid var(--border-color, #e5e7eb)",
+          borderTop: "3px solid var(--primary, #6366f1)",
+          borderRadius: "50%",
+          animation: "spin 0.7s linear infinite",
+        }}
+      />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+// ── Full-screen loader ONLY for top-level public routes (Login / Landing) ────
+function FullPageLoader() {
   return (
     <div
       style={{
@@ -39,22 +68,49 @@ function PageLoader() {
         height: "100vh",
         background: "var(--bg-main, #fff)",
       }}
-    />
+    >
+      <div
+        style={{
+          width: "32px",
+          height: "32px",
+          border: "3px solid var(--border-color, #e5e7eb)",
+          borderTop: "3px solid var(--primary, #6366f1)",
+          borderRadius: "50%",
+          animation: "spin 0.7s linear infinite",
+        }}
+      />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
   );
+}
+
+// ── Wraps every dashboard child route so Layout stays mounted ─────────────────
+function Page({ children }) {
+  return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
 }
 
 function ProtectedRoute({ children }) {
   const [status, setStatus] = useState("checking");
+  const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
 
   useEffect(() => {
+    if (user) {
+      setStatus("ok");
+      authApi.me().catch(() => {
+        localStorage.removeItem(STORAGE_KEYS.LEXORA_USER);
+        sessionStorage.removeItem("lexora_user");
+        setStatus("unauth");
+      });
+      return;
+    }
     authApi.me()
       .then(() => setStatus("ok"))
       .catch(() => {
         sessionStorage.removeItem("lexora_user");
-        localStorage.removeItem("lexora_user");
+        localStorage.removeItem(STORAGE_KEYS.LEXORA_USER);
         setStatus("unauth");
       });
-  }, []);
+  }, [user]);
 
   if (status === "checking") return null;
   if (status === "unauth")   return <Navigate to="/login" replace />;
@@ -86,13 +142,18 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Suspense fallback={<PageLoader />}>
+      {/*
+        Top-level Suspense: only kicks in for the public routes (Login, Landing).
+        Dashboard child routes use their own <Page> wrapper below so that
+        the Layout (sidebar + topbar) is NEVER unmounted during navigation.
+      */}
+      <Suspense fallback={<FullPageLoader />}>
         <Routes>
           {/* Public routes */}
           <Route path="/"      element={<LandingRouteGuard />} />
           <Route path="/login" element={<Login />} />
 
-          {/* Protected routes */}
+          {/* Protected routes — Layout stays mounted; only outlet swaps */}
           <Route
             path="/dashboard"
             element={
@@ -101,14 +162,15 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index                 element={<Dashboard />}       />
-            <Route path="books"          element={<Books />}           />
-            <Route path="lexora-books"   element={<LexoraBooks />}     />
-            <Route path="borrowed"       element={<Borrowed />}        />
-            <Route path="attendance"     element={<Attendance />}      />
-            <Route path="students"       element={<Students />}        />
-            <Route path="faculty"        element={<Faculty />}         />
-            <Route path="deleted"        element={<RecentlyDeleted />} />
+            <Route index                   element={<Page><Dashboard /></Page>}       />
+            <Route path="books"            element={<Page><Books /></Page>}           />
+            <Route path="lexora-books"     element={<Page><LexoraBooks /></Page>}     />
+            <Route path="borrowed"         element={<Page><Borrowed /></Page>}        />
+            <Route path="attendance"       element={<Page><Attendance /></Page>}      />
+            <Route path="students"         element={<Page><Students /></Page>}        />
+            <Route path="faculty"          element={<Page><Faculty /></Page>}         />
+            <Route path="attendance/kiosk" element={<Page><KioskAttendance /></Page>} />
+            <Route path="deleted"          element={<Page><RecentlyDeleted /></Page>} />
           </Route>
 
           {/* Catch-all → landing */}
