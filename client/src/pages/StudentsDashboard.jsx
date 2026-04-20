@@ -1,25 +1,26 @@
 /**
  * client/src/pages/StudentsDashboard.jsx
  *
- * Students Overview Dashboard — pure UI, no backend.
- * Matches wireframe exactly:
- *  • Header with Academic Year selector + user info
- *  • Filter bar (Semester, Course/Program, Region, City, Barangay, Feeder School, Gender)
- *  • 6 KPI cards
- *  • Student Distribution Map (SVG choropleth) + Course Demand (bar + donut)
- *  • Top Feeder Schools table + Attendance Insights (3 panels) + Location vs Course table
- *  • Enrollment Trends line + Course Growth Trends multi-line + Enrollment by Gender donut
+ * Real Leaflet + GeoJSON choropleth map of Cagayan de Oro barangays.
+ * Minimal UI — smaller text, tighter spacing, icon-only where possible.
+ *
+ * Requirements (already in package.json after your install):
+ *   npm install leaflet react-leaflet@4
+ *
+ * Add to client/index.html <head>:
+ *   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
  */
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
+  BarChart, Bar, LineChart, Line, XAxis, YAxis,
+  CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
 } from "recharts";
 import {
-  Users, UserPlus, CalendarCheck, GraduationCap, MapPin, School,
-  ChevronDown, RefreshCw, Bell, User, ArrowUpRight, ArrowDownRight,
-  Filter, X,
+  Users, UserPlus, CalendarCheck, GraduationCap,
+  MapPin, School, ChevronDown, RefreshCw,
+  TrendingUp, TrendingDown,
 } from "lucide-react";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -27,177 +28,294 @@ const C = {
   navy:   "#132F45",
   teal:   "#32667F",
   amber:  "#EEA23A",
-  blue:   "#3b82f6",
-  indigo: "#6366f1",
+  blue:   "#4285f4",
   green:  "#22c55e",
   rose:   "#f43f5e",
-  purple: "#a855f7",
   cyan:   "#06b6d4",
   orange: "#f97316",
   pink:   "#ec4899",
+  indigo: "#6366f1",
   slate:  "#64748b",
 };
 
-// ── Mock Data ─────────────────────────────────────────────────────────────────
-const COURSE_BAR = [
-  { course: "BSIT",   students: 808 },
-  { course: "BSBA",   students: 617 },
-  { course: "BSED",   students: 470 },
-  { course: "BSN",    students: 352 },
-  { course: "BSA",    students: 222 },
-  { course: "BEED",   students: 173 },
-  { course: "BTVTED", students: 115 },
-  { course: "Others", students: 86  },
-];
+// ── Choropleth colour scale (light → dark blue) ───────────────────────────────
+function choroplethColor(n) {
+  if (n >= 280) return "#1a3a6b";
+  if (n >= 200) return "#2d5fa8";
+  if (n >= 150) return "#4a87d0";
+  if (n >= 100) return "#7eb3e8";
+  if (n >= 50)  return "#b8d8f5";
+  return "#daeef8";
+}
 
-const COURSE_DONUT = [
-  { name: "BSIT",   value: 28.4, color: C.blue   },
-  { name: "BSBA",   value: 21.7, color: C.cyan   },
-  { name: "BSED",   value: 16.6, color: C.indigo },
-  { name: "BSN",    value: 12.4, color: C.green  },
-  { name: "BSA",    value: 7.8,  color: C.slate  },
-  { name: "BEED",   value: 6.1,  color: C.amber  },
-  { name: "Others", value: 5.0,  color: C.rose   },
-];
-
-const FEEDER_SCHOOLS = [
-  { name: "Sapang High School",         location: "City A", enrollees: 186, topCourse: "BSIT"  },
-  { name: "San Isidro National HS",     location: "City A", enrollees: 153, topCourse: "BSBA"  },
-  { name: "Riverside High School",      location: "City B", enrollees: 142, topCourse: "BSED"  },
-  { name: "East Valley Integrated HS",  location: "City B", enrollees: 118, topCourse: "BSN"   },
-  { name: "West Point High School",     location: "City C", enrollees: 97,  topCourse: "BSIT"  },
-];
-
-const ATTENDANCE_OVER_TIME = [
-  { month: "Aug", rate: 94 }, { month: "Sep", rate: 92 }, { month: "Oct", rate: 91 },
-  { month: "Nov", rate: 88 }, { month: "Dec", rate: 85 }, { month: "Jan", rate: 87 },
-  { month: "Feb", rate: 90 }, { month: "Mar", rate: 92 }, { month: "Apr", rate: 93 },
-  { month: "May", rate: 91 },
-];
-
-const ATTENDANCE_BY_COURSE = [
-  { course: "BSIT",   rate: 93.4 },
-  { course: "BSBA",   rate: 92.1 },
-  { course: "BSED",   rate: 91.7 },
-  { course: "BSN",    rate: 90.8 },
-  { course: "BSA",    rate: 89.6 },
-  { course: "BEED",   rate: 88.3 },
-  { course: "BTVTED", rate: 86.5 },
-];
-
-const AT_RISK = [
-  { id: "20241001", course: "BSIT",  attendance: "62%" },
-  { id: "20241022", course: "BSED",  attendance: "64%" },
-  { id: "20241105", course: "BSBA",  attendance: "66%" },
-  { id: "20241087", course: "BSN",   attendance: "67%" },
-  { id: "20241132", course: "BSA",   attendance: "68%" },
-];
-
-const LOC_VS_COURSE = [
-  { course: "BSIT",   students: 120, pct: 38.5 },
-  { course: "BSBA",   students: 84,  pct: 26.9 },
-  { course: "BSED",   students: 54,  pct: 17.3 },
-  { course: "BSN",    students: 28,  pct: 9.0  },
-  { course: "Others", students: 26,  pct: 8.3  },
-];
-
-const ENROLLMENT_TREND = [
-  { year: "2020-21", students: 1850 },
-  { year: "2021-22", students: 2150 },
-  { year: "2022-23", students: 2320 },
-  { year: "2023-24", students: 2620 },
-  { year: "2024-25", students: 2843 },
-];
-
-const COURSE_GROWTH = [
-  { year: "2020-21", BSIT: 480,  BSBA: 380, BSED: 290, BSN: 210, Others: 490 },
-  { year: "2021-22", BSIT: 560,  BSBA: 420, BSED: 340, BSN: 240, Others: 590 },
-  { year: "2022-23", BSIT: 640,  BSBA: 470, BSED: 380, BSN: 270, Others: 630 },
-  { year: "2023-24", BSIT: 730,  BSBA: 540, BSED: 420, BSN: 310, Others: 620 },
-  { year: "2024-25", BSIT: 808,  BSBA: 617, BSED: 470, BSN: 352, Others: 596 },
-];
-
-const GENDER_DONUT = [
-  { name: "Female", value: 58.0, count: 1648, color: C.pink },
-  { name: "Male",   value: 42.0, count: 1195, color: C.blue },
-];
-
-// ── Barangay map data ─────────────────────────────────────────────────────────
-const BARANGAYS = [
-  { id: "b5", label: "Barangay 5", students: 312, x: 270, y: 200, r: 38, shade: 5 },
-  { id: "b2", label: "Barangay 2", students: 284, x: 155, y: 170, r: 30, shade: 4 },
-  { id: "b1", label: "Barangay 1", students: 276, x: 110, y: 230, r: 28, shade: 4 },
-  { id: "b4", label: "Barangay 4", students: 198, x: 350, y: 240, r: 24, shade: 3 },
-  { id: "b3", label: "Barangay 3", students: 176, x: 220, y: 300, r: 22, shade: 3 },
-  { id: "b7", label: "Barangay 7", students: 142, x: 160, y: 340, r: 20, shade: 2 },
-  { id: "b8", label: "Barangay 8", students: 98,  x: 320, y: 320, r: 18, shade: 1 },
-  { id: "b6", label: "Barangay 6", students: 73,  x: 420, y: 180, r: 15, shade: 1 },
-];
-
-const SHADE_COLORS = {
-  5: "#1e3a5f",
-  4: "#2d5282",
-  3: "#3b6cb0",
-  2: "#7eb3e0",
-  1: "#c3dff5",
+// ── GeoJSON: Cagayan de Oro City barangays (simplified polygons) ──────────────
+// Real approximate coordinates for CDO barangays.
+// For production, replace with the official NAMRIA / PhilGIS shapefile converted to GeoJSON.
+const CDO_GEOJSON = {
+  type: "FeatureCollection",
+  features: [
+    {
+      type: "Feature",
+      properties: { name: "Barangay 1",  students: 276 },
+      geometry: { type: "Polygon", coordinates: [[[124.638,8.478],[124.645,8.478],[124.645,8.483],[124.638,8.483],[124.638,8.478]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Barangay 2",  students: 284 },
+      geometry: { type: "Polygon", coordinates: [[[124.645,8.478],[124.652,8.478],[124.652,8.484],[124.645,8.484],[124.645,8.478]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Barangay 3",  students: 176 },
+      geometry: { type: "Polygon", coordinates: [[[124.638,8.472],[124.645,8.472],[124.645,8.478],[124.638,8.478],[124.638,8.472]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Barangay 4",  students: 198 },
+      geometry: { type: "Polygon", coordinates: [[[124.645,8.472],[124.652,8.472],[124.652,8.478],[124.645,8.478],[124.645,8.472]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Barangay 5",  students: 312 },
+      geometry: { type: "Polygon", coordinates: [[[124.652,8.478],[124.660,8.478],[124.660,8.485],[124.652,8.485],[124.652,8.478]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Barangay 6",  students: 73 },
+      geometry: { type: "Polygon", coordinates: [[[124.660,8.478],[124.667,8.478],[124.667,8.484],[124.660,8.484],[124.660,8.478]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Barangay 7",  students: 142 },
+      geometry: { type: "Polygon", coordinates: [[[124.638,8.466],[124.645,8.466],[124.645,8.472],[124.638,8.472],[124.638,8.466]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Barangay 8",  students: 98 },
+      geometry: { type: "Polygon", coordinates: [[[124.645,8.466],[124.652,8.466],[124.652,8.472],[124.645,8.472],[124.645,8.466]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Agusan",      students: 220 },
+      geometry: { type: "Polygon", coordinates: [[[124.652,8.466],[124.665,8.466],[124.665,8.476],[124.652,8.476],[124.652,8.466]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Balulang",    students: 185 },
+      geometry: { type: "Polygon", coordinates: [[[124.625,8.470],[124.638,8.470],[124.638,8.480],[124.625,8.480],[124.625,8.470]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Bonbon",      students: 134 },
+      geometry: { type: "Polygon", coordinates: [[[124.625,8.460],[124.638,8.460],[124.638,8.470],[124.625,8.470],[124.625,8.460]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Bugo",        students: 261 },
+      geometry: { type: "Polygon", coordinates: [[[124.667,8.472],[124.680,8.472],[124.680,8.483],[124.667,8.483],[124.667,8.472]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Bulua",       students: 193 },
+      geometry: { type: "Polygon", coordinates: [[[124.618,8.472],[124.625,8.472],[124.625,8.482],[124.618,8.482],[124.618,8.472]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Carmen",      students: 244 },
+      geometry: { type: "Polygon", coordinates: [[[124.638,8.484],[124.652,8.484],[124.652,8.494],[124.638,8.494],[124.638,8.484]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Consolacion", students: 167 },
+      geometry: { type: "Polygon", coordinates: [[[124.652,8.485],[124.662,8.485],[124.662,8.494],[124.652,8.494],[124.652,8.485]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Cugman",      students: 118 },
+      geometry: { type: "Polygon", coordinates: [[[124.662,8.484],[124.672,8.484],[124.672,8.493],[124.662,8.493],[124.662,8.484]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Iponan",      students: 156 },
+      geometry: { type: "Polygon", coordinates: [[[124.618,8.460],[124.630,8.460],[124.630,8.472],[124.618,8.472],[124.618,8.460]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Kauswagan",   students: 209 },
+      geometry: { type: "Polygon", coordinates: [[[124.630,8.482],[124.638,8.482],[124.638,8.492],[124.630,8.492],[124.630,8.482]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Lapasan",     students: 231 },
+      geometry: { type: "Polygon", coordinates: [[[124.660,8.466],[124.672,8.466],[124.672,8.477],[124.660,8.477],[124.660,8.466]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Lumbia",      students: 88 },
+      geometry: { type: "Polygon", coordinates: [[[124.625,8.450],[124.640,8.450],[124.640,8.462],[124.625,8.462],[124.625,8.450]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Macabalan",   students: 178 },
+      geometry: { type: "Polygon", coordinates: [[[124.652,8.457],[124.664,8.457],[124.664,8.467],[124.652,8.467],[124.652,8.457]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Macasandig",  students: 203 },
+      geometry: { type: "Polygon", coordinates: [[[124.640,8.457],[124.652,8.457],[124.652,8.467],[124.640,8.467],[124.640,8.457]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Nazareth",    students: 145 },
+      geometry: { type: "Polygon", coordinates: [[[124.630,8.460],[124.640,8.460],[124.640,8.470],[124.630,8.470],[124.630,8.460]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Puntod",      students: 162 },
+      geometry: { type: "Polygon", coordinates: [[[124.664,8.458],[124.675,8.458],[124.675,8.467],[124.664,8.467],[124.664,8.458]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Puerto",      students: 189 },
+      geometry: { type: "Polygon", coordinates: [[[124.620,8.480],[124.630,8.480],[124.630,8.490],[124.620,8.490],[124.620,8.480]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Tablon",      students: 137 },
+      geometry: { type: "Polygon", coordinates: [[[124.672,8.480],[124.685,8.480],[124.685,8.490],[124.672,8.490],[124.672,8.480]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Tignapoloan", students: 104 },
+      geometry: { type: "Polygon", coordinates: [[[124.605,8.472],[124.618,8.472],[124.618,8.482],[124.605,8.482],[124.605,8.472]]] },
+    },
+    {
+      type: "Feature",
+      properties: { name: "Tumpagon",    students: 76 },
+      geometry: { type: "Polygon", coordinates: [[[124.605,8.460],[124.618,8.460],[124.618,8.472],[124.605,8.472],[124.605,8.460]]] },
+    },
+  ],
 };
 
-const TOP5 = BARANGAYS.slice(0, 5);
+// ── Top barangays derived from GeoJSON ────────────────────────────────────────
+const TOP5 = [...CDO_GEOJSON.features]
+  .sort((a, b) => b.properties.students - a.properties.students)
+  .slice(0, 5)
+  .map(f => f.properties);
 
-// ── Shared Components ─────────────────────────────────────────────────────────
-function ChartTip({ active, payload, label, suffix = "" }) {
+// ── Mock data ─────────────────────────────────────────────────────────────────
+const COURSE_BAR   = [
+  { c:"BSIT",v:808},{c:"BSBA",v:617},{c:"BSED",v:470},
+  {c:"BSN",v:352},{c:"BSA",v:222},{c:"BEED",v:173},
+  {c:"BTVTED",v:115},{c:"Others",v:86},
+];
+const COURSE_DONUT = [
+  {name:"BSIT",pct:28.4,color:C.blue},
+  {name:"BSBA",pct:21.7,color:C.cyan},
+  {name:"BSED",pct:16.6,color:C.indigo},
+  {name:"BSN", pct:12.4,color:C.green},
+  {name:"BSA", pct:7.8, color:C.slate},
+  {name:"BEED",pct:6.1, color:C.amber},
+  {name:"Others",pct:5.0,color:C.rose},
+];
+const FEEDER = [
+  {name:"Sapang High School",       loc:"City A",n:186,top:"BSIT"},
+  {name:"San Isidro National HS",   loc:"City A",n:153,top:"BSBA"},
+  {name:"Riverside High School",    loc:"City B",n:142,top:"BSED"},
+  {name:"East Valley Integrated HS",loc:"City B",n:118,top:"BSN"},
+  {name:"West Point High School",   loc:"City C",n:97, top:"BSIT"},
+];
+const ATT_TIME = [
+  {m:"Aug",v:94},{m:"Sep",v:92},{m:"Oct",v:91},{m:"Nov",v:88},
+  {m:"Dec",v:85},{m:"Jan",v:87},{m:"Feb",v:90},{m:"Mar",v:92},
+  {m:"Apr",v:93},{m:"May",v:91},
+];
+const ATT_COURSE = [
+  {c:"BSIT",v:93.4},{c:"BSBA",v:92.1},{c:"BSED",v:91.7},
+  {c:"BSN",v:90.8},{c:"BSA",v:89.6},{c:"BEED",v:88.3},{c:"BTVTED",v:86.5},
+];
+const AT_RISK = [
+  {id:"20241001",c:"BSIT",v:"62%"},{id:"20241022",c:"BSED",v:"64%"},
+  {id:"20241105",c:"BSBA",v:"66%"},{id:"20241087",c:"BSN", v:"67%"},
+  {id:"20241132",c:"BSA", v:"68%"},
+];
+const LOC_COURSE = [
+  {c:"BSIT",n:120,p:38.5},{c:"BSBA",n:84,p:26.9},
+  {c:"BSED",n:54,p:17.3},{c:"BSN",n:28,p:9.0},{c:"Others",n:26,p:8.3},
+];
+const ENROLL_TREND = [
+  {y:"2020-21",v:1850},{y:"2021-22",v:2150},
+  {y:"2022-23",v:2320},{y:"2023-24",v:2620},{y:"2024-25",v:2843},
+];
+const COURSE_GROWTH = [
+  {y:"2020-21",BSIT:480,BSBA:380,BSED:290,BSN:210,Others:490},
+  {y:"2021-22",BSIT:560,BSBA:420,BSED:340,BSN:240,Others:590},
+  {y:"2022-23",BSIT:640,BSBA:470,BSED:380,BSN:270,Others:630},
+  {y:"2023-24",BSIT:730,BSBA:540,BSED:420,BSN:310,Others:620},
+  {y:"2024-25",BSIT:808,BSBA:617,BSED:470,BSN:352,Others:596},
+];
+const GENDER = [
+  {name:"Female",v:58.0,n:1648,color:C.pink},
+  {name:"Male",  v:42.0,n:1195,color:C.blue},
+];
+
+// ── Tiny helpers ──────────────────────────────────────────────────────────────
+function Tip({ active, payload, label, suffix="" }) {
   if (!active || !payload?.length) return null;
   return (
     <div style={{
-      background: "var(--bg-surface)", border: "1px solid var(--border)",
-      borderRadius: 10, padding: "8px 12px", fontSize: 12, boxShadow: "var(--shadow-lg)",
+      background:"var(--bg-surface)", border:"1px solid var(--border)",
+      borderRadius:8, padding:"6px 10px", fontSize:11,
+      boxShadow:"0 4px 14px rgba(0,0,0,.1)",
     }}>
-      {label && <p style={{ color: "var(--text-secondary)", fontWeight: 600, marginBottom: 4, fontSize: 11 }}>{label}</p>}
-      {payload.map((p, i) => (
-        <p key={i} style={{ color: "var(--text-primary)", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: p.color || p.fill || p.stroke, display: "inline-block" }} />
-          {p.name && <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{p.name}:</span>}
-          {p.value?.toLocaleString()}{suffix}
-        </p>
+      {label && <p style={{color:"var(--text-muted)",fontSize:10,marginBottom:3}}>{label}</p>}
+      {payload.map((p,i)=>(
+        <div key={i} style={{display:"flex",alignItems:"center",gap:5}}>
+          <span style={{width:7,height:7,borderRadius:"50%",background:p.color||p.fill||p.stroke,flexShrink:0}}/>
+          {p.name && <span style={{color:"var(--text-secondary)"}}>{p.name}:</span>}
+          <span style={{fontWeight:700,color:"var(--text-primary)"}}>
+            {typeof p.value==="number"?p.value.toLocaleString():p.value}{suffix}
+          </span>
+        </div>
       ))}
     </div>
   );
 }
 
-function SCard({ title, subtitle, action, children, noPad }) {
+function Card({ title, subtitle, action, children, style={} }) {
   return (
     <div style={{
-      background: "var(--bg-surface)", border: "1px solid var(--border)",
-      borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow-sm)",
-      display: "flex", flexDirection: "column",
+      background:"var(--bg-surface)", border:"1px solid var(--border)",
+      borderRadius:10, boxShadow:"0 1px 3px rgba(0,0,0,.05)",
+      overflow:"hidden", display:"flex", flexDirection:"column", ...style,
     }}>
-      {(title || action) && (
+      {(title||action) && (
         <div style={{
-          padding: "13px 18px", borderBottom: "1px solid var(--border-light)",
-          display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexShrink: 0,
+          display:"flex", alignItems:"flex-start", justifyContent:"space-between",
+          padding:"11px 15px 9px", borderBottom:"1px solid var(--border-light)",
+          gap:8, flexShrink:0,
         }}>
           <div>
-            <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>{title}</p>
-            {subtitle && <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "2px 0 0" }}>{subtitle}</p>}
+            <p style={{margin:0,fontSize:12,fontWeight:700,color:"var(--text-primary)"}}>{title}</p>
+            {subtitle && <p style={{margin:"1px 0 0",fontSize:10,color:"var(--text-muted)"}}>{subtitle}</p>}
           </div>
-          {action}
+          {action && <div style={{flexShrink:0}}>{action}</div>}
         </div>
       )}
-      <div style={noPad ? {} : { padding: 18, flex: 1 }}>{children}</div>
+      <div style={{padding:14,flex:1}}>{children}</div>
     </div>
   );
 }
 
-function DropBtn({ label, small }) {
+function Sel({ label }) {
   return (
     <button style={{
-      display: "flex", alignItems: "center", gap: 5,
-      padding: small ? "5px 10px" : "7px 12px",
-      fontSize: small ? 11 : 12, fontWeight: 600, borderRadius: 8, cursor: "pointer",
-      background: "var(--bg-subtle)", border: "1px solid var(--border-light)",
-      color: "var(--text-secondary)", whiteSpace: "nowrap",
+      display:"inline-flex", alignItems:"center", gap:3,
+      padding:"3px 9px", fontSize:11, fontWeight:500, borderRadius:5,
+      cursor:"pointer", background:"var(--bg-surface)",
+      border:"1px solid var(--border)", color:"var(--text-primary)",
     }}>
-      {label} <ChevronDown size={12} />
+      {label}<ChevronDown size={10} style={{color:"var(--text-muted)"}}/>
     </button>
   );
 }
@@ -205,42 +323,45 @@ function DropBtn({ label, small }) {
 function TabBtn({ label, active, onClick }) {
   return (
     <button onClick={onClick} style={{
-      padding: "6px 14px", fontSize: 12, fontWeight: 600, borderRadius: 7,
-      border: "none", cursor: "pointer", transition: "all .15s",
-      background: active ? C.blue : "var(--bg-subtle)",
-      color: active ? "#fff" : "var(--text-secondary)",
+      padding:"4px 11px", fontSize:11, fontWeight:600, borderRadius:5,
+      border:"none", cursor:"pointer",
+      background:active?C.blue:"transparent",
+      color:active?"#fff":"var(--text-secondary)",
     }}>{label}</button>
   );
 }
 
-function KpiCard({ icon: Icon, iconBg, iconColor, label, value, sub, subUp }) {
+function CBadge({ label }) {
+  return (
+    <span style={{
+      fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:20,
+      background:"rgba(66,133,244,.1)", color:C.blue,
+    }}>{label}</span>
+  );
+}
+
+function KpiCard({ icon:Icon, iconBg, iconColor, label, value, sub, up }) {
   return (
     <div style={{
-      background: "var(--bg-surface)", border: "1px solid var(--border)",
-      borderRadius: 12, padding: "16px 18px", display: "flex",
-      alignItems: "center", gap: 14, boxShadow: "var(--shadow-sm)",
-      transition: "box-shadow .2s, transform .2s",
-    }}
-      onMouseEnter={e => { e.currentTarget.style.boxShadow = "var(--shadow-md)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
-      onMouseLeave={e => { e.currentTarget.style.boxShadow = "var(--shadow-sm)"; e.currentTarget.style.transform = ""; }}
-    >
+      background:"var(--bg-surface)", border:"1px solid var(--border)",
+      borderRadius:10, padding:"13px 15px",
+      display:"flex", alignItems:"center", gap:11,
+      boxShadow:"0 1px 3px rgba(0,0,0,.05)",
+    }}>
       <div style={{
-        width: 46, height: 46, borderRadius: 12, background: iconBg,
-        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        width:38, height:38, borderRadius:9, background:iconBg,
+        display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
       }}>
-        <Icon size={22} color={iconColor} />
+        <Icon size={18} color={iconColor}/>
       </div>
-      <div style={{ minWidth: 0 }}>
-        <p style={{ fontSize: 11.5, color: "var(--text-secondary)", fontWeight: 500, margin: "0 0 3px" }}>{label}</p>
-        <p style={{ fontSize: 24, fontWeight: 800, color: "var(--text-primary)", lineHeight: 1, margin: "0 0 4px" }}>{value}</p>
+      <div style={{minWidth:0}}>
+        <p style={{margin:"0 0 1px",fontSize:10,color:"var(--text-muted)",fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</p>
+        <p style={{margin:"0 0 2px",fontSize:20,fontWeight:800,color:"var(--text-primary)",lineHeight:1}}>{value}</p>
         {sub && (
-          <p style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 3, margin: 0 }}>
-            {subUp !== undefined && (
-              subUp
-                ? <ArrowUpRight size={12} color={C.green} />
-                : <ArrowDownRight size={12} color={C.rose} />
-            )}
-            <span style={{ color: subUp === true ? C.green : subUp === false ? C.rose : "var(--text-muted)" }}>{sub}</span>
+          <p style={{margin:0,fontSize:10,display:"flex",alignItems:"center",gap:2}}>
+            {up===true  && <TrendingUp   size={10} color={C.green}/>}
+            {up===false && <TrendingDown size={10} color={C.rose}/>}
+            <span style={{color:up===true?C.green:up===false?C.rose:"var(--text-muted)"}}>{sub}</span>
           </p>
         )}
       </div>
@@ -248,98 +369,145 @@ function KpiCard({ icon: Icon, iconBg, iconColor, label, value, sub, subUp }) {
   );
 }
 
-// ── SVG Choropleth Map ────────────────────────────────────────────────────────
-function DistributionMap() {
-  const [hovered, setHovered] = useState(null);
+// ── Leaflet Choropleth Map ────────────────────────────────────────────────────
+function LeafletMap() {
+  const mapRef    = useRef(null);
+  const leafletRef = useRef(null);
+  const [info, setInfo] = useState(null);   // hovered barangay
+
+  useEffect(() => {
+    // Dynamically import leaflet so SSR won't break
+    import("leaflet").then(L => {
+      if (leafletRef.current) return; // already initialised
+
+      // Fix default marker icon paths broken by bundlers
+      delete L.Icon.Default.prototype._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+        iconUrl:       "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+        shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+      });
+
+      const map = L.map(mapRef.current, {
+        center: [8.478, 124.648],
+        zoom: 13,
+        zoomControl: true,
+        scrollWheelZoom: false,
+      });
+
+      // OpenStreetMap tile layer
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
+        maxZoom: 18,
+      }).addTo(map);
+
+      // Style each feature based on student count
+      function style(feature) {
+        return {
+          fillColor:   choroplethColor(feature.properties.students),
+          weight:      1.5,
+          opacity:     1,
+          color:       "white",
+          fillOpacity: 0.78,
+        };
+      }
+
+      // Interaction handlers
+      function onEachFeature(feature, layer) {
+        layer.on({
+          mouseover(e) {
+            const l = e.target;
+            l.setStyle({ weight:2.5, color:"#fff", fillOpacity:0.92 });
+            l.bringToFront();
+            setInfo(feature.properties);
+          },
+          mouseout(e) {
+            geoLayer.resetStyle(e.target);
+            setInfo(null);
+          },
+          click(e) {
+            map.fitBounds(e.target.getBounds(), { padding:[30,30] });
+          },
+        });
+      }
+
+      const geoLayer = L.geoJSON(CDO_GEOJSON, { style, onEachFeature }).addTo(map);
+
+      leafletRef.current = map;
+    });
+
+    return () => {
+      if (leafletRef.current) {
+        leafletRef.current.remove();
+        leafletRef.current = null;
+      }
+    };
+  }, []);
+
   return (
-    <div style={{ position: "relative" }}>
-      <svg viewBox="0 0 560 420" style={{ width: "100%", borderRadius: 10, background: "var(--bg-subtle)" }}>
-        {/* water bg */}
-        <rect width="560" height="420" fill="var(--bg-subtle)" rx="10" />
-        {/* coastline blob */}
-        <path d="M30,60 Q80,20 160,40 Q240,55 310,30 Q390,10 460,50 Q520,80 530,160
-                 Q540,240 510,320 Q480,390 400,400 Q300,415 200,400
-                 Q120,390 70,340 Q20,290 20,210 Q15,130 30,60Z"
-          fill="rgba(99,179,237,0.12)" stroke="rgba(99,179,237,0.25)" strokeWidth="1.5" />
+    <div>
+      {/* Map container */}
+      <div style={{ position:"relative" }}>
+        <div
+          ref={mapRef}
+          style={{ height:300, borderRadius:8, border:"1px solid var(--border-light)", overflow:"hidden" }}
+        />
 
-        {/* barangay bubbles */}
-        {BARANGAYS.map(b => (
-          <g key={b.id}
-            onMouseEnter={() => setHovered(b)}
-            onMouseLeave={() => setHovered(null)}
-            style={{ cursor: "pointer" }}
-          >
-            <circle cx={b.x} cy={b.y} r={b.r + 4} fill={SHADE_COLORS[b.shade]} opacity={0.15} />
-            <circle cx={b.x} cy={b.y} r={b.r}
-              fill={hovered?.id === b.id ? C.amber : SHADE_COLORS[b.shade]}
-              stroke={hovered?.id === b.id ? "#fff" : "rgba(255,255,255,0.3)"}
-              strokeWidth={1.5}
-              style={{ transition: "fill .2s" }}
-            />
-            <text x={b.x} y={b.y - b.r - 6} textAnchor="middle"
-              fontSize={9.5} fontWeight={600} fill="var(--text-secondary)">{b.label}</text>
-          </g>
-        ))}
-
-        {/* tooltip */}
-        {hovered && (
-          <g>
-            <rect x={hovered.x + hovered.r + 6} y={hovered.y - 18} width={110} height={36}
-              rx={6} fill="var(--bg-surface)" stroke="var(--border)" strokeWidth={1} />
-            <text x={hovered.x + hovered.r + 12} y={hovered.y - 3}
-              fontSize={11} fontWeight={700} fill="var(--text-primary)">{hovered.label}</text>
-            <text x={hovered.x + hovered.r + 12} y={hovered.y + 12}
-              fontSize={10} fill="var(--text-secondary)">{hovered.students} students</text>
-          </g>
+        {/* Hover info box */}
+        {info && (
+          <div style={{
+            position:"absolute", top:10, right:10, zIndex:1000,
+            background:"white", borderRadius:8, padding:"8px 12px",
+            boxShadow:"0 2px 10px rgba(0,0,0,.15)", minWidth:140,
+            border:"1px solid #e2e8f0",
+          }}>
+            <p style={{margin:"0 0 2px",fontSize:12,fontWeight:700,color:"#1e293b"}}>{info.name}</p>
+            <p style={{margin:0,fontSize:11,color:"#64748b"}}>{info.students} students</p>
+          </div>
         )}
 
-        {/* zoom controls */}
-        <g>
-          <rect x={520} y={20} width={26} height={26} rx={6} fill="var(--bg-surface)" stroke="var(--border)" strokeWidth={1} />
-          <text x={533} y={37} textAnchor="middle" fontSize={16} fill="var(--text-secondary)">+</text>
-          <rect x={520} y={50} width={26} height={26} rx={6} fill="var(--bg-surface)" stroke="var(--border)" strokeWidth={1} />
-          <text x={533} y={67} textAnchor="middle" fontSize={16} fill="var(--text-secondary)">−</text>
-        </g>
-      </svg>
-
-      {/* Legend */}
-      <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
-        <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", margin: "0 0 4px" }}>Number of Students</p>
-        {[
-          { label: "200 and above", shade: 5 },
-          { label: "101 – 200",     shade: 4 },
-          { label: "51 – 100",      shade: 3 },
-          { label: "21 – 50",       shade: 2 },
-          { label: "20 and below",  shade: 1 },
-        ].map(l => (
-          <div key={l.shade} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ width: 14, height: 14, borderRadius: 3, background: SHADE_COLORS[l.shade], flexShrink: 0 }} />
-            <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{l.label}</span>
-          </div>
-        ))}
+        {/* Legend */}
+        <div style={{
+          position:"absolute", bottom:10, left:10, zIndex:1000,
+          background:"rgba(255,255,255,.92)", borderRadius:8,
+          padding:"8px 10px", boxShadow:"0 2px 8px rgba(0,0,0,.12)",
+          border:"1px solid #e2e8f0",
+        }}>
+          <p style={{margin:"0 0 5px",fontSize:10,fontWeight:700,color:"#475569"}}>Students</p>
+          {[
+            {label:"280+",  color:"#1a3a6b"},
+            {label:"200–279",color:"#2d5fa8"},
+            {label:"150–199",color:"#4a87d0"},
+            {label:"100–149",color:"#7eb3e8"},
+            {label:"50–99", color:"#b8d8f5"},
+            {label:"<50",   color:"#daeef8"},
+          ].map(l=>(
+            <div key={l.label} style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
+              <span style={{width:12,height:12,borderRadius:2,background:l.color,flexShrink:0,border:"1px solid rgba(0,0,0,.08)"}}/>
+              <span style={{fontSize:10,color:"#475569"}}>{l.label}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Top 5 Barangays panel */}
+      {/* Top 5 bar list */}
       <div style={{
-        marginTop: 14, background: "var(--bg-subtle)", borderRadius: 10, padding: "12px 14px",
-        border: "1px solid var(--border-light)",
+        marginTop:10, background:"var(--bg-subtle)", borderRadius:8,
+        padding:"10px 12px", border:"1px solid var(--border-light)",
       }}>
-        <p style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", margin: "0 0 10px" }}>
-          Top 5 Barangays <span style={{ fontSize: 10, fontWeight: 500, color: "var(--text-muted)" }}>by number of students</span>
+        <p style={{margin:"0 0 8px",fontSize:11,fontWeight:700,color:"var(--text-primary)"}}>
+          Top 5 Barangays
         </p>
-        {TOP5.map((b, i) => (
-          <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: i < 4 ? 7 : 0 }}>
-            <span style={{ fontSize: 11, color: "var(--text-secondary)", width: 72, flexShrink: 0 }}>{b.label}</span>
-            <div style={{ flex: 1, height: 8, background: "var(--border-light)", borderRadius: 4, overflow: "hidden" }}>
-              <div style={{
-                height: "100%", borderRadius: 4, background: C.blue,
-                width: `${(b.students / 312) * 100}%`, transition: "width .4s",
-              }} />
+        {TOP5.map((b,i)=>(
+          <div key={b.name} style={{display:"flex",alignItems:"center",gap:7,marginBottom:i<4?5:0}}>
+            <span style={{fontSize:10,color:"var(--text-secondary)",width:78,flexShrink:0,whiteSpace:"nowrap"}}>{b.name}</span>
+            <div style={{flex:1,height:6,background:"var(--border-light)",borderRadius:3,overflow:"hidden"}}>
+              <div style={{height:"100%",background:C.blue,borderRadius:3,width:`${(b.students/TOP5[0].students)*100}%`}}/>
             </div>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)", width: 30, textAlign: "right" }}>{b.students}</span>
+            <span style={{fontSize:10,fontWeight:700,color:"var(--text-primary)",width:26,textAlign:"right"}}>{b.students}</span>
           </div>
         ))}
-        <button style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: C.blue, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+        <button style={{marginTop:8,fontSize:11,fontWeight:600,color:C.blue,background:"none",border:"none",cursor:"pointer",padding:0}}>
           View all locations
         </button>
       </div>
@@ -347,396 +515,338 @@ function DistributionMap() {
   );
 }
 
-// ── Attendance Rate Bar (horizontal) ─────────────────────────────────────────
-function AttendanceByCourseBars() {
+// ── Attendance horizontal bars ────────────────────────────────────────────────
+function AttBars() {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {ATTENDANCE_BY_COURSE.map(d => (
-        <div key={d.course} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", width: 46, flexShrink: 0 }}>{d.course}</span>
-          <div style={{ flex: 1, height: 10, background: "var(--border-light)", borderRadius: 5, overflow: "hidden" }}>
+    <div style={{display:"flex",flexDirection:"column",gap:7}}>
+      {ATT_COURSE.map(d=>(
+        <div key={d.c} style={{display:"flex",alignItems:"center",gap:7}}>
+          <span style={{fontSize:10,fontWeight:600,color:"var(--text-secondary)",width:42,flexShrink:0}}>{d.c}</span>
+          <div style={{flex:1,height:8,background:"var(--border-light)",borderRadius:4,overflow:"hidden"}}>
             <div style={{
-              height: "100%", borderRadius: 5,
-              background: d.rate >= 92 ? C.green : d.rate >= 89 ? C.blue : C.amber,
-              width: `${d.rate}%`, transition: "width .5s",
-            }} />
+              height:"100%",borderRadius:4,
+              background:d.v>=92?"#16a34a":d.v>=90?"#22c55e":d.v>=88?"#4ade80":"#86efac",
+              width:`${d.v}%`,
+            }}/>
           </div>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)", width: 36, textAlign: "right" }}>{d.rate}%</span>
+          <span style={{fontSize:10,fontWeight:700,color:"var(--text-primary)",width:34,textAlign:"right"}}>{d.v}%</span>
         </div>
       ))}
     </div>
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function StudentsDashboard() {
   const [courseTab, setCourseTab] = useState("Overall");
 
   return (
-    <main style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <main style={{display:"flex",flexDirection:"column",gap:14}}>
 
-      {/* ── Page Header ── */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      {/* ── Header ── */}
+      <div style={{
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        flexWrap:"wrap", gap:10,
+      }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text-primary)", margin: 0, display: "flex", alignItems: "center", gap: 9 }}>
-            <span style={{ width: 34, height: 34, borderRadius: 9, background: "rgba(59,130,246,.12)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-              <Users size={18} color={C.blue} />
-            </span>
-            Overview
+          <h1 style={{margin:0,fontSize:17,fontWeight:800,color:"var(--text-primary)",display:"flex",alignItems:"center",gap:7}}>
+            <Users size={17} color={C.blue}/> Overview
           </h1>
-          <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: "4px 0 0" }}>
+          <p style={{margin:"2px 0 0",fontSize:11,color:"var(--text-secondary)"}}>
             Summary of enrollment, attendance and student insights
           </p>
         </div>
-
-        {/* Right: Academic Year + User */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
           <div>
-            <p style={{ fontSize: 10, color: "var(--text-muted)", margin: "0 0 2px", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".4px" }}>Academic Year</p>
-            <DropBtn label="2024 – 2025" />
+            <p style={{margin:"0 0 2px",fontSize:9,fontWeight:700,color:"var(--text-muted)",textTransform:"uppercase",letterSpacing:".4px"}}>Academic Year</p>
+            <Sel label="2024 – 2025"/>
           </div>
-          <div style={{
-            width: 36, height: 36, borderRadius: 10, background: "rgba(238,162,58,.12)",
-            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", position: "relative",
+          <button style={{
+            display:"flex",alignItems:"center",gap:6,padding:"6px 12px",
+            fontSize:11,fontWeight:700,borderRadius:7,cursor:"pointer",
+            background:"rgba(239,68,68,.06)",border:"1.5px solid rgba(239,68,68,.2)",color:"#ef4444",
           }}>
-            <Bell size={17} color={C.amber} />
-            <span style={{
-              position: "absolute", top: 6, right: 6, width: 8, height: 8,
-              background: C.rose, borderRadius: "50%", border: "2px solid var(--bg-surface)",
-            }} />
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", background: "var(--bg-subtle)", borderRadius: 10, border: "1px solid var(--border-light)", cursor: "pointer" }}>
-            <div style={{ width: 30, height: 30, borderRadius: "50%", background: C.navy, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <User size={15} color="#fff" />
-            </div>
-            <div>
-              <p style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>Admin User</p>
-              <p style={{ fontSize: 10, color: "var(--text-muted)", margin: 0 }}>Administrator</p>
-            </div>
-            <ChevronDown size={13} style={{ color: "var(--text-muted)" }} />
-          </div>
+            <RefreshCw size={11}/> Clear Filters
+          </button>
         </div>
       </div>
 
       {/* ── Filter Bar ── */}
       <div style={{
-        display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
-        background: "var(--bg-surface)", border: "1px solid var(--border)",
-        borderRadius: 12, padding: "12px 16px", boxShadow: "var(--shadow-sm)",
+        background:"var(--bg-surface)", border:"1px solid var(--border)",
+        borderRadius:10, padding:"10px 14px",
+        display:"flex", alignItems:"flex-end", gap:12, flexWrap:"wrap",
       }}>
-        {[
-          { label: "Semester",         value: "All" },
-          { label: "Course / Program", value: "All" },
-          { label: "Region",           value: "All" },
-          { label: "City / Municipality", value: "All" },
-          { label: "Barangay",         value: "All" },
-          { label: "Feeder School",    value: "All" },
-          { label: "Gender",           value: "All" },
-        ].map(f => (
-          <div key={f.label} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".4px" }}>{f.label}</span>
-            <DropBtn label={f.value} small />
+        {[["Semester","All"],["Course / Program","All"],["Region","All"],
+          ["City / Municipality","All"],["Barangay","All"],
+          ["Feeder School","All"],["Gender","All"],
+        ].map(([lbl,val])=>(
+          <div key={lbl} style={{display:"flex",flexDirection:"column",gap:2}}>
+            <span style={{fontSize:9,fontWeight:700,color:"var(--text-muted)",textTransform:"uppercase",letterSpacing:".4px"}}>{lbl}</span>
+            <Sel label={val}/>
           </div>
         ))}
-        <button style={{
-          marginLeft: "auto", display: "flex", alignItems: "center", gap: 6,
-          padding: "7px 14px", fontSize: 12, fontWeight: 700, borderRadius: 8,
-          cursor: "pointer", background: "rgba(239,68,68,.08)",
-          border: "1.5px solid rgba(239,68,68,.2)", color: "#ef4444",
-        }}>
-          <RefreshCw size={12} /> Clear Filters
-        </button>
       </div>
 
-      {/* ── KPI Cards ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14 }}>
-        <KpiCard icon={Users}        iconBg="rgba(59,130,246,.12)"  iconColor={C.blue}   label="Total Students"    value="2,843" sub="8.5% vs last year"   subUp={true}  />
-        <KpiCard icon={UserPlus}     iconBg="rgba(34,197,94,.12)"   iconColor={C.green}  label="New Enrollees"     value="1,234" sub="12.4% vs last year"  subUp={true}  />
-        <KpiCard icon={CalendarCheck} iconBg="rgba(238,162,58,.12)" iconColor={C.amber}  label="Attendance Rate"   value="92.6%" sub="1.8% vs last year"   subUp={false} />
-        <KpiCard icon={GraduationCap} iconBg="rgba(99,102,241,.12)" iconColor={C.indigo} label="Top Course"        value="BSIT"  sub="28.4% of total"                    />
-        <KpiCard icon={MapPin}       iconBg="rgba(244,63,94,.12)"   iconColor={C.rose}   label="Top Barangay"      value="Barangay 5" sub="312 students"                />
-        <KpiCard icon={School}       iconBg="rgba(6,182,212,.12)"   iconColor={C.cyan}   label="Top Feeder School" value="Sapang HS"  sub="186 students"                />
+      {/* ── KPI Row ── */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:12}}>
+        <KpiCard icon={Users}         iconBg="rgba(59,130,246,.1)"  iconColor={C.blue}   label="Total Students"    value="2,843"      sub="↑ 8.5% vs last year"  up={true}  />
+        <KpiCard icon={UserPlus}      iconBg="rgba(34,197,94,.1)"   iconColor={C.green}  label="New Enrollees"     value="1,234"      sub="↑ 12.4% vs last year" up={true}  />
+        <KpiCard icon={CalendarCheck} iconBg="rgba(238,162,58,.12)" iconColor={C.amber}  label="Attendance Rate"   value="92.6%"      sub="↓ 1.8% vs last year"  up={false} />
+        <KpiCard icon={GraduationCap} iconBg="rgba(99,102,241,.1)"  iconColor={C.indigo} label="Top Course"        value="BSIT"       sub="28.4% of total"                  />
+        <KpiCard icon={MapPin}        iconBg="rgba(244,63,94,.1)"   iconColor={C.rose}   label="Top Barangay"      value="Barangay 5" sub="312 students"                    />
+        <KpiCard icon={School}        iconBg="rgba(6,182,212,.1)"   iconColor={C.cyan}   label="Top Feeder School" value="Sapang HS"  sub="186 students"                    />
       </div>
 
       {/* ── Row 2: Map + Course Demand ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr", gap: 16 }}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
 
-        <SCard title="Student Distribution Map" subtitle="Number of students by location">
-          <DistributionMap />
-        </SCard>
+        <Card title="Student Distribution Map" subtitle="Cagayan de Oro City · hover a barangay">
+          <LeafletMap/>
+        </Card>
 
-        <SCard
+        <Card
           title="Course Demand"
           subtitle="Enrollment per course"
           action={
-            <div style={{ display: "flex", gap: 4 }}>
-              <TabBtn label="Overall"     active={courseTab === "Overall"}     onClick={() => setCourseTab("Overall")} />
-              <TabBtn label="By Location" active={courseTab === "By Location"} onClick={() => setCourseTab("By Location")} />
+            <div style={{display:"flex",background:"var(--bg-subtle)",borderRadius:7,padding:2,gap:1,border:"1px solid var(--border-light)"}}>
+              <TabBtn label="Overall"     active={courseTab==="Overall"}     onClick={()=>setCourseTab("Overall")}/>
+              <TabBtn label="By Location" active={courseTab==="By Location"} onClick={()=>setCourseTab("By Location")}/>
             </div>
           }
         >
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "center" }}>
-            {/* Bar chart */}
-            <div style={{ height: 240 }}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:14,alignItems:"start"}}>
+            <div style={{height:256}}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={COURSE_BAR} barSize={22} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
-                  <CartesianGrid vertical={false} stroke="var(--border-light)" />
-                  <XAxis dataKey="course" tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<ChartTip />} cursor={{ fill: "rgba(59,130,246,.06)" }} />
-                  <Bar dataKey="students" fill={C.blue} radius={[4, 4, 0, 0]} />
+                <BarChart data={COURSE_BAR} barSize={22} margin={{top:6,right:4,left:-22,bottom:0}}>
+                  <CartesianGrid vertical={false} stroke="var(--border-light)"/>
+                  <XAxis dataKey="c" tick={{fontSize:9,fill:"var(--text-muted)"}} axisLine={false} tickLine={false}/>
+                  <YAxis domain={[0,1000]} ticks={[0,250,500,750,1000]} tick={{fontSize:9,fill:"var(--text-muted)"}} axisLine={false} tickLine={false}/>
+                  <Tooltip content={<Tip/>} cursor={{fill:"rgba(66,133,244,.06)"}}/>
+                  <Bar dataKey="v" name="Students" fill={C.blue} radius={[3,3,0,0]}/>
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
-            {/* Donut + legend */}
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-              <div style={{ position: "relative", width: 140, height: 140 }}>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",minWidth:155}}>
+              <div style={{position:"relative",width:136,height:136}}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={COURSE_DONUT} cx="50%" cy="50%" innerRadius={42} outerRadius={66}
-                      startAngle={90} endAngle={-270} dataKey="value" paddingAngle={1.5}>
-                      {COURSE_DONUT.map((d, i) => <Cell key={i} fill={d.color} stroke="none" />)}
+                    <Pie data={COURSE_DONUT} cx="50%" cy="50%"
+                      innerRadius={40} outerRadius={64}
+                      startAngle={90} endAngle={-270}
+                      dataKey="pct" paddingAngle={1.5}>
+                      {COURSE_DONUT.map((d,i)=><Cell key={i} fill={d.color} stroke="none"/>)}
                     </Pie>
                   </PieChart>
                 </ResponsiveContainer>
-                <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ fontSize: 15, fontWeight: 800, color: "var(--text-primary)", lineHeight: 1 }}>Total</span>
-                  <span style={{ fontSize: 17, fontWeight: 800, color: "var(--text-primary)" }}>2,843</span>
+                <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+                  <span style={{fontSize:10,color:"var(--text-muted)",fontWeight:600}}>Total</span>
+                  <span style={{fontSize:16,fontWeight:800,color:"var(--text-primary)",lineHeight:1.1}}>2,843</span>
                 </div>
               </div>
-              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 5, width: "100%" }}>
-                {COURSE_DONUT.map((d, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ width: 9, height: 9, borderRadius: "50%", background: d.color, flexShrink: 0 }} />
-                      <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{d.name}</span>
+              <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:4,width:"100%"}}>
+                {COURSE_DONUT.map((d,i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:5}}>
+                    <div style={{display:"flex",alignItems:"center",gap:5}}>
+                      <span style={{width:8,height:8,borderRadius:"50%",background:d.color,flexShrink:0}}/>
+                      <span style={{fontSize:10,color:"var(--text-secondary)"}}>{d.name}</span>
                     </div>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)" }}>{d.value}%</span>
+                    <span style={{fontSize:10,fontWeight:700,color:"var(--text-primary)"}}>{d.pct}%</span>
                   </div>
                 ))}
               </div>
-              <button style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: C.blue, background: "none", border: "none", cursor: "pointer" }}>
+              <button style={{marginTop:8,fontSize:11,fontWeight:600,color:C.blue,background:"none",border:"none",cursor:"pointer"}}>
                 View course details
               </button>
             </div>
           </div>
-        </SCard>
+        </Card>
       </div>
 
-      {/* ── Row 3: Feeder Schools + Attendance Insights + Location vs Course ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr 1fr", gap: 16 }}>
+      {/* ── Row 3: Feeder + Attendance + Location ── */}
+      <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1.7fr) minmax(0,1fr)",gap:14}}>
 
-        {/* Top Feeder Schools */}
-        <SCard title="Top Feeder Schools" subtitle="by number of enrollees" noPad>
-          <div style={{ padding: "0 18px 14px" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-              <thead>
-                <tr>
-                  {["School Name", "Location", "Enrollees", "Top Course"].map(h => (
-                    <th key={h} style={{
-                      textAlign: "left", fontSize: 10, fontWeight: 700, color: "var(--text-muted)",
-                      textTransform: "uppercase", letterSpacing: ".4px",
-                      padding: "14px 8px 10px 0", borderBottom: "1px solid var(--border-light)",
-                    }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {FEEDER_SCHOOLS.map((s, i) => (
-                  <tr key={i} style={{ borderBottom: i < FEEDER_SCHOOLS.length - 1 ? "1px solid var(--border-light)" : "none" }}>
-                    <td style={{ padding: "9px 8px 9px 0", fontWeight: 600, color: "var(--text-primary)", fontSize: 12 }}>{s.name}</td>
-                    <td style={{ padding: "9px 8px 9px 0", color: "var(--text-muted)", fontSize: 11 }}>{s.location}</td>
-                    <td style={{ padding: "9px 8px 9px 0", fontWeight: 700, color: "var(--text-primary)" }}>{s.enrollees}</td>
-                    <td style={{ padding: "9px 0" }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 20, background: "rgba(59,130,246,.1)", color: C.blue }}>{s.topCourse}</span>
-                    </td>
-                  </tr>
+        <Card title="Top Feeder Schools" subtitle="by number of enrollees">
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr>
+                {["School Name","Location","Enrollees","Top Course"].map(h=>(
+                  <th key={h} style={{textAlign:"left",fontSize:9,fontWeight:700,color:"var(--text-muted)",textTransform:"uppercase",letterSpacing:".4px",paddingBottom:8,borderBottom:"1px solid var(--border-light)",paddingRight:8}}>{h}</th>
                 ))}
-              </tbody>
-            </table>
-            <button style={{ marginTop: 12, fontSize: 12, fontWeight: 700, color: C.blue, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-              View all feeder schools
-            </button>
-          </div>
-        </SCard>
+              </tr>
+            </thead>
+            <tbody>
+              {FEEDER.map((s,i)=>(
+                <tr key={i} style={{borderBottom:i<FEEDER.length-1?"1px solid var(--border-light)":"none"}}>
+                  <td style={{padding:"8px 8px 8px 0",fontWeight:600,color:"var(--text-primary)",fontSize:11}}>{s.name}</td>
+                  <td style={{padding:"8px 8px 8px 0",color:"var(--text-muted)",fontSize:10}}>{s.loc}</td>
+                  <td style={{padding:"8px 8px 8px 0",fontWeight:700,color:"var(--text-primary)",fontSize:11}}>{s.n}</td>
+                  <td style={{padding:"8px 0"}}><CBadge label={s.top}/></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button style={{marginTop:10,fontSize:11,fontWeight:600,color:C.blue,background:"none",border:"none",cursor:"pointer",padding:0}}>
+            View all feeder schools
+          </button>
+        </Card>
 
-        {/* Attendance Insights */}
-        <SCard title="Attendance Insights">
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
-
-            {/* Over Time line */}
+        <Card title="Attendance Insights">
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>
             <div>
-              <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", margin: "0 0 10px" }}>Attendance Rate Over Time</p>
-              <div style={{ height: 140 }}>
+              <p style={{fontSize:10,fontWeight:700,color:"var(--text-secondary)",margin:"0 0 8px"}}>Rate Over Time</p>
+              <div style={{height:140}}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={ATTENDANCE_OVER_TIME} margin={{ top: 5, right: 5, left: -30, bottom: 0 }}>
-                    <CartesianGrid vertical={false} stroke="var(--border-light)" />
-                    <XAxis dataKey="month" tick={{ fontSize: 9, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[80, 100]} tick={{ fontSize: 9, fill: "var(--text-muted)" }} axisLine={false} tickLine={false}
-                      tickFormatter={v => `${v}%`} />
-                    <Tooltip content={<ChartTip suffix="%" />} />
-                    <Line type="monotone" dataKey="rate" stroke={C.blue} strokeWidth={2}
-                      dot={{ r: 2.5, fill: C.blue, strokeWidth: 0 }} activeDot={{ r: 4 }} />
+                  <LineChart data={ATT_TIME} margin={{top:4,right:4,left:-34,bottom:0}}>
+                    <CartesianGrid vertical={false} stroke="var(--border-light)"/>
+                    <XAxis dataKey="m" tick={{fontSize:8,fill:"var(--text-muted)"}} axisLine={false} tickLine={false}/>
+                    <YAxis domain={[80,100]} tickCount={5} tick={{fontSize:8,fill:"var(--text-muted)"}} axisLine={false} tickLine={false} tickFormatter={v=>`${v}%`}/>
+                    <Tooltip content={<Tip suffix="%"/>}/>
+                    <Line type="monotone" dataKey="v" stroke={C.blue} strokeWidth={1.8} dot={{r:2,fill:C.blue,strokeWidth:0}} activeDot={{r:3.5}}/>
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
-
-            {/* By Course horizontal bars */}
             <div>
-              <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", margin: "0 0 10px" }}>Attendance Rate by Course</p>
-              <AttendanceByCourseBars />
+              <p style={{fontSize:10,fontWeight:700,color:"var(--text-secondary)",margin:"0 0 8px"}}>By Course</p>
+              <AttBars/>
             </div>
-
-            {/* At-risk table */}
             <div>
-              <p style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", margin: "0 0 10px" }}>Students at Risk (Low Attendance)</p>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <p style={{fontSize:10,fontWeight:700,color:"var(--text-secondary)",margin:"0 0 8px"}}>At Risk (Low Attendance)</p>
+              <table style={{width:"100%",borderCollapse:"collapse"}}>
                 <thead>
                   <tr>
-                    {["Student ID", "Course", "Attendance"].map(h => (
-                      <th key={h} style={{ textAlign: "left", fontSize: 9.5, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".3px", paddingBottom: 8, borderBottom: "1px solid var(--border-light)" }}>{h}</th>
+                    {["ID","Course","Att."].map(h=>(
+                      <th key={h} style={{textAlign:"left",fontSize:9,fontWeight:700,color:"var(--text-muted)",textTransform:"uppercase",letterSpacing:".3px",paddingBottom:7,borderBottom:"1px solid var(--border-light)"}}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {AT_RISK.map((s, i) => (
-                    <tr key={i} style={{ borderBottom: i < AT_RISK.length - 1 ? "1px solid var(--border-light)" : "none" }}>
-                      <td style={{ padding: "7px 0", color: "var(--text-primary)", fontWeight: 600, fontSize: 11 }}>{s.id}</td>
-                      <td style={{ padding: "7px 4px" }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 20, background: "rgba(59,130,246,.1)", color: C.blue }}>{s.course}</span>
-                      </td>
-                      <td style={{ padding: "7px 0", fontWeight: 700, color: C.rose, fontSize: 11 }}>{s.attendance}</td>
+                  {AT_RISK.map((s,i)=>(
+                    <tr key={i} style={{borderBottom:i<AT_RISK.length-1?"1px solid var(--border-light)":"none"}}>
+                      <td style={{padding:"6px 0",fontSize:10,fontWeight:600,color:"var(--text-primary)"}}>{s.id}</td>
+                      <td style={{padding:"6px 4px"}}><CBadge label={s.c}/></td>
+                      <td style={{padding:"6px 0",fontSize:10,fontWeight:700,color:C.rose}}>{s.v}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <button style={{ marginTop: 10, fontSize: 11, fontWeight: 700, color: C.blue, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+              <button style={{marginTop:8,fontSize:10,fontWeight:600,color:C.blue,background:"none",border:"none",cursor:"pointer",padding:0}}>
                 View all at-risk students
               </button>
             </div>
           </div>
-        </SCard>
+        </Card>
 
-        {/* Location vs Course */}
-        <SCard
-          title="Location vs Course"
-          subtitle="Top Courses per Location"
-          action={<DropBtn label="Barangay 5" small />}
-          noPad
-        >
-          <div style={{ padding: "0 18px 14px" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-              <thead>
-                <tr>
-                  {["Course", "Number of Students", "Percentage"].map(h => (
-                    <th key={h} style={{
-                      textAlign: "left", fontSize: 10, fontWeight: 700, color: "var(--text-muted)",
-                      textTransform: "uppercase", letterSpacing: ".3px",
-                      padding: "14px 8px 10px 0", borderBottom: "1px solid var(--border-light)",
-                    }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {LOC_VS_COURSE.map((r, i) => (
-                  <tr key={i} style={{ borderBottom: i < LOC_VS_COURSE.length - 1 ? "1px solid var(--border-light)" : "none" }}>
-                    <td style={{ padding: "9px 8px 9px 0", fontWeight: 700, color: "var(--text-primary)" }}>{r.course}</td>
-                    <td style={{ padding: "9px 8px 9px 0", color: "var(--text-secondary)" }}>{r.students}</td>
-                    <td style={{ padding: "9px 0", fontWeight: 700, color: C.blue }}>{r.pct}%</td>
-                  </tr>
+        <Card title="Location vs Course" subtitle="Top Courses per Location" action={<Sel label="Barangay 5"/>}>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr>
+                {["Course","Students","Pct"].map(h=>(
+                  <th key={h} style={{textAlign:"left",fontSize:9,fontWeight:700,color:"var(--text-muted)",textTransform:"uppercase",letterSpacing:".3px",paddingBottom:8,borderBottom:"1px solid var(--border-light)",paddingRight:8}}>{h}</th>
                 ))}
-              </tbody>
-            </table>
-            <button style={{ marginTop: 12, fontSize: 12, fontWeight: 700, color: C.blue, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-              View other locations
-            </button>
-          </div>
-        </SCard>
+              </tr>
+            </thead>
+            <tbody>
+              {LOC_COURSE.map((r,i)=>(
+                <tr key={i} style={{borderBottom:i<LOC_COURSE.length-1?"1px solid var(--border-light)":"none"}}>
+                  <td style={{padding:"8px 8px 8px 0",fontWeight:700,color:"var(--text-primary)",fontSize:11}}>{r.c}</td>
+                  <td style={{padding:"8px 8px 8px 0",color:"var(--text-secondary)",fontSize:11}}>{r.n}</td>
+                  <td style={{padding:"8px 0",fontWeight:700,color:C.blue,fontSize:11}}>{r.p}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button style={{marginTop:10,fontSize:11,fontWeight:600,color:C.blue,background:"none",border:"none",cursor:"pointer",padding:0}}>
+            View other locations
+          </button>
+        </Card>
       </div>
 
-      {/* ── Row 4: Enrollment Trends + Course Growth + Gender ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr 1fr", gap: 16 }}>
+      {/* ── Row 4: Enrollment + Course Growth + Gender ── */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr 1fr",gap:14}}>
 
-        {/* Enrollment Trends */}
-        <SCard title="Enrollment Trends" subtitle="Total enrollment over time">
-          <div style={{ height: 220 }}>
+        <Card title="Enrollment Trends" subtitle="Total enrollment over time">
+          <div style={{height:210}}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={ENROLLMENT_TREND} margin={{ top: 15, right: 10, left: -15, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="var(--border-light)" />
-                <XAxis dataKey="year" tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false}
-                  tickFormatter={v => v >= 1000 ? `${v / 1000}k` : v} />
-                <Tooltip content={<ChartTip />} />
-                <Line type="monotone" dataKey="students" stroke={C.blue} strokeWidth={2.5}
-                  dot={{ r: 4, fill: C.blue, strokeWidth: 0 }}
-                  activeDot={{ r: 6, fill: C.amber }}
-                  label={({ x, y, value }) => (
-                    <text x={x} y={y - 10} textAnchor="middle" fontSize={10} fontWeight={700} fill="var(--text-primary)">{value.toLocaleString()}</text>
-                  )}
-                />
+              <LineChart data={ENROLL_TREND} margin={{top:20,right:10,left:-12,bottom:0}}>
+                <CartesianGrid vertical={false} stroke="var(--border-light)"/>
+                <XAxis dataKey="y" tick={{fontSize:9,fill:"var(--text-muted)"}} axisLine={false} tickLine={false}/>
+                <YAxis domain={[0,4000]} ticks={[0,1000,2000,3000,4000]}
+                  tick={{fontSize:9,fill:"var(--text-muted)"}} axisLine={false} tickLine={false}
+                  tickFormatter={v=>v===0?"0":`${v/1000}k`}/>
+                <Tooltip content={<Tip/>}/>
+                <Line type="monotone" dataKey="v" name="Students" stroke={C.blue} strokeWidth={2.5}
+                  dot={{r:4,fill:C.blue,strokeWidth:0}} activeDot={{r:5.5}}
+                  label={({x,y,value})=>(
+                    <text x={x} y={y-10} textAnchor="middle" fontSize={9} fontWeight={700} fill="var(--text-primary)">
+                      {value.toLocaleString()}
+                    </text>
+                  )}/>
               </LineChart>
             </ResponsiveContainer>
           </div>
-        </SCard>
+        </Card>
 
-        {/* Course Growth Trends */}
-        <SCard title="Course Growth Trends" subtitle="Enrollment per course over time">
-          <div style={{ height: 220 }}>
+        <Card title="Course Growth Trends" subtitle="Enrollment per course over time">
+          <div style={{height:210}}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={COURSE_GROWTH} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="var(--border-light)" />
-                <XAxis dataKey="year" tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-                <Tooltip content={<ChartTip />} />
-                <Legend iconSize={8} iconType="circle" wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+              <LineChart data={COURSE_GROWTH} margin={{top:8,right:10,left:-12,bottom:0}}>
+                <CartesianGrid vertical={false} stroke="var(--border-light)"/>
+                <XAxis dataKey="y" tick={{fontSize:9,fill:"var(--text-muted)"}} axisLine={false} tickLine={false}/>
+                <YAxis domain={[0,1500]} ticks={[0,500,1000,1500]}
+                  tick={{fontSize:9,fill:"var(--text-muted)"}} axisLine={false} tickLine={false}/>
+                <Tooltip content={<Tip/>}/>
+                <Legend iconSize={7} iconType="circle" wrapperStyle={{fontSize:10,paddingTop:4}}/>
                 {[
-                  { key: "BSIT",   color: C.blue   },
-                  { key: "BSBA",   color: C.cyan   },
-                  { key: "BSED",   color: C.indigo },
-                  { key: "BSN",    color: C.orange },
-                  { key: "Others", color: C.slate  },
-                ].map(l => (
-                  <Line key={l.key} type="monotone" dataKey={l.key} stroke={l.color} strokeWidth={2}
-                    dot={{ r: 3, fill: l.color, strokeWidth: 0 }} activeDot={{ r: 5 }} />
+                  {k:"BSIT",  color:C.blue},
+                  {k:"BSBA",  color:C.cyan},
+                  {k:"BSED",  color:C.indigo},
+                  {k:"BSN",   color:C.orange},
+                  {k:"Others",color:C.slate},
+                ].map(l=>(
+                  <Line key={l.k} type="monotone" dataKey={l.k} stroke={l.color}
+                    strokeWidth={1.8} dot={{r:2.5,fill:l.color,strokeWidth:0}} activeDot={{r:4}}/>
                 ))}
               </LineChart>
             </ResponsiveContainer>
           </div>
-        </SCard>
+        </Card>
 
-        {/* Enrollment by Gender */}
-        <SCard title="Enrollment by Gender" subtitle="Distribution of students by gender">
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
-            <div style={{ position: "relative", width: 160, height: 160 }}>
+        <Card title="Enrollment by Gender" subtitle="Distribution of students by gender">
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",paddingTop:8}}>
+            <div style={{position:"relative",width:154,height:154}}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={GENDER_DONUT} cx="50%" cy="50%" innerRadius={50} outerRadius={76}
-                    startAngle={90} endAngle={-270} dataKey="value" paddingAngle={2}>
-                    {GENDER_DONUT.map((d, i) => <Cell key={i} fill={d.color} stroke="none" />)}
+                  <Pie data={GENDER} cx="50%" cy="50%"
+                    innerRadius={48} outerRadius={72}
+                    startAngle={90} endAngle={-270}
+                    dataKey="v" paddingAngle={2}>
+                    {GENDER.map((d,i)=><Cell key={i} fill={d.color} stroke="none"/>)}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
-              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ fontSize: 20, fontWeight: 800, color: "var(--text-primary)", lineHeight: 1 }}>2,843</span>
+              <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:19,fontWeight:800,color:"var(--text-primary)"}}>2,843</span>
               </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
-              {GENDER_DONUT.map((d, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ width: 10, height: 10, borderRadius: "50%", background: d.color }} />
-                    <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{d.name}</span>
+            <div style={{marginTop:14,display:"flex",flexDirection:"column",gap:8,width:"100%"}}>
+              {GENDER.map((d,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7}}>
+                    <span style={{width:10,height:10,borderRadius:"50%",background:d.color}}/>
+                    <span style={{fontSize:11,color:"var(--text-secondary)"}}>{d.name}</span>
                   </div>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>
-                    {d.count.toLocaleString()} <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>({d.value}%)</span>
+                  <span style={{fontSize:11,fontWeight:700,color:"var(--text-primary)"}}>
+                    {d.n.toLocaleString()}{" "}
+                    <span style={{fontWeight:400,color:"var(--text-muted)"}}>({d.v}%)</span>
                   </span>
                 </div>
               ))}
             </div>
           </div>
-        </SCard>
+        </Card>
       </div>
     </main>
   );
