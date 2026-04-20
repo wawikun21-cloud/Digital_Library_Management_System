@@ -120,6 +120,7 @@ export default function LexoraBooks() {
   }, [filteredBooks, safePage, pageSize]);
 
   // ── Toast helpers ────────────────────────────────────────
+// sourcery skip: avoid-function-declarations-in-blocks
   function showToast(message, type = "info") {
     setToast({ visible: true, message, type });
   }
@@ -215,6 +216,20 @@ export default function LexoraBooks() {
     <div className="flex flex-col gap-5">
 
       {/* ── Toolbar (search + program filter + dropdown) ── */}
+      {/* ── Page Header ──────────────────────────────── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
+            style={{ color: "var(--text-primary)" }}>
+            <BookOpen size={22} style={{ color: "var(--accent-amber)" }} />
+            Lexora Books
+          </h1>
+          <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
+            Manage imported Lexora collection
+          </p>
+        </div>
+      </div>
+
       <BookToolbar
         query={query} setQuery={setQuery}
         genreFilter={programFilter} setGenreFilter={setProgramFilter}
@@ -350,6 +365,7 @@ function Pagination({ currentPage, totalPages, totalItems, pageSize, onPageChang
 
   const iconBtn = "inline-flex items-center justify-center w-7 h-7 rounded-lg text-[12px] font-semibold transition-all duration-150 select-none";
 
+// sourcery skip: avoid-function-declarations-in-blocks
   function NavBtn({ onClick, disabled, title, children }) {
     return (
       <button onClick={onClick} disabled={disabled} title={title} className={iconBtn}

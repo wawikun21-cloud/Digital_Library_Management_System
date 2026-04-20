@@ -57,13 +57,15 @@ async function search(req, res) {
                 COUNT(*)                  AS total_copies,
                 SUM(status = 'Available') AS avail_copies
          FROM book_copies
+         WHERE is_deleted = 0
          GROUP BY book_id
        ) cc ON cc.book_id = b.id
        WHERE
+         b.is_deleted = 0 AND (
          b.title      LIKE ? OR
          b.author     LIKE ? OR
          b.authors    LIKE ? OR
-         b.authorName LIKE ?
+         b.authorName LIKE ?)
        ORDER BY
          CASE WHEN b.title LIKE ? THEN 0 ELSE 1 END,
          b.title ASC

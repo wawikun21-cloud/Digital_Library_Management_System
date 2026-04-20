@@ -91,8 +91,12 @@ async function parseLexoraExcel(buffer) {
         ? (row[colIdx.subject]?.toString().replace(/[\r\n]+/g, " ").trim() || null)
         : null;
 
-      // Global dedup: same title+author across sheets → skip
-      const key = `${title.toLowerCase()}||${(author || "").toLowerCase()}`;
+      // Dedup key: title + author + program.
+      // Using title+author alone would wrongly collapse books that share a
+      // title but have different authors across programs/sheets.
+      // Using title+author+program keeps legitimate cross-sheet duplicates
+      // while still preventing exact redundant rows within the same sheet.
+      const key = `${title.toLowerCase()}||${(author || "").toLowerCase()}||${sheetName.toLowerCase()}`;
       if (seen.has(key)) continue;
       seen.set(key, allBooks.length);
 
@@ -152,10 +156,13 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
   const [parsed, setParsed]               = useState([]);
   const [parsedSheets, setParsedSheets]   = useState([]);
   const [selectedSheets, setSelectedSheets] = useState([]);
-  const [progress, setProgress]           = useState({ current:0, total:0, title:"" });
-  const [results, setResults]             = useState(null);
-  const [dragOver, setDragOver]           = useState(false);
-  const [parseError, setParseError]       = useState("");
+  const [progress, setProgress]               = useState({ current:0, total:0, title:"" });
+  const [results, setResults]                 = useState(null);
+  const [dragOver, setDragOver]               = useState(false);
+  const [parseError, setParseError]           = useState("");
+  const [duplicates, setDuplicates]           = useState([]);      // [{title,author}] already in DB
+  const [isDupChecking, setIsDupChecking]     = useState(false);   // spinner while pre-check runs
+  const [skipDuplicates, setSkipDuplicates]   = useState(false);   // user toggle
 
   const setStepAndNotify = useCallback((s, books) => {
     setStep(s);
@@ -182,6 +189,25 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
         setParsedSheets(result.sheets);
         setSelectedSheets(result.sheets.map(s => s.name)); // select all by default
         setParsed(result.books);
+        setSkipDuplicates(false);
+
+        // ── Auto duplicate pre-check ─────────────────────────────
+        setIsDupChecking(true);
+        try {
+          const checkRes = await fetch(`${API_BASE}/books/lexora-check-duplicates`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ books: result.books.map(b => ({ title: b.title, author: b.author })) }),
+          });
+          const checkData = await checkRes.json();
+          setDuplicates(checkData.success ? (checkData.duplicates ?? []) : []);
+        } catch {
+          setDuplicates([]); // non-fatal: silently ignore, import will still work
+        } finally {
+          setIsDupChecking(false);
+        }
+        // ────────────────────────────────────────────────────────
+
         setStepAndNotify(2, result.books);
       } catch (err) {
         setParseError(`Failed to parse file: ${err.message}`);
@@ -196,13 +222,25 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
   const onDragLeave   = ()  => setDragOver(false);
 
   const startImport = async () => {
-    const booksToImport = parsedSheets
+    let booksToImport = parsedSheets
       .filter(s => selectedSheets.includes(s.name))
-      .flatMap(s => s.books)
-      .slice(0, 1000);
+      .flatMap(s => s.books);
+
+    // If user chose to skip duplicates, remove books that already exist in DB
+    if (skipDuplicates && duplicates.length > 0) {
+      const dupKeys = new Set(
+        duplicates.map(d => `${d.title?.toLowerCase().trim()}||${(d.author || "").toLowerCase().trim()}`)
+      );
+      booksToImport = booksToImport.filter(b => {
+        const key = `${b.title?.toLowerCase().trim()}||${(b.author || "").toLowerCase().trim()}`;
+        return !dupKeys.has(key);
+      });
+    }
+
+    booksToImport = booksToImport.slice(0, 1000);
 
     if (booksToImport.length === 0) {
-      setParseError("No sheet selected. Please select at least one program to import.");
+      setParseError("No books to import. Either no sheet is selected or all selected books are duplicates.");
       return;
     }
     await runImport(booksToImport);
@@ -231,7 +269,17 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
         const res  = await fetch(`${API_BASE}/books/lexora-import`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ books: chunk }),
+          body:    JSON.stringify({
+            books:             chunk,
+            is_first_chunk:    offset === 0,
+            is_last_chunk:     offset + CHUNK_SIZE >= total,
+            // Running totals BEFORE this chunk — server adds its own chunk
+            // counts on top so the final audit log reflects everything.
+            acc_imported:      importedCount,
+            acc_updated:       updatedCount,
+            acc_errors:        allFailed.length,
+            acc_skippedCopies: 0,
+          }),
         });
         const data = await res.json();
 
@@ -270,6 +318,7 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
     setFileName(""); setParsed([]); setParsedSheets([]); setSelectedSheets([]);
     setProgress({ current:0, total:0, title:"" });
     setResults(null); setParseError("");
+    setDuplicates([]); setSkipDuplicates(false); setIsDupChecking(false);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -365,6 +414,67 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
               <X size={13} style={{ color:"var(--text-muted)" }} />
             </button>
           </div>
+
+          {/* ── Duplicate check result banner ────────────────── */}
+          {isDupChecking && (
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-[12px]"
+                 style={{ background:"rgba(184,122,0,0.07)", border:"1.5px solid rgba(184,122,0,0.2)", color:"#92400e" }}>
+              <Loader2 size={13} className="animate-spin" style={{ flexShrink:0 }} />
+              <span>Checking for duplicates in the library…</span>
+            </div>
+          )}
+          {!isDupChecking && duplicates.length > 0 && (
+            <div className="flex flex-col gap-2 px-3 py-2.5 rounded-xl"
+                 style={{ background:"rgba(220,38,38,0.06)", border:"1.5px solid rgba(220,38,38,0.22)" }}>
+              <div className="flex items-start gap-2">
+                <AlertCircle size={13} style={{ color:"#b91c1c", flexShrink:0, marginTop:1 }} />
+                <p className="text-[12px] font-semibold" style={{ color:"#b91c1c" }}>
+                  {duplicates.length} book{duplicates.length !== 1 ? "s" : ""} already exist in the Lexora library.
+                </p>
+              </div>
+              {/* Scrollable duplicate list */}
+              <div className="max-h-[90px] overflow-y-auto rounded-lg pl-5"
+                   style={{ borderLeft:"2px solid rgba(220,38,38,0.2)" }}>
+                {duplicates.map((d, i) => (
+                  <p key={i} className="text-[10px] py-0.5 truncate" style={{ color:"#b91c1c" }}>
+                    {d.title}{d.author ? ` — ${d.author}` : ""}
+                  </p>
+                ))}
+              </div>
+              {/* Skip / Include toggle */}
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={() => setSkipDuplicates(false)}
+                  className="px-3 py-1 rounded-lg text-[11px] font-bold transition-colors"
+                  style={{
+                    background: !skipDuplicates ? "rgba(220,38,38,0.12)" : "var(--bg-subtle)",
+                    border: `1.5px solid ${!skipDuplicates ? "rgba(220,38,38,0.35)" : "var(--border-light)"}`,
+                    color: !skipDuplicates ? "#b91c1c" : "var(--text-muted)",
+                  }}
+                >
+                  Include all (duplicates will be updated)
+                </button>
+                <button
+                  onClick={() => setSkipDuplicates(true)}
+                  className="px-3 py-1 rounded-lg text-[11px] font-bold transition-colors"
+                  style={{
+                    background: skipDuplicates ? "rgba(34,197,94,0.1)" : "var(--bg-subtle)",
+                    border: `1.5px solid ${skipDuplicates ? "rgba(34,197,94,0.35)" : "var(--border-light)"}`,
+                    color: skipDuplicates ? "#15803d" : "var(--text-muted)",
+                  }}
+                >
+                  Skip duplicates (new titles only)
+                </button>
+              </div>
+            </div>
+          )}
+          {!isDupChecking && duplicates.length === 0 && parsed.length > 0 && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px]"
+                 style={{ background:"rgba(34,197,94,0.07)", border:"1.5px solid rgba(34,197,94,0.2)", color:"#15803d" }}>
+              <CheckCircle2 size={12} style={{ flexShrink:0 }} />
+              <span>No duplicates found — all titles are new to the library.</span>
+            </div>
+          )}
 
           <div className="flex items-center gap-2 flex-wrap">
             <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold"
@@ -526,7 +636,7 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
             <AlertCircle size={13} style={{ flexShrink:0, marginTop:1 }} />
             <span>
               Books are saved to the Lexora e-library table. Each sheet (program) becomes the collection label.
-              Duplicates are skipped automatically.
+              Duplicates are updated automatically — existing records will be refreshed, not skipped.
             </span>
           </div>
         </>
@@ -563,12 +673,37 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
       {/* ══ STEP 4: Done ══ */}
       {step === 4 && results && (
         <div className="flex flex-col gap-4">
+
+          {/* ── FIX: Total processed banner so users know all books were handled ── */}
+          {(() => {
+            const total     = (results.imported ?? 0) + (results.updated ?? 0);
+            const hasErrors = (results.errors ?? 0) > 0;
+            return (
+              <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl"
+                   style={{
+                     background: hasErrors ? "rgba(184,122,0,0.07)" : "rgba(34,197,94,0.07)",
+                     border: `1.5px solid ${hasErrors ? "rgba(184,122,0,0.25)" : "rgba(34,197,94,0.25)"}`,
+                   }}>
+                <CheckCircle2 size={16} style={{ color: hasErrors ? "var(--accent-amber)" : "#15803d", flexShrink:0 }} />
+                <p className="text-[12px] font-semibold" style={{ color: hasErrors ? "#92400e" : "#15803d" }}>
+                  <strong>{total}</strong> of <strong>{total + (results.errors ?? 0)}</strong> titles processed successfully
+                  {results.updated > 0 && (
+                    <span className="ml-1 font-normal" style={{ color:"var(--text-secondary)" }}>
+                      ({results.imported ?? 0} new · {results.updated} already existed &amp; were updated)
+                    </span>
+                  )}
+                </p>
+              </div>
+            );
+          })()}
+
           <div className="grid grid-cols-3 gap-3">
+            {/* ── FIX: Renamed from "Titles Imported" → "New Titles" to avoid confusion with "updated" books ── */}
             <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl"
                  style={{ background:"rgba(34,197,94,0.08)", border:"1.5px solid rgba(34,197,94,0.2)" }}>
               <CheckCircle2 size={26} style={{ color:"#15803d" }} />
               <p className="text-2xl font-black" style={{ color:"#15803d" }}>{results.imported ?? 0}</p>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color:"#15803d" }}>Titles Imported</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color:"#15803d" }}>New Titles</p>
             </div>
             <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl"
                  style={{ background:"rgba(184,122,0,0.08)", border:"1.5px solid rgba(184,122,0,0.2)" }}>
@@ -576,7 +711,9 @@ const LexoraImport = forwardRef(function LexoraImport({ onImportComplete, onStep
               <p className="text-2xl font-black" style={{ color:"var(--accent-amber)" }}>
                 {results.updated ?? 0}
               </p>
+              {/* ── FIX: "Updated" label now has a subtitle so users understand these were already in the DB ── */}
               <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color:"var(--accent-amber)" }}>Updated</p>
+              <p className="text-[9px] text-center leading-tight" style={{ color:"var(--text-muted)" }}>already in library</p>
             </div>
             <div className="flex flex-col items-center gap-1.5 p-4 rounded-xl"
                  style={{

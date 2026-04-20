@@ -3,12 +3,23 @@
 //  Attendance API Service - Frontend API calls for attendance
 // ─────────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
+// Empty string → same-origin → Vite proxy forwards to server (cookie sent correctly)
+const API_BASE = import.meta.env.VITE_API_URL || "";
+
+/** Shared fetch options — always send the session cookie */
+const withCreds = (opts = {}) => ({
+  ...opts,
+  credentials: "include",
+  headers: {
+    "Content-Type": "application/json",
+    ...(opts.headers || {}),
+  },
+});
 
 /** GET /api/attendance — all records */
 export async function getAllAttendance() {
   try {
-    const res  = await fetch(`${API_BASE}/api/attendance`);
+    const res = await fetch(`${API_BASE}/api/attendance`, withCreds());
     return await res.json();
   } catch (error) {
     console.error("[attendanceApi.getAllAttendance]", error);
@@ -19,7 +30,7 @@ export async function getAllAttendance() {
 /** GET /api/attendance/active — currently checked-in students */
 export async function getActiveAttendance() {
   try {
-    const res  = await fetch(`${API_BASE}/api/attendance/active`);
+    const res = await fetch(`${API_BASE}/api/attendance/active`, withCreds());
     return await res.json();
   } catch (error) {
     console.error("[attendanceApi.getActiveAttendance]", error);
@@ -30,7 +41,10 @@ export async function getActiveAttendance() {
 /** GET /api/attendance/student/:id — history for one student */
 export async function getAttendanceByStudentId(studentIdNumber) {
   try {
-    const res  = await fetch(`${API_BASE}/api/attendance/student/${studentIdNumber}`);
+    const res = await fetch(
+      `${API_BASE}/api/attendance/student/${studentIdNumber}`,
+      withCreds()
+    );
     return await res.json();
   } catch (error) {
     console.error("[attendanceApi.getAttendanceByStudentId]", error);
@@ -41,7 +55,7 @@ export async function getAttendanceByStudentId(studentIdNumber) {
 /** GET /api/attendance/stats */
 export async function getAttendanceStats() {
   try {
-    const res  = await fetch(`${API_BASE}/api/attendance/stats`);
+    const res = await fetch(`${API_BASE}/api/attendance/stats`, withCreds());
     return await res.json();
   } catch (error) {
     console.error("[attendanceApi.getAttendanceStats]", error);
@@ -56,10 +70,10 @@ export async function getAttendanceStats() {
  */
 export async function tapAttendance(studentIdNumber) {
   try {
-    const res  = await fetch(`${API_BASE}/api/attendance/tap/${encodeURIComponent(studentIdNumber)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
+    const res = await fetch(
+      `${API_BASE}/api/attendance/tap/${encodeURIComponent(studentIdNumber)}`,
+      withCreds({ method: "POST" })
+    );
     return await res.json();
   } catch (error) {
     console.error("[attendanceApi.tapAttendance]", error);
@@ -70,11 +84,10 @@ export async function tapAttendance(studentIdNumber) {
 /** POST /api/attendance/check-in — explicit check-in (legacy / direct use) */
 export async function checkIn(attendanceData) {
   try {
-    const res = await fetch(`${API_BASE}/api/attendance/check-in`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(attendanceData),
-    });
+    const res = await fetch(
+      `${API_BASE}/api/attendance/check-in`,
+      withCreds({ method: "POST", body: JSON.stringify(attendanceData) })
+    );
     return await res.json();
   } catch (error) {
     console.error("[attendanceApi.checkIn]", error);
@@ -85,10 +98,10 @@ export async function checkIn(attendanceData) {
 /** POST /api/attendance/check-out/:id — explicit check-out */
 export async function checkOut(studentIdNumber) {
   try {
-    const res = await fetch(`${API_BASE}/api/attendance/check-out/${studentIdNumber}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
+    const res = await fetch(
+      `${API_BASE}/api/attendance/check-out/${studentIdNumber}`,
+      withCreds({ method: "POST" })
+    );
     return await res.json();
   } catch (error) {
     console.error("[attendanceApi.checkOut]", error);
@@ -99,7 +112,10 @@ export async function checkOut(studentIdNumber) {
 /** DELETE /api/attendance/:id */
 export async function deleteAttendance(id) {
   try {
-    const res = await fetch(`${API_BASE}/api/attendance/${id}`, { method: "DELETE" });
+    const res = await fetch(
+      `${API_BASE}/api/attendance/${id}`,
+      withCreds({ method: "DELETE" })
+    );
     return await res.json();
   } catch (error) {
     console.error("[attendanceApi.deleteAttendance]", error);

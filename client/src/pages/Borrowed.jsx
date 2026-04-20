@@ -10,6 +10,7 @@ import ConfirmationModal from "../components/ConfirmationModal";
 import Toast from "../components/Toast";
 import useDebounce from "../hooks/useDebounce";
 import CopiesList from "../components/books/CopiesList";
+import { useWebSocket } from "../hooks/useWebsocket";
 
 // ── Constants ─────────────────────────────────────────────
 const MAX_BOOKS   = 2;
@@ -156,6 +157,50 @@ export default function Borrowed() {
   }, []);
 
   useEffect(() => { fetchTransactions(); }, [fetchTransactions]);
+
+  // ── Real-time transaction sync via Socket.io ──────────
+  //
+  // When another browser tab or a different staff member performs a
+  // borrow / return / delete / fine-paid action, the server broadcasts
+  // the event.  We apply the update directly to local state so this
+  // view stays current without a manual refresh.
+  //
+  // Duplicate-guard: if our own mutation already updated state (optimistic
+  // update in handleBorrow / handleReturn etc.), the WS event will carry
+  // the same id — the map/filter will no-op harmlessly.
+  useWebSocket({
+    // transaction:new — prepend the new transaction
+    onTransactionNew: (data) => {
+      if (!data?.id) return;
+      setTxns(prev => {
+        // Avoid duplicates if our own POST already added it
+        if (prev.some(t => t.id === data.id)) return prev;
+        return [sanitizeTxns([data])[0], ...prev];
+      });
+    },
+
+    // transaction:returned — update the matching row in-place
+    onTransactionReturned: (data) => {
+      if (!data?.id) return;
+      setTxns(prev =>
+        prev.map(t => t.id === data.id ? { ...t, ...sanitizeTxns([data])[0] } : t)
+      );
+    },
+
+    // transaction:deleted — remove the row
+    onTransactionDeleted: (data) => {
+      if (!data?.id) return;
+      setTxns(prev => prev.filter(t => t.id !== data.id));
+    },
+
+    // transaction:fine_paid — mark the fine paid on the row
+    onTransactionFinePaid: (data) => {
+      if (!data?.id) return;
+      setTxns(prev =>
+        prev.map(t => t.id === data.id ? { ...t, ...sanitizeTxns([data])[0] } : t)
+      );
+    },
+  });
 
   // ── Borrower lookup ───────────────────────────────────
   // Handles both student (by ID number) and faculty (by name).
@@ -317,6 +362,7 @@ export default function Borrowed() {
 
   // ── Add book to list ──────────────────────────────────
   // accessionNumber starts null — user picks the specific copy via CopiesList below.
+// sourcery skip: avoid-function-declarations-in-blocks
   function addBook(book) {
     if (form.borrower_type !== "faculty" && form.books.length >= MAX_BOOKS) return;
     if (form.books.some(b => b.id === book.id)) return;
@@ -484,7 +530,21 @@ body: JSON.stringify({
   //  Render
   // ─────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col gap-5">
+<div className="flex flex-col gap-5">
+
+      {/* ── Page Header ──────────────────────────────── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
+            style={{ color: "var(--text-primary)" }}>
+            <BookOpen size={22} style={{ color: "var(--accent-amber)" }} />
+            Borrowed Books
+          </h1>
+          <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
+            Manage borrowing transactions, returns, renewals, and overdue fines
+          </p>
+        </div>
+      </div>
 
       {/* ── Summary pills ──────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

@@ -74,7 +74,12 @@ const LexoraBookModel = {
       let bookId    = null;
       let isNewBook = false;
 
+      // A book is uniquely identified by title + author together.
+      // Do NOT fall back to title-only matching — that would incorrectly
+      // merge books that share a title but have different authors
+      // (e.g. different editors/editions with the same series name).
       if (authorVal) {
+        // Both title and author are present → match on both.
         const [rows] = await conn.query(
           `SELECT id FROM lexora_books
             WHERE LOWER(TRIM(title)) = LOWER(TRIM(?))
@@ -83,12 +88,13 @@ const LexoraBookModel = {
           [titleVal, authorVal]
         );
         if (rows.length) bookId = rows[0].id;
-      }
-
-      if (!bookId) {
+      } else {
+        // No author on the incoming record → match title + empty/null author only,
+        // so we don't accidentally merge an authorless row with an authored one.
         const [rows] = await conn.query(
           `SELECT id FROM lexora_books
             WHERE LOWER(TRIM(title)) = LOWER(TRIM(?))
+              AND (author IS NULL OR TRIM(author) = '')
             LIMIT 1`,
           [titleVal]
         );
@@ -288,6 +294,54 @@ const LexoraBookModel = {
       };
     } catch (error) {
       console.error("[LexoraBookModel.getAll]", error.message);
+      return { success: false, error: error.message };
+    }
+  },
+  /**
+   * Check which books from the given list already exist in lexora_books.
+   * Matches on sanitized title + author (same logic as upsertBook).
+   * @param {Array<{title:string, author:string|null}>} books
+   * @returns {{ success:boolean, duplicates: Array<{title,author}> }}
+   */
+  async checkDuplicates(books) {
+    try {
+      const duplicates = [];
+
+      for (const book of books) {
+        const titleVal  = sanitize(book.title);
+        const authorVal = sanitize(book.author);
+
+        if (!titleVal) continue;
+
+        let rows;
+        if (authorVal) {
+          [rows] = await pool.query(
+            `SELECT id FROM lexora_books
+              WHERE deleted_at IS NULL
+                AND LOWER(TRIM(title))                = LOWER(TRIM(?))
+                AND LOWER(TRIM(COALESCE(author, ''))) = LOWER(TRIM(?))
+              LIMIT 1`,
+            [titleVal, authorVal]
+          );
+        } else {
+          [rows] = await pool.query(
+            `SELECT id FROM lexora_books
+              WHERE deleted_at IS NULL
+                AND LOWER(TRIM(title)) = LOWER(TRIM(?))
+                AND (author IS NULL OR TRIM(author) = '')
+              LIMIT 1`,
+            [titleVal]
+          );
+        }
+
+        if (rows.length) {
+          duplicates.push({ title: book.title, author: book.author || null });
+        }
+      }
+
+      return { success: true, duplicates };
+    } catch (error) {
+      console.error("[LexoraBookModel.checkDuplicates]", error.message);
       return { success: false, error: error.message };
     }
   },

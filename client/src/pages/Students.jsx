@@ -12,7 +12,6 @@ import {
   bulkImportStudents,
   getStudentStats
 } from '../services/api/studentsApi';
-import StatsCard from '../components/StatsCard';
 import Toast from '../components/Toast';
 import Pagination from '../components/books/Pagination';
 
@@ -58,6 +57,7 @@ export default function Students() {
   const [importSchoolYear, setImportSchoolYear] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [importErrors, setImportErrors]     = useState({});  // field-level errors for import modal
   const fileInputRef = useRef(null);
 
   // ── Toast state ─────────────────────────────────────
@@ -195,6 +195,15 @@ export default function Students() {
 
   // ── Handle bulk import ───────────────────────────────
   const handleBulkImport = async (studentsData) => {
+    // ── Validate required import fields before touching the server ──
+    const errs = {};
+    if (!importCourse.trim())     errs.importCourse     = 'Course is required before importing.';
+    if (!importSchoolYear.trim()) errs.importSchoolYear = 'School Year is required before importing.';
+    if (Object.keys(errs).length) {
+      setImportErrors(errs);
+      return;
+    }
+    setImportErrors({});
     setIsImporting(true);
     setImportProgress(0);
 
@@ -384,19 +393,22 @@ export default function Students() {
   }, []);
 
   return (
-    <div className="p-6">
+    <div className="flex flex-col gap-5">
       {/* ── Page Header ────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-3">
-            <User className="w-8 h-8 text-amber-500" />
+          <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
+            style={{ color: "var(--text-primary)" }}>
+            <GraduationCap size={22} style={{ color: "var(--accent-amber)" }} />
             Student Management
           </h1>
-          <p className="text-gray-600 dark:text-gray-300 mt-1">
-            Manage student details and bulk import functionality
+          <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
+            Manage student records, enrollments, and bulk import functionality
           </p>
         </div>
-        <div className="flex items-center gap-4">
+
+        <div className="flex items-center gap-2 flex-wrap">
+
           <button
             onClick={() => {
               const now = new Date();
@@ -404,104 +416,207 @@ export default function Students() {
               setImportSchoolYear(`${syStart}-${syStart + 1}`);
               setIsImportModalOpen(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-all hover:opacity-90 active:scale-[.98]"
+            style={{
+              background: "rgba(45,122,71,0.1)",
+              border: "1.5px solid rgba(45, 63, 122, 0.35)",
+              color: "var(--text-primary)",
+            }}
           >
-            <Upload className="w-4 h-4" />
+            <Upload size={14} />
             Bulk Import
           </button>
+
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-gray-900 dark:text-white font-medium rounded-md transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors"
+            style={{ background: "var(--accent-amber)", boxShadow: "0 2px 8px rgba(238,162,58,.3)" }}
           >
-            <Plus className="w-4 h-4" />
-            Add Student
+            <Plus size={14} /> Add Student
           </button>
         </div>
       </div>
 
       {/* ── Statistics Cards ────────────────────────────── */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <StatsCard
-            title="Total Students"
-            value={stats.total}
-            icon={User}
-            color="blue"
-          />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {/* Total Students */}
+          <div
+            className="flex items-center gap-3 px-4 py-3 rounded-xl"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+          >
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: 'rgba(30,58,123,0.1)' }}>
+              <User size={16} style={{ color: '#1e3a7b' }} />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide leading-none" style={{ color: 'var(--text-muted)' }}>Total</p>
+              <p className="text-[20px] font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>{stats.total}</p>
+              <p className="text-[10.5px]" style={{ color: 'var(--text-muted)' }}>students enrolled</p>
+            </div>
+          </div>
+
+          {/* Top Course */}
           {stats.byCourse.slice(0, 1).map((course) => (
-            <StatsCard
-              key={course.student_course}
-              title={`${course.student_course} (${course.count})`}
-              value={`${Math.round((course.count / stats.total) * 100)}%`}
-              icon={Building2}
-              color="green"
-            />
+            <div key={course.student_course}
+              className="flex items-center gap-3 px-4 py-3 rounded-xl"
+              style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+            >
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                style={{ background: 'rgba(238,162,58,0.12)' }}>
+                <Building2 size={16} style={{ color: '#b87a1a' }} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wide leading-none" style={{ color: 'var(--text-muted)' }}>Top Course</p>
+                <p className="text-[20px] font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>{course.count}</p>
+                <p className="text-[10.5px] font-semibold truncate" style={{ color: '#b87a1a' }}>{course.student_course}</p>
+              </div>
+            </div>
           ))}
-          {stats.byYearLevel.slice(0, 2).map((yearLevel) => (
-            <StatsCard
-              key={yearLevel.student_yr_level}
-              title={`${yearLevel.student_yr_level} (${yearLevel.count})`}
-              value={`${Math.round((yearLevel.count / stats.total) * 100)}%`}
-              icon={GraduationCap}
-              color="purple"
-            />
-          ))}
+
+          {/* Year Level Cards */}
+          {stats.byYearLevel.slice(0, 4).map((yearLevel, idx) => {
+            const yrColors = [
+              { bg: 'rgba(59,130,246,0.1)',  text: '#2563eb', label: '1st Year' },
+              { bg: 'rgba(16,185,129,0.1)',  text: '#059669', label: '2nd Year' },
+              { bg: 'rgba(168,85,247,0.1)',  text: '#7c3aed', label: '3rd Year' },
+              { bg: 'rgba(239,68,68,0.1)',   text: '#dc2626', label: '4th Year' },
+            ];
+            const c = yrColors[idx] || yrColors[0];
+            const shortLabel = yearLevel.student_yr_level?.replace(' Year', 'yr') || c.label;
+            return (
+              <div key={yearLevel.student_yr_level}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl"
+                style={{ background: 'var(--bg-surface)', border: `1px solid var(--border)` }}
+              >
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ background: c.bg }}>
+                  <GraduationCap size={16} style={{ color: c.text }} />
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide leading-none" style={{ color: 'var(--text-muted)' }}>{yearLevel.student_yr_level}</p>
+                  <p className="text-[20px] font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>{yearLevel.count}</p>
+                  <p className="text-[10.5px] font-semibold" style={{ color: c.text }}>students</p>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
       {/* ── School Year Tabs ─────────────────────────────── */}
       {schoolYears.length > 0 && (
-        <div className="mb-4">
-          <div className="flex items-center gap-1 flex-wrap">
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-400 mr-2">
-              School Year:
-            </span>
-            {schoolYears.map(sy => (
-              <button
-                key={sy}
-                onClick={() => setSelectedSY(sy)}
-                className={`px-4 py-1.5 rounded-full text-sm font-semibold border-2 transition-colors ${
-                  selectedSY === sy
-                    ? 'bg-amber-500 border-amber-600 text-gray-900'
-                    : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-amber-400 hover:text-amber-700 dark:hover:text-amber-400'
-                }`}
-              >
-                {sy}
-                <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full font-normal ${
-                  selectedSY === sy
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                }`}>
-                  {students.filter(s => s.student_school_year === sy).length}
-                </span>
-              </button>
-            ))}
+        <div
+          className="rounded-xl p-4"
+          style={{
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border)',
+          }}
+        >
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Label */}
+            <div className="flex items-center gap-1.5 mr-1">
+              <FileText className="w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} />
+              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                School Year
+              </span>
+            </div>
+
+            {/* Divider */}
+            <div className="w-px h-5 self-center" style={{ background: 'var(--border)' }} />
+
+            {/* Tab buttons */}
+            {schoolYears.map(sy => {
+              const count = students.filter(s => s.student_school_year === sy).length;
+              const isActive = selectedSY === sy;
+              return (
+                <button
+                  key={sy}
+                  onClick={() => setSelectedSY(sy)}
+                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all duration-150"
+                  style={isActive ? {
+                    background: 'linear-gradient(135deg, #1e3a7b 0%, #2d4fa3 100%)',
+                    color: '#ffffff',
+                    boxShadow: '0 2px 8px rgba(30,58,123,0.35)',
+                    border: '1px solid transparent',
+                  } : {
+                    background: 'var(--bg-subtle)',
+                    color: 'var(--text-secondary)',
+                    border: '1px solid var(--border)',
+                    boxShadow: 'none',
+                  }}
+                  onMouseEnter={e => {
+                    if (!isActive) {
+                      e.currentTarget.style.borderColor = '#2d4fa3';
+                      e.currentTarget.style.color = '#2d4fa3';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!isActive) {
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                      e.currentTarget.style.color = 'var(--text-secondary)';
+                    }
+                  }}
+                >
+                  {sy}
+                  <span
+                    className="text-xs px-1.5 py-0.5 rounded-md font-semibold"
+                    style={isActive ? {
+                      background: 'rgba(255,255,255,0.25)',
+                      color: '#ffffff',
+                    } : {
+                      background: 'var(--bg-input)',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
 
       {/* ── Filters and Search ──────────────────────────── */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-8">
+      <div
+        className="rounded-xl p-5"
+        style={{
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border)',
+        }}
+      >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex flex-col md:flex-row md:items-center gap-4">
+          <div className="flex flex-col md:flex-row md:items-center gap-3">
             {/* Search */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-muted)' }} />
               <input
                 type="text"
                 placeholder="Search students..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                className="pl-10 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-700 transition-colors"
+                style={{
+                  background: 'var(--bg-input)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-primary)',
+                  minWidth: '220px',
+                }}
               />
             </div>
             {/* Course Filter */}
             <div className="relative">
-              <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-muted)' }} />
               <select
                 value={filters.course}
                 onChange={(e) => setFilters({ ...filters, course: e.target.value })}
-                className="pl-10 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none"
+                className="pl-10 pr-10 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-700 appearance-none transition-colors"
+                style={{
+                  background: 'var(--bg-input)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-primary)',
+                }}
               >
                 <option value="All">All Courses</option>
                 {stats?.byCourse.map((course) => (
@@ -510,15 +625,20 @@ export default function Students() {
                   </option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
             </div>
             {/* Year Level Filter */}
             <div className="relative">
-              <GraduationCap className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <GraduationCap className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-muted)' }} />
               <select
                 value={filters.yearLevel}
                 onChange={(e) => setFilters({ ...filters, yearLevel: e.target.value })}
-                className="pl-10 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none"
+                className="pl-10 pr-10 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-700 appearance-none transition-colors"
+                style={{
+                  background: 'var(--bg-input)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-primary)',
+                }}
               >
                 <option value="All">All Year Levels</option>
                 {stats?.byYearLevel.map((yearLevel) => (
@@ -527,97 +647,103 @@ export default function Students() {
                   </option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
             </div>
           </div>
 
           {/* ── Results count ─────────────────────────── */}
           {!isLoading && (
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              Showing {paginatedStudents.length} of {filteredStudents.length} student{filteredStudents.length !== 1 ? 's' : ''}
+            <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>
+              Showing <span style={{ color: 'var(--text-primary)' }}>{paginatedStudents.length}</span> of <span style={{ color: 'var(--text-primary)' }}>{filteredStudents.length}</span> student{filteredStudents.length !== 1 ? 's' : ''}
             </p>
           )}
         </div>
       </div>
 
       {/* ── Students Table ───────────────────────────────── */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border)',
+        }}
+      >
         {isLoading ? (
-          <div className="flex justify-center items-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div>
-            <span className="ml-3 text-gray-600 dark:text-gray-300">Loading students...</span>
+          <div className="flex justify-center items-center py-16">
+            <svg className="animate-spin" style={{ width: 18, height: 18, color: 'var(--accent-amber)' }} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+            </svg>
+            <span className="ml-3 text-[13px]" style={{ color: 'var(--text-muted)' }}>Loading students...</span>
           </div>
         ) : filteredStudents.length > 0 ? (
           <>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-600">
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Student
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      ID Number
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Course
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Year Level
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Email
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Display Name
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      First Name
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Last Name
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Actions
-                    </th>
+                  <tr style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border-light)' }}>
+                    {['Student', 'ID Number', 'Course', 'Year Level', 'Email', 'Display Name', 'First Name', 'Last Name', 'Actions'].map(h => (
+                      <th key={h} className="text-left py-3 px-4 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                        {h}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedStudents.map((student) => (
-                    <tr key={student.id} className="border-b border-gray-100 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="py-3 px-4 text-sm">
+                  {paginatedStudents.map((student, idx) => (
+                    <tr
+                      key={student.id}
+                      style={{ borderBottom: '1px solid var(--border-light)' }}
+                      className="hover:bg-amber-50/30 transition-colors"
+                    >
+                      <td className="py-3 px-4 text-[13px]">
                         <div className="flex items-center gap-3">
-                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
-                            <User className="w-4 h-4 text-amber-500" />
+                          <div
+                            className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs"
+                            style={{ background: 'rgba(30,58,123,0.12)', color: '#2d4fa3', border: '1px solid rgba(30,58,123,0.2)' }}
+                          >
+                            {student.student_name?.charAt(0)?.toUpperCase() || <User size={13} />}
                           </div>
-                          <div className="font-medium text-gray-800 dark:text-white">
+                          <span className="font-semibold text-slate-900" style={{ color: 'var(--text-primary)' }}>
                             {student.student_name}
-                          </div>
+                          </span>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
+                      <td className="py-3 px-4 text-[13px] font-mono" style={{ color: 'var(--text-secondary)' }}>
                         {student.student_id_number}
                       </td>
-                      <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
-                        {student.student_course || 'N/A'}
+                      <td className="py-3 px-4 text-[13px]">
+                        {student.student_course ? (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                            style={{ background: 'rgba(50,102,127,.12)', color: '#32667F' }}>
+                            {student.student_course}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>—</span>
+                        )}
                       </td>
-                      <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
-                        {student.student_yr_level || 'N/A'}
+                      <td className="py-3 px-4 text-[13px]" style={{ color: 'var(--text-secondary)' }}>
+                        {student.student_yr_level ? (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                            style={{ background: 'rgba(124,58,237,.1)', color: '#7c3aed' }}>
+                            {student.student_yr_level}
+                          </span>
+                        ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                       </td>
-                      <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
-                        {student.student_email || 'N/A'}
+                      <td className="py-3 px-4 text-[13px]" style={{ color: 'var(--text-secondary)' }}>
+                        {student.student_email || <span style={{ color: 'var(--text-muted)' }}>—</span>}
                       </td>
-                      <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
-                        {student.display_name || 'N/A'}
+                      <td className="py-3 px-4 text-[13px]" style={{ color: 'var(--text-secondary)' }}>
+                        {student.display_name || <span style={{ color: 'var(--text-muted)' }}>—</span>}
                       </td>
-                      <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
-                        {student.first_name || 'N/A'}
+                      <td className="py-3 px-4 text-[13px]" style={{ color: 'var(--text-secondary)' }}>
+                        {student.first_name || <span style={{ color: 'var(--text-muted)' }}>—</span>}
                       </td>
-                      <td className="py-3 px-4 text-sm text-gray-800 dark:text-white">
-                        {student.last_name || 'N/A'}
+                      <td className="py-3 px-4 text-[13px]" style={{ color: 'var(--text-secondary)' }}>
+                        {student.last_name || <span style={{ color: 'var(--text-muted)' }}>—</span>}
                       </td>
                       <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                           <button
                             onClick={() => {
                               setSelectedStudent(student);
@@ -625,17 +751,23 @@ export default function Students() {
                               setIsEditMode(true);
                               setIsModalOpen(true);
                             }}
-                            className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900 rounded transition-colors"
+                            className="p-1.5 rounded-lg transition-colors duration-150"
+                            style={{ color: '#2d4fa3' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(30,58,123,0.1)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                             title="Edit"
                           >
-                            <Edit className="w-4 h-4" />
+                            <Edit size={14} />
                           </button>
                           <button
                             onClick={() => handleDeleteStudent(student.id)}
-                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900 rounded transition-colors"
+                            className="p-1.5 rounded-lg transition-colors duration-150"
+                            style={{ color: '#dc2626' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.08)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                             title="Delete"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       </td>
@@ -646,7 +778,7 @@ export default function Students() {
             </div>
 
             {/* ── Pagination ─────────────────────────────── */}
-            <div className="mt-4 border-t border-gray-100 dark:border-gray-700 pt-4">
+            <div className="px-4 py-3" style={{ borderTop: '1px solid var(--border)' }}>
               <Pagination
                 currentPage={currentPage}
                 totalPages={totalPages}
@@ -655,10 +787,13 @@ export default function Students() {
             </div>
           </>
         ) : (
-          <div className="text-center py-12">
-            <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600 dark:text-gray-300 text-lg">
+          <div className="flex flex-col items-center justify-center py-12 gap-2">
+            <AlertCircle size={28} style={{ color: 'var(--text-muted)' }} />
+            <p className="text-[13px] font-medium" style={{ color: 'var(--text-primary)' }}>
               {searchTerm ? 'No matching students found' : 'No students available'}
+            </p>
+            <p className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
+              {searchTerm ? 'Try adjusting your search or filters' : 'Add students manually or use bulk import'}
             </p>
           </div>
         )}
@@ -666,32 +801,42 @@ export default function Students() {
 
       {/* ── Student Form Modal ───────────────────────────── */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(10,22,34,0.65)', backdropFilter: 'blur(4px)' }}>
           <div
-            className="rounded-lg shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto"
-            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+            className="rounded-2xl shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: '0 24px 60px rgba(0,0,0,0.28)' }}
           >
-            <h2
-              className="text-xl font-bold mb-6"
-              style={{ color: 'var(--text-primary)' }}
-            >
-              {isEditMode ? 'Edit Student' : 'Add New Student'}
-            </h2>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{ background: 'linear-gradient(135deg, #1e3a7b 0%, #2d4fa3 100%)' }}>
+                  <GraduationCap size={16} className="text-white" />
+                </div>
+                <h2 className="text-[17px] font-bold" style={{ color: 'var(--text-primary)' }}>
+                  {isEditMode ? 'Edit Student' : 'Add New Student'}
+                </h2>
+              </div>
+              <button
+                onClick={() => { setIsModalOpen(false); setIsEditMode(false); resetForm(); }}
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-black/5"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                <XCircle size={18} />
+              </button>
+            </div>
             <form onSubmit={isEditMode ? handleUpdateStudent : handleCreateStudent}>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {[
-                  { label: 'Student ID Number *', key: 'student_id_number', type: 'text', required: true, placeholder: 'Enter student ID number' },
-                  { label: 'Student Name *',      key: 'student_name',      type: 'text', required: true, placeholder: 'Enter student name' },
-                  { label: 'Course *',            key: 'student_course',    type: 'text', required: true, placeholder: 'Enter course (e.g., BSIT)' },
-                  { label: 'Email',               key: 'student_email',     type: 'email', placeholder: 'Enter email address' },
-                  { label: 'Contact Number',      key: 'student_contact',   type: 'text', placeholder: 'Enter contact number' },
+                  { label: 'Student ID Number', key: 'student_id_number', type: 'text', required: true, placeholder: 'Enter student ID number' },
+                  { label: 'Student Name',      key: 'student_name',      type: 'text', required: true, placeholder: 'Enter student name' },
+                  { label: 'Course',            key: 'student_course',    type: 'text', required: true, placeholder: 'Enter course (e.g., BSIT)' },
+                  { label: 'Email',             key: 'student_email',     type: 'email', placeholder: 'Enter email address' },
+                  { label: 'Contact Number',    key: 'student_contact',   type: 'text', placeholder: 'Enter contact number' },
                 ].map(({ label, key, type, required, placeholder }) => (
                   <div key={key}>
-                    <label
-                      className="block text-sm font-medium mb-1"
-                      style={{ color: 'var(--text-secondary)' }}
-                    >
-                      {label}
+                    <label className="block text-[12.5px] font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
+                      {label}{required && <span style={{ color: '#dc2626' }}> *</span>}
                     </label>
                     <input
                       type={type}
@@ -699,66 +844,49 @@ export default function Students() {
                       value={formData[key]}
                       onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
                       placeholder={placeholder}
-                      className="w-full px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      style={{
-                        background: 'var(--bg-main)',
-                        border: '1px solid var(--border)',
-                        color: 'var(--text-primary)',
-                      }}
+                      className="w-full px-3 py-2.5 rounded-lg text-[13px] outline-none transition-all focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400"
+                      style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', color: 'var(--text-primary)' }}
                     />
                   </div>
                 ))}
                 <div>
-                  <label
-                    className="block text-sm font-medium mb-1"
-                    style={{ color: 'var(--text-secondary)' }}
-                  >
+                  <label className="block text-[12.5px] font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                     Year Level
                   </label>
-                  <select
-                    value={formData.student_yr_level}
-                    onChange={(e) => setFormData({ ...formData, student_yr_level: e.target.value })}
-                    className="w-full px-3 py-2 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    style={{
-                      background: 'var(--bg-main)',
-                      border: '1px solid var(--border)',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
-                    <option value="">Select year level</option>
-                    <option value="1st Year">1st Year</option>
-                    <option value="2nd Year">2nd Year</option>
-                    <option value="3rd Year">3rd Year</option>
-                    <option value="4th Year">4th Year</option>
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={formData.student_yr_level}
+                      onChange={(e) => setFormData({ ...formData, student_yr_level: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-lg text-[13px] outline-none transition-all focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 appearance-none"
+                      style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', color: 'var(--text-primary)' }}
+                    >
+                      <option value="">Select year level</option>
+                      <option value="1st Year">1st Year</option>
+                      <option value="2nd Year">2nd Year</option>
+                      <option value="3rd Year">3rd Year</option>
+                      <option value="4th Year">4th Year</option>
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                      style={{ color: 'var(--text-muted)' }} />
+                  </div>
                 </div>
               </div>
 
               {/* ── Modal footer ──────────────────────────── */}
-              <div
-                className="flex items-center justify-end gap-3 mt-6 pt-4"
-                style={{ borderTop: '1px solid var(--border)' }}
-              >
+              <div className="flex items-center justify-end gap-2.5 mt-6 pt-4"
+                style={{ borderTop: '1px solid var(--border-light)' }}>
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setIsEditMode(false);
-                    resetForm();
-                  }}
-                  className="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                  style={{
-                    background: 'var(--bg-main)',
-                    border: '1px solid var(--border)',
-                    color: 'var(--text-secondary)',
-                  }}
+                  onClick={() => { setIsModalOpen(false); setIsEditMode(false); resetForm(); }}
+                  className="px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-all hover:opacity-80 active:scale-[.98]"
+                  style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-md text-sm font-medium text-white transition-colors"
-                  style={{ background: 'var(--accent-amber)' }}
+                  className="px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white transition-all hover:opacity-90 active:scale-[.98]"
+                  style={{ background: 'linear-gradient(135deg, #1e3a7b 0%, #2d4fa3 100%)', boxShadow: '0 2px 8px rgba(30,58,123,0.35)' }}
                   onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
                   onMouseLeave={e => e.currentTarget.style.opacity = '1'}
                 >
@@ -772,15 +900,24 @@ export default function Students() {
 
       {/* ── Bulk Import Modal ────────────────────────────── */}
       {isImportModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(10,22,34,0.65)', backdropFilter: 'blur(4px)' }}>
+          <div className="rounded-2xl shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: '0 24px 60px rgba(0,0,0,0.28)' }}>
+            {/* ── Modal Header ───────────────────────────── */}
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-gray-800 dark:text-white">
-                Bulk Import Students
-              </h2>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{ background: 'linear-gradient(135deg, #1e3a7b 0%, #2d4fa3 100%)' }}>
+                  <Upload size={16} className="text-white" />
+                </div>
+                <h2 className="text-[17px] font-bold" style={{ color: 'var(--text-primary)' }}>
+                  Bulk Import Students
+                </h2>
+              </div>
               <button
                 onClick={() => {
-                  if (isImporting) return; // block closing mid-import
+                  if (isImporting) return;
                   setIsImportModalOpen(false);
                   setImportFile(null);
                   setParsedStudentsData(null);
@@ -788,49 +925,52 @@ export default function Students() {
                   setImportCourse('');
                   setImportSchoolYear('');
                   setImportProgress(0);
+                  setImportErrors({});
                 }}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
                 disabled={isImporting}
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ color: 'var(--text-muted)' }}
               >
-                <XCircle className="w-6 h-6" />
+                <XCircle size={18} />
               </button>
             </div>
 
             <div className="space-y-4">
               {/* ── Import Progress Bar ─────────────────────── */}
               {isImporting && (
-                <div className="p-4 bg-amber-100 dark:bg-amber-900/20 border-2 border-amber-400 dark:border-amber-700 rounded-lg">
+                <div className="p-4 rounded-xl"
+                  style={{ background: 'rgba(238,162,58,0.08)', border: '1.5px solid rgba(238,162,58,0.35)' }}>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-semibold text-amber-900 dark:text-amber-300 flex items-center gap-2">
-                      {/* Spinner */}
-                      <svg className="animate-spin w-4 h-4 text-amber-600 dark:text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <span className="text-[13px] font-semibold flex items-center gap-2"
+                      style={{ color: 'var(--accent-amber)' }}>
+                      <svg className="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                       </svg>
                       Importing students, please wait…
                     </span>
-                    <span className="text-sm font-bold text-amber-900 dark:text-amber-300">
+                    <span className="text-[13px] font-bold" style={{ color: 'var(--accent-amber)' }}>
                       {Math.round(importProgress)}%
                     </span>
                   </div>
-                  <div className="w-full bg-amber-200 dark:bg-amber-800 rounded-full h-3 overflow-hidden">
-                    <div
-                      className="bg-amber-500 dark:bg-amber-400 h-3 rounded-full transition-all duration-300 ease-out"
-                      style={{ width: `${importProgress}%` }}
-                    />
+                  <div className="w-full rounded-full h-2 overflow-hidden" style={{ background: 'rgba(238,162,58,0.2)' }}>
+                    <div className="h-2 rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${importProgress}%`, background: 'var(--accent-amber)' }} />
                   </div>
-                  <p className="text-xs font-medium text-amber-800 dark:text-amber-400 mt-2">
+                  <p className="text-[11.5px] font-medium mt-2" style={{ color: 'var(--text-muted)' }}>
                     ⚠ Do not close this window while import is in progress.
                   </p>
                 </div>
               )}
 
+              {/* ── File Upload ─────────────────────────────── */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-[12.5px] font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
                   Upload Excel File
                 </label>
                 <div
-                  className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center"
+                  className="rounded-xl p-8 text-center transition-colors"
+                  style={{ border: '2px dashed var(--border)', background: 'var(--bg-subtle)' }}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     e.preventDefault();
@@ -839,12 +979,12 @@ export default function Students() {
                   }}
                 >
                   {importFile ? (
-                    <div className="flex flex-col items-center">
-                      <FileSpreadsheet className="w-12 h-12 text-green-500 mb-2" />
-                      <p className="text-sm text-gray-800 dark:text-white font-medium">
+                    <div className="flex flex-col items-center gap-1">
+                      <FileSpreadsheet size={36} style={{ color: '#2d7a47' }} />
+                      <p className="text-[13px] font-semibold mt-1" style={{ color: 'var(--text-primary)' }}>
                         {importFile.name}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                         {(importFile.size / 1024).toFixed(1)} KB
                       </p>
                       <button
@@ -853,18 +993,19 @@ export default function Students() {
                           setParsedStudentsData(null);
                           if (fileInputRef.current) fileInputRef.current.value = '';
                         }}
-                        className="mt-2 text-xs text-red-500 hover:text-red-700"
+                        className="mt-1 text-[12px] font-semibold transition-opacity hover:opacity-70"
+                        style={{ color: '#dc2626' }}
                       >
                         Remove File
                       </button>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center">
-                      <Upload className="w-12 h-12 text-gray-400 mb-2" />
-                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
+                    <div className="flex flex-col items-center gap-1">
+                      <Upload size={32} style={{ color: 'var(--text-muted)' }} />
+                      <p className="text-[13px] mt-1" style={{ color: 'var(--text-secondary)' }}>
                         Drag & drop Excel file here or click to browse
                       </p>
-                      <label className="cursor-pointer">
+                      <label className="cursor-pointer mt-2">
                         <input
                           type="file"
                           accept=".xlsx, .xls"
@@ -872,11 +1013,12 @@ export default function Students() {
                           className="hidden"
                           ref={fileInputRef}
                         />
-                        <span className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm">
+                        <span className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-all hover:opacity-90"
+                          style={{ background: 'var(--accent-amber)' }}>
                           Choose File
                         </span>
                       </label>
-                      <p className="text-xs text-gray-500 mt-2">
+                      <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
                         Supports Excel files (.xlsx, .xls)
                       </p>
                     </div>
@@ -884,45 +1026,57 @@ export default function Students() {
                 </div>
               </div>
 
-              {/* Course Selection */}
+              {/* ── Course Selection ────────────────────────── */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Course *
+                <label className="block text-[12.5px] font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
+                  Course <span style={{ color: '#dc2626' }}>*</span>
                 </label>
                 <div className="relative">
                   <select
                     required
                     value={importCourse}
-                    onChange={(e) => setImportCourse(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none"
+                    onChange={(e) => {
+                      setImportCourse(e.target.value);
+                      setImportErrors(p => ({ ...p, importCourse: '' }));
+                    }}
+                    className="w-full px-3 py-2.5 rounded-lg text-[13px] outline-none transition-all focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 appearance-none"
+                    style={{ background: 'var(--bg-input)', border: `1.5px solid ${importErrors.importCourse ? '#dc2626' : 'var(--border)'}`, color: 'var(--text-primary)' }}
                   >
                     <option value="">Select a course</option>
                     {['BSIT', 'BEED', 'BSED', 'BA', 'BSCRIM'].map(course => (
                       <option key={course} value={course}>{course}</option>
                     ))}
                   </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{ color: 'var(--text-muted)' }} />
                 </div>
+                {importErrors.importCourse && (
+                  <p className="text-[11.5px] font-semibold mt-1.5 flex items-center gap-1" style={{ color: '#dc2626' }}>
+                    <AlertCircle size={12} /> {importErrors.importCourse}
+                  </p>
+                )}
               </div>
 
-              {/* School Year Selection */}
+              {/* ── School Year Selection ───────────────────── */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  School Year *
+                <label className="block text-[12.5px] font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
+                  School Year <span style={{ color: '#dc2626' }}>*</span>
                 </label>
                 <div className="relative">
                   <select
                     required
                     value={importSchoolYear}
-                    onChange={(e) => setImportSchoolYear(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 appearance-none"
+                    onChange={(e) => {
+                      setImportSchoolYear(e.target.value);
+                      setImportErrors(p => ({ ...p, importSchoolYear: '' }));
+                    }}
+                    className="w-full px-3 py-2.5 rounded-lg text-[13px] outline-none transition-all focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 appearance-none"
+                    style={{ background: 'var(--bg-input)', border: `1.5px solid ${importErrors.importSchoolYear ? '#dc2626' : 'var(--border)'}`, color: 'var(--text-primary)' }}
                   >
                     <option value="">Select school year</option>
                     {(() => {
                       const currentYear = new Date().getFullYear();
-                      // Current S.Y. starts in current year if month >= June, else previous year
                       const syStartYear = new Date().getMonth() >= 5 ? currentYear : currentYear - 1;
-                      // Generate current S.Y. + 5 past years
                       return Array.from({ length: 6 }, (_, i) => {
                         const start = syStartYear - i;
                         return `${start}-${start + 1}`;
@@ -931,52 +1085,63 @@ export default function Students() {
                       <option key={sy} value={sy}>{sy}</option>
                     ))}
                   </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{ color: 'var(--text-muted)' }} />
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
                   All students in this import batch will be tagged with this school year.
                 </p>
+                {importErrors.importSchoolYear && (
+                  <p className="text-[11.5px] font-semibold mt-1.5 flex items-center gap-1" style={{ color: '#dc2626' }}>
+                    <AlertCircle size={12} /> {importErrors.importSchoolYear}
+                  </p>
+                )}
               </div>
 
-              {/* Download Template */}
+              {/* ── Download Template ───────────────────────── */}
               <div className="flex items-center justify-center">
                 <button
                   onClick={downloadSampleTemplate}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150"
+                  style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#2d4fa3'; e.currentTarget.style.color = '#2d4fa3'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
                 >
-                  <Download className="w-4 h-4" />
+                  <Download size={14} />
                   Download Sample Template
                 </button>
               </div>
 
-              {/* Import Results */}
+              {/* ── Import Results ──────────────────────────── */}
               {importResult && (
-                <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-md">
-                  <h3 className="text-sm font-semibold text-gray-800 dark:text-white mb-2">
+                <div className="p-4 rounded-xl" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-light)' }}>
+                  <h3 className="text-[13px] font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
                     Import Results
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      <span className="text-sm text-gray-800 dark:text-white">
-                        Successfully imported: {importResult.successful}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                      style={{ background: 'rgba(45,122,71,0.08)', border: '1px solid rgba(45,122,71,0.2)' }}>
+                      <CheckCircle2 size={14} style={{ color: '#2d7a47' }} />
+                      <span className="text-[12.5px] font-medium" style={{ color: '#2d7a47' }}>
+                        {importResult.successful} imported
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <XCircle className="w-4 h-4 text-red-500" />
-                      <span className="text-sm text-gray-800 dark:text-white">
-                        Failed to import: {importResult.failed}
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                      style={{ background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.2)' }}>
+                      <XCircle size={14} style={{ color: '#dc2626' }} />
+                      <span className="text-[12.5px] font-medium" style={{ color: '#dc2626' }}>
+                        {importResult.failed} failed
                       </span>
                     </div>
                   </div>
                   {importResult.errors.length > 0 && (
-                    <div className="mt-2 p-2 bg-red-50 dark:bg-red-900 rounded-md">
-                      <h4 className="text-xs font-semibold text-red-700 dark:text-red-300 mb-1">
-                        Errors:
+                    <div className="mt-3 p-3 rounded-lg" style={{ background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.15)' }}>
+                      <h4 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: '#dc2626' }}>
+                        Errors
                       </h4>
-                      <div className="text-xs text-red-600 dark:text-red-400 max-h-32 overflow-y-auto">
+                      <div className="text-[12px] max-h-32 overflow-y-auto space-y-1" style={{ color: '#dc2626' }}>
                         {importResult.errors.map((error, index) => (
-                          <div key={index} className="mb-1">
+                          <div key={index}>
                             <strong>Row {error.index + 2}:</strong> {error.error}
                           </div>
                         ))}
@@ -987,7 +1152,9 @@ export default function Students() {
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-3 mt-6">
+            {/* ── Modal Footer ────────────────────────────── */}
+            <div className="flex items-center justify-end gap-2.5 mt-6 pt-4"
+              style={{ borderTop: '1px solid var(--border-light)' }}>
               {importResult && (
                 <button
                   onClick={() => {
@@ -997,11 +1164,13 @@ export default function Students() {
                     setImportCourse('');
                     setImportSchoolYear('');
                     setImportProgress(0);
+                    setImportErrors({});
                     if (fileInputRef.current) fileInputRef.current.value = '';
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-gray-900 font-semibold border-2 border-amber-600 rounded-md transition-colors shadow-sm"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold text-white transition-all hover:opacity-90 active:scale-[.98]"
+                  style={{ background: 'var(--accent-amber)', boxShadow: '0 2px 8px rgba(238,162,58,.3)' }}
                 >
-                  <Upload className="w-4 h-4 text-gray-900" />
+                  <Upload size={14} />
                   Import Again
                 </button>
               )}
@@ -1009,19 +1178,18 @@ export default function Students() {
                 <button
                   onClick={() => handleBulkImport(parsedStudentsData)}
                   disabled={isImporting}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-green-300 disabled:cursor-not-allowed text-white rounded-md transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold text-white transition-all hover:opacity-90 active:scale-[.98] disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ background: 'linear-gradient(135deg, #0a0064, #0003c7)', boxShadow: '0 2px 8px rgba(45,122,71,.3)' }}
                 >
                   {isImporting ? (
                     <>
-                      <svg className="animate-spin w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-40" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                      <svg className="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                       </svg>
                       Importing…
                     </>
-                  ) : (
-                    'Import to Database'
-                  )}
+                  ) : 'Import to Database'}
                 </button>
               )}
               <button
@@ -1034,43 +1202,46 @@ export default function Students() {
                   setImportCourse('');
                   setImportSchoolYear('');
                   setImportProgress(0);
+                  setImportErrors({});
                 }}
                 disabled={isImporting}
-                className="px-4 py-2 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-all hover:opacity-80 active:scale-[.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
               >
                 Close
               </button>
             </div>
 
-            {/* Parsed Data Preview */}
+            {/* ── Parsed Data Preview ──────────────────────── */}
             {parsedStudentsData && !importResult && (
-              <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-md">
-                <h3 className="text-sm font-semibold text-gray-800 dark:text-white mb-3">
-                  Parsed Students Data ({parsedStudentsData.length} students)
+              <div className="mt-4 p-4 rounded-xl" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-light)' }}>
+                <h3 className="text-[13px] font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
+                  Preview — {parsedStudentsData.length} students parsed
                 </h3>
                 <div className="overflow-x-auto max-h-60">
-                  <table className="w-full text-sm">
+                  <table className="w-full">
                     <thead>
-                      <tr className="border-b border-gray-200 dark:border-gray-600">
-                        <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">ID Number</th>
-                        <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">Name</th>
-                        <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">Year Level</th>
-                        <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">Email</th>
+                      <tr style={{ borderBottom: '1px solid var(--border-light)' }}>
+                        {['ID Number', 'Name', 'Year Level', 'Email'].map(h => (
+                          <th key={h} className="text-left py-2 px-3 text-[11px] font-semibold uppercase tracking-wide"
+                            style={{ color: 'var(--text-muted)' }}>{h}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
                       {parsedStudentsData.slice(0, 5).map((student, index) => (
-                        <tr key={index} className="border-b border-gray-100 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600">
-                          <td className="py-2 px-3 text-gray-800 dark:text-white">{student.student_id_number}</td>
-                          <td className="py-2 px-3 text-gray-800 dark:text-white">{student.student_name}</td>
-                          <td className="py-2 px-3 text-gray-800 dark:text-white">{student.student_yr_level || 'N/A'}</td>
-                          <td className="py-2 px-3 text-gray-800 dark:text-white">{student.student_email || 'N/A'}</td>
+                        <tr key={index} className="hover:bg-amber-50/30 transition-colors"
+                          style={{ borderBottom: '1px solid var(--border-light)' }}>
+                          <td className="py-2 px-3 text-[12.5px] font-mono" style={{ color: 'var(--text-secondary)' }}>{student.student_id_number}</td>
+                          <td className="py-2 px-3 text-[12.5px] font-medium" style={{ color: 'var(--text-primary)' }}>{student.student_name}</td>
+                          <td className="py-2 px-3 text-[12.5px]" style={{ color: 'var(--text-secondary)' }}>{student.student_yr_level || '—'}</td>
+                          <td className="py-2 px-3 text-[12.5px]" style={{ color: 'var(--text-secondary)' }}>{student.student_email || '—'}</td>
                         </tr>
                       ))}
                       {parsedStudentsData.length > 5 && (
                         <tr>
-                          <td colSpan="4" className="py-2 px-3 text-center text-gray-500 dark:text-gray-400">
-                            And {parsedStudentsData.length - 5} more students...
+                          <td colSpan="4" className="py-2 px-3 text-center text-[12px]" style={{ color: 'var(--text-muted)' }}>
+                            And {parsedStudentsData.length - 5} more students…
                           </td>
                         </tr>
                       )}
@@ -1091,6 +1262,11 @@ export default function Students() {
           onClose={() => setToast({ ...toast, show: false })}
         />
       )}
+
+      <style>{`
+        @keyframes overlayIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes modalIn   { from { opacity: 0; transform: scale(.94) translateY(10px) } to { opacity: 1; transform: scale(1) translateY(0) } }
+      `}</style>
     </div>
   );
 }

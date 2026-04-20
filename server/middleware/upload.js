@@ -15,7 +15,6 @@ const ALLOWED_MIME = new Set([
 ]);
 
 const MAX_SIZE_BYTES = 1 * 1024 * 1024; // 1 MB
-
 const storage = multer.memoryStorage();
 
 const fileFilter = (_req, file, cb) => {

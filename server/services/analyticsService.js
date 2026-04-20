@@ -78,11 +78,19 @@ async function getBookStats(filters = {}) {
     const ncAnd = ncCl.length ? `AND ${ncCl.join(" AND ")}` : "";
 
     const [[nemco]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM books b WHERE b.deleted_at IS NULL ${ncAnd}`, ncPr
+      `SELECT COUNT(*) AS total FROM books b WHERE b.is_deleted = 0 ${ncAnd}`, ncPr
     );
     const [[oos]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM books b
-       WHERE b.deleted_at IS NULL AND (b.status = 'OutOfStock' OR b.quantity = 0) ${ncAnd}`,
+      `SELECT COUNT(*) AS total
+       FROM books b
+       INNER JOIN (
+         SELECT book_id, SUM(status = 'Available') AS avail_copies
+         FROM book_copies
+         WHERE is_deleted = 0
+         GROUP BY book_id
+       ) cc ON cc.book_id = b.id
+       WHERE b.is_deleted = 0
+         AND cc.avail_copies = 0 ${ncAnd}`,
       ncPr
     );
 
@@ -91,7 +99,7 @@ async function getBookStats(filters = {}) {
     const lxAnd = lxCl.length ? `AND ${lxCl.join(" AND ")}` : "";
 
     const [[lexora]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM lexora_books lb WHERE lb.deleted_at IS NULL ${lxAnd}`, lxPr
+      `SELECT COUNT(*) AS total FROM lexora_books lb WHERE lb.is_deleted = 0 ${lxAnd}`, lxPr
     );
 
     // Borrow activity in this period
@@ -390,7 +398,7 @@ async function getHoldingsBreakdown(filters = {}) {
     const [nemcoRows] = await pool.query(
       `SELECT TRIM(UPPER(COALESCE(NULLIF(TRIM(b.collection),''),'UNCATEGORIZED'))) AS category, COUNT(*) AS total
        FROM books b
-       WHERE b.deleted_at IS NULL
+       WHERE b.is_deleted = 0
          ${ncAnd}
        GROUP BY category ORDER BY category ASC`,
       ncPr
@@ -403,7 +411,7 @@ async function getHoldingsBreakdown(filters = {}) {
     const [lexoraRows] = await pool.query(
       `SELECT TRIM(UPPER(COALESCE(NULLIF(TRIM(lb.program),''),'UNCATEGORIZED'))) AS category, COUNT(*) AS total
        FROM lexora_books lb
-       WHERE lb.deleted_at IS NULL
+       WHERE lb.is_deleted = 0
          ${lxAnd}
        GROUP BY category ORDER BY category ASC`,
       lxPr

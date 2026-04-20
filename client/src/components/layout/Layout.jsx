@@ -11,17 +11,16 @@ const W_COLLAPSED = 58;
 export default function Layout() {
   const [collapsed,  setCollapsed]  = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [darkMode, setDarkMode]     = useLocalStorage(STORAGE_KEYS.THEME, false);
 
-  // ✅ FIX: replaced useState(false) with useLocalStorage so the chosen
-  //    theme survives page refreshes, tab closes, and logouts.
-  const [darkMode, setDarkMode] = useLocalStorage(STORAGE_KEYS.THEME, false);
+  // ── Read user role from localStorage ─────────────────────────────────────
+  const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
+  const role = user?.role ?? "admin"; // fallback to "admin" for safety
 
-  /* Apply data-theme to <html> so CSS vars + Tailwind dark-mode both work */
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
   }, [darkMode]);
 
-  /* Close mobile drawer on resize to desktop */
   useEffect(() => {
     const handler = () => { if (window.innerWidth >= 1024) setMobileOpen(false); };
     window.addEventListener("resize", handler);
@@ -43,22 +42,20 @@ export default function Layout() {
         />
       )}
 
-      {/* ── Sidebar ── */}
+      {/* ── Sidebar — receives role to filter nav items ── */}
       <Sidebar
         collapsed={collapsed}
         darkMode={darkMode}
         onToggleTheme={() => setDarkMode(d => !d)}
         mobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}
+        userRole={role}
       />
 
       {/* ── Main body ── */}
       <div
         className="flex flex-1 flex-col min-h-screen ml-transition"
-        style={{
-          marginLeft: "0px",
-          background: "var(--bg-page)",
-        }}
+        style={{ marginLeft: "0px", background: "var(--bg-page)" }}
         ref={el => {
           if (!el) return;
           const apply = () => {

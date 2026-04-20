@@ -46,8 +46,9 @@ export const TRANSACTION_STATUS = {
 
 // Storage Keys
 export const STORAGE_KEYS = {
-  DELETED_ITEMS: "LEXORA_DELETED",
-  THEME: "LEXORA_THEME",
+  LEXORA_USER:       "lexora_user",       // ← must match Login.jsx: localStorage.setItem("lexora_user", ...)
+  DELETED_ITEMS:     "LEXORA_DELETED",
+  THEME:             "LEXORA_THEME",
   SIDEBAR_COLLAPSED: "LEXORA_SIDEBAR_COLLAPSED",
 };
 
@@ -109,4 +110,3 @@ export default {
   FEATURES,
   APP_INFO,
 };
-

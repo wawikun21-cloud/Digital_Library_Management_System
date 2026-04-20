@@ -40,6 +40,13 @@ const fmtDuration = (mins) => {
 const getInitials = (name = '') =>
   name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
+// Combines first_name + last_name; falls back to display_name / student_name.
+const getFullName = (student = {}) => {
+  const { first_name, last_name, display_name, student_name } = student;
+  const combined = [first_name, last_name].filter(Boolean).join(' ').trim();
+  return combined || display_name || student_name || '';
+};
+
 const pad = (n) => String(n).padStart(2, '0');
 
 const AVATAR_COLORS = [
@@ -59,6 +66,7 @@ function printStudentPDF(student, sessions) {
   const e = (v) =>
     String(v ?? '—').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+  const fullName   = getFullName(student);
   const totalMins  = sessions.reduce((a, r) => a + (r.duration || 0), 0);
   const totalHours = (totalMins / 60).toFixed(1);
 
@@ -75,7 +83,7 @@ function printStudentPDF(student, sessions) {
     .join('');
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<title>Attendance — ${e(student.student_name)}</title>
+<title>Attendance — ${e(fullName)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#1a1a1a;padding:32px}
@@ -96,7 +104,7 @@ tr:nth-child(even) td{background:#f8f9fa}
 </style></head><body>
 <div class="hdr">
   <div class="hdr-left">
-    <h1>Attendance History — ${e(student.student_name)}</h1>
+    <h1>Attendance History — ${e(fullName)}</h1>
     <p>${e(student.student_id_number)} · ${e(student.student_course || '—')} · ${e(student.student_yr_level || '—')}</p>
   </div>
   <div class="hdr-right">
@@ -188,19 +196,22 @@ const SessionActions = ({ sessionId, onDelete }) => {
     <div className="relative" ref={ref}>
       <button
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
-        className="p-1 rounded hover:bg-slate-200/70 transition-colors"
-        style={{ color: '#94a3b8' }}
+        className="p-1 rounded transition-colors hover:opacity-60"
+        style={{ color: 'var(--text-muted)' }}
       >
         <MoreVertical size={13} />
       </button>
       {open && (
         <div
-          className="absolute right-0 top-full mt-1 bg-white rounded-lg py-1 w-36 z-50"
-          style={{ border: '1px solid #e2e8f0', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
+          className="absolute right-0 top-full mt-1 rounded-lg py-1 w-36 z-50"
+          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,0.22)' }}
         >
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(e, sessionId); setOpen(false); }}
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] font-medium text-red-600 hover:bg-red-50 transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] font-medium transition-colors"
+            style={{ color: '#dc2626' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(220,38,38,0.08)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
           >
             <Trash2 size={12} /> Delete Session
           </button>
@@ -236,7 +247,8 @@ const StudentHistoryModal = ({ student, onClose, onDelete }) => {
   const totalMins  = sessions.reduce((a, r) => a + (r.duration || 0), 0);
   const totalHours = (totalMins / 60).toFixed(1);
   const isActive   = sessions.some((s) => s.status === 'checked_in');
-  const [bg1, bg2] = avatarColor(student.student_name);
+  const fullName   = getFullName(student);
+  const [bg1, bg2] = avatarColor(fullName);
 
   return (
     <div
@@ -272,7 +284,7 @@ const StudentHistoryModal = ({ student, onClose, onDelete }) => {
               className="w-11 h-11 rounded-full flex items-center justify-center text-[14px] font-bold text-white shrink-0 shadow"
               style={{ background: `linear-gradient(135deg, ${bg1} 0%, ${bg2} 100%)` }}
             >
-              {getInitials(student.student_name)}
+              {getInitials(fullName)}
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -280,7 +292,7 @@ const StudentHistoryModal = ({ student, onClose, onDelete }) => {
                   className="text-[15px] font-bold leading-snug"
                   style={{ color: 'var(--text-primary)' }}
                 >
-                  {student.student_name}
+                  {fullName}
                 </h2>
                 {isActive && (
                   <span
@@ -318,7 +330,7 @@ const StudentHistoryModal = ({ student, onClose, onDelete }) => {
             </button>
             <button
               onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:bg-slate-100"
+              className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:opacity-60"
               style={{ color: 'var(--text-secondary)' }}
               aria-label="Close"
             >
@@ -376,8 +388,8 @@ const StudentHistoryModal = ({ student, onClose, onDelete }) => {
               <span className="text-[13px]">No sessions found.</span>
             </div>
           ) : (
-            <div className="rounded-xl overflow-hidden border border-slate-200">
-              <table className="min-w-full divide-y divide-slate-100">
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+              <table className="min-w-full" style={{ borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--bg-subtle)' }}>
                     {['#', 'Date', 'Check In', 'Check Out', 'Duration', 'Status', ''].map((h) => (
@@ -391,18 +403,23 @@ const StudentHistoryModal = ({ student, onClose, onDelete }) => {
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
+                <tbody style={{ background: 'var(--bg-surface)' }}>
                   {sessions.map((s, idx) => (
                     <tr
                       key={s.id}
-                      className="transition-colors hover:bg-slate-50/80"
-                      style={{ background: idx % 2 !== 0 ? 'rgba(248,250,252,0.5)' : 'white' }}
+                      className="transition-colors"
+                      style={{
+                        background: idx % 2 !== 0 ? 'var(--bg-subtle)' : 'var(--bg-surface)',
+                        borderBottom: '1px solid var(--border-light)',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = idx % 2 !== 0 ? 'var(--bg-subtle)' : 'var(--bg-surface)'; }}
                     >
                       {/* # */}
                       <td className="px-4 py-3">
                         <span
                           className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[10px] font-bold"
-                          style={{ background: '#e2e8f0', color: '#64748b' }}
+                          style={{ background: 'var(--border)', color: 'var(--text-muted)' }}
                         >
                           {idx + 1}
                         </span>
@@ -469,19 +486,19 @@ const StudentHistoryModal = ({ student, onClose, onDelete }) => {
 //  Skeleton Row
 // ─────────────────────────────────────────────────────────
 const SkeletonRow = () => (
-  <tr className="animate-pulse border-b border-slate-100">
+  <tr className="animate-pulse" style={{ borderBottom: '1px solid var(--border-light)' }}>
     <td className="px-5 py-4">
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-full bg-slate-200" />
+        <div className="w-9 h-9 rounded-full" style={{ background: 'var(--border)' }} />
         <div className="space-y-1.5">
-          <div className="h-3.5 bg-slate-200 rounded w-32" />
-          <div className="h-2.5 bg-slate-100 rounded w-20" />
+          <div className="h-3.5 rounded w-32" style={{ background: 'var(--border)' }} />
+          <div className="h-2.5 rounded w-20" style={{ background: 'var(--border-light)' }} />
         </div>
       </div>
     </td>
     {[80, 96, 64, 64, 80, 80, 80].map((w, i) => (
       <td key={i} className="px-5 py-4">
-        <div className="h-3 bg-slate-200 rounded" style={{ width: w }} />
+        <div className="h-3 rounded" style={{ width: w, background: 'var(--border)' }} />
       </td>
     ))}
   </tr>
@@ -498,6 +515,8 @@ function groupByStudent(records) {
       map.set(key, {
         student_id_number: r.student_id_number,
         student_name:      r.student_name,
+        first_name:        r.first_name  || '',
+        last_name:         r.last_name   || '',
         student_course:    r.student_course,
         student_yr_level:  r.student_yr_level,
         sessions: [],
@@ -591,13 +610,14 @@ const AttendanceTable = React.memo(({
   if (loading) {
     return (
       <div className="overflow-x-auto">
-        <table className="min-w-full bg-white">
-          <thead style={{ background: 'rgba(255,255,255,0.97)', borderBottom: '2px solid #e2e8f0' }}>
+        <table className="min-w-full" style={{ background: 'var(--bg-surface)' }}>
+          <thead style={{ background: 'var(--bg-subtle)', borderBottom: '2px solid var(--border)' }}>
             <tr>
               {headers.map((h) => (
                 <th
                   key={h.label}
-                  className="px-5 py-3.5 text-left text-[10.5px] font-bold text-slate-500 uppercase tracking-wider"
+                  className="px-5 py-3.5 text-left text-[10.5px] font-bold uppercase tracking-wider"
+                  style={{ color: 'var(--text-muted)' }}
                 >
                   {h.label}
                 </th>
@@ -622,9 +642,9 @@ const AttendanceTable = React.memo(({
           <thead
             className="sticky top-0 z-10"
             style={{
-              background: 'rgba(255,255,255,0.97)',
+              background: 'var(--bg-subtle)',
               backdropFilter: 'blur(8px)',
-              borderBottom: '2px solid #e2e8f0',
+              borderBottom: '2px solid var(--border)',
             }}
           >
             <tr>
@@ -633,11 +653,12 @@ const AttendanceTable = React.memo(({
                   key={h.label}
                   scope="col"
                   className="px-5 py-3.5 text-left group"
-                  style={{ borderBottom: '2px solid #e2e8f0' }}
+                  style={{ borderBottom: '2px solid var(--border)' }}
                 >
                   <div
                     className={`flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wider select-none
-                      ${h.sortable ? 'cursor-pointer hover:text-slate-800' : 'cursor-default'} text-slate-500`}
+                      ${h.sortable ? 'cursor-pointer' : 'cursor-default'}`}
+                    style={{ color: 'var(--text-muted)' }}
                     onClick={() => h.sortable && handleSort(h.key)}
                   >
                     {h.label}
@@ -649,19 +670,20 @@ const AttendanceTable = React.memo(({
           </thead>
 
           {/* Body */}
-          <tbody className="bg-white divide-y divide-slate-100">
+          <tbody style={{ background: 'var(--bg-surface)' }}>
             {sortedGroups.map((student) => {
               const key        = student.student_id_number;
               const latest     = student.sessions[0];
               const isActive   = student.sessions.some((s) => s.status === 'checked_in');
               const totalMins  = student.sessions.reduce((s, r) => s + (r.duration || 0), 0);
-              const [bg1, bg2] = avatarColor(student.student_name);
+              const fullName   = getFullName(student);
+              const [bg1, bg2] = avatarColor(fullName);
 
               return (
                 <tr
                   key={key}
                   className="group transition-all duration-150 cursor-pointer"
-                  style={{ borderLeft: '3px solid transparent' }}
+                  style={{ borderLeft: '3px solid transparent', borderBottom: '1px solid var(--border-light)' }}
                   onClick={() => setSelectedStudent(student)}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background =
@@ -683,12 +705,12 @@ const AttendanceTable = React.memo(({
                         className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold text-white shrink-0 shadow-sm"
                         style={{ background: `linear-gradient(135deg, ${bg1} 0%, ${bg2} 100%)` }}
                       >
-                        {getInitials(student.student_name)}
+                        {getInitials(fullName)}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-[13.5px] text-slate-900 group-hover:text-slate-700 transition-colors">
-                            {student.student_name}
+                          <span className="font-semibold text-[13.5px] transition-colors" style={{ color: 'var(--text-primary)' }}>
+                            {fullName}
                           </span>
                           {isActive && (
                             <span
@@ -701,7 +723,7 @@ const AttendanceTable = React.memo(({
                             />
                           )}
                         </div>
-                        <span className="text-[11px] text-slate-400 font-mono">
+                        <span className="text-[11px] font-mono" style={{ color: 'var(--text-muted)' }}>
                           {student.student_id_number}
                         </span>
                       </div>
@@ -709,7 +731,7 @@ const AttendanceTable = React.memo(({
                   </td>
 
                   {/* ID */}
-                  <td className="px-5 py-3.5 font-mono text-[12.5px] text-slate-600">
+                  <td className="px-5 py-3.5 font-mono text-[12.5px]" style={{ color: 'var(--text-secondary)' }}>
                     {student.student_id_number}
                   </td>
 
@@ -724,7 +746,7 @@ const AttendanceTable = React.memo(({
                   </td>
 
                   {/* Year Level */}
-                  <td className="px-5 py-3.5 text-[12.5px] text-slate-600">
+                  <td className="px-5 py-3.5 text-[12.5px]" style={{ color: 'var(--text-secondary)' }}>
                     {student.student_yr_level || '—'}
                   </td>
 
@@ -737,7 +759,7 @@ const AttendanceTable = React.memo(({
                       >
                         {student.sessions.length}
                       </div>
-                      <span className="text-[11px] text-slate-400">
+                      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                         visit{student.sessions.length !== 1 ? 's' : ''}
                       </span>
                     </div>
@@ -761,7 +783,7 @@ const AttendanceTable = React.memo(({
                   </td>
 
                   {/* Last Visit */}
-                  <td className="px-5 py-3.5 text-[12px] text-slate-500">
+                  <td className="px-5 py-3.5 text-[12px]" style={{ color: 'var(--text-muted)' }}>
                     {fmtDateTime(latest?.check_in_time)}
                   </td>
 
@@ -781,14 +803,14 @@ const AttendanceTable = React.memo(({
         <div className="text-center py-16 px-5">
           <div
             className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
-            style={{ background: 'rgba(148,163,184,0.08)', border: '1px solid #e2e8f0' }}
+            style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}
           >
-            <Users size={28} className="text-slate-300" />
+            <Users size={28} style={{ color: 'var(--text-muted)', opacity: 0.4 }} />
           </div>
-          <p className="text-[15px] font-semibold text-slate-700 mb-1">
+          <p className="text-[15px] font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
             {hasFilters ? 'No records match your filters' : 'No attendance records yet'}
           </p>
-          <p className="text-[12.5px] text-slate-400 mb-5">
+          <p className="text-[12.5px] mb-5" style={{ color: 'var(--text-muted)' }}>
             {hasFilters
               ? 'Try adjusting your search or filters'
               : 'Check in a student to get started'}
@@ -810,24 +832,24 @@ const AttendanceTable = React.memo(({
         <div
           className="px-5 py-3 flex items-center justify-between text-[11.5px]"
           style={{
-            background: 'linear-gradient(90deg, #f8fafc 0%, #f1f5f9 100%)',
-            borderTop: '1px solid #e2e8f0',
+            background: 'var(--bg-subtle)',
+            borderTop: '1px solid var(--border)',
           }}
         >
           <div className="flex items-center gap-4" style={{ color: 'var(--text-secondary)' }}>
             <span className="flex items-center gap-1.5">
               <Users size={12} style={{ color: 'var(--accent-amber)' }} />
-              <strong className="font-bold text-slate-700">{sortedGroups.length}</strong>
+              <strong className="font-bold" style={{ color: 'var(--text-primary)' }}>{sortedGroups.length}</strong>
               &nbsp;unique student{sortedGroups.length !== 1 ? 's' : ''}
             </span>
-            <span className="text-slate-300">·</span>
+            <span style={{ color: 'var(--border)' }}>·</span>
             <span className="flex items-center gap-1.5">
               <TrendingUp size={12} className="text-blue-400" />
-              <strong className="font-bold text-slate-700">{totalRecords ?? data.length}</strong>
+              <strong className="font-bold" style={{ color: 'var(--text-primary)' }}>{totalRecords ?? data.length}</strong>
               &nbsp;total sessions
             </span>
           </div>
-          <span className="text-slate-400 font-medium">
+          <span className="font-medium" style={{ color: 'var(--text-muted)' }}>
             Click a row to view session history
           </span>
         </div>

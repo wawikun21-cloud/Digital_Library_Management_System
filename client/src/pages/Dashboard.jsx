@@ -10,7 +10,7 @@
  * — Holdings breakdown table with NEMCO vs Lexora progress bars (bottom).
  */
 
-import { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate }   from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -235,7 +235,7 @@ const MEDAL = [
   { bg: "rgba(188,143,71,0.15)", border: "rgba(188,143,71,0.4)", text: "#795548", label: "🥉" },
 ];
 
-function MostBorrowedBooks({ data, loading, error }) {
+const MostBorrowedBooks = React.memo(function MostBorrowedBooks({ data, loading, error }) {
   const total   = data.reduce((s, r) => s + r.borrows, 0);
   const maxBorrows = data.length > 0 ? data[0].borrows : 1;
 
@@ -457,9 +457,9 @@ function MostBorrowedBooks({ data, loading, error }) {
       </div>
     </div>
   );
-}
+});
 
-function AttendanceCount({ data, loading, error, semester, month }) {
+const AttendanceCount = React.memo(function AttendanceCount({ data, loading, error, semester, month }) {
   const total = data.reduce((s, r) => s + r.visits, 0);
   const peak  = data.reduce((mx, r) => r.visits > mx.visits ? r : mx, { visits: 0, x: "—" });
   return (
@@ -502,9 +502,9 @@ function AttendanceCount({ data, loading, error, semester, month }) {
       )}
     </Card>
   );
-}
+});
 
-function TotalFinesCollected({ data, loading, error }) {
+const TotalFinesCollected = React.memo(function TotalFinesCollected({ data, loading, error }) {
   const totCollected   = data.reduce((s, r) => s + r.collected,   0);
   const totUncollected = data.reduce((s, r) => s + r.uncollected, 0);
   return (
@@ -544,9 +544,9 @@ function TotalFinesCollected({ data, loading, error }) {
       )}
     </Card>
   );
-}
+});
 
-function OverdueBooks({ data, loading, error }) {
+const OverdueBooks = React.memo(function OverdueBooks({ data, loading, error }) {
   const totCrit = data.reduce((s, r) => s + r.critical, 0);
   const totWarn = data.reduce((s, r) => s + r.warning,  0);
   const totMin  = data.reduce((s, r) => s + r.minor,    0);
@@ -588,17 +588,18 @@ function OverdueBooks({ data, loading, error }) {
       )}
     </Card>
   );
-}
+});
 
 // ── Holdings Breakdown ────────────────────────────────────────────────────────
 
-function HoldingsBreakdown({ data: rawData, loading, error }) {
+const HoldingsBreakdown = React.memo(function HoldingsBreakdown({ data: rawData, loading, error }) {
   const data        = Array.isArray(rawData) ? rawData : [];
   const totalNemco  = data.reduce((s, r) => s + r.nemco,  0);
   const totalLexora = data.reduce((s, r) => s + r.lexora, 0);
   const grandTotal  = totalNemco + totalLexora;
 
   // ── Skeleton rows
+// sourcery skip: avoid-function-declarations-in-blocks
   function SkeletonRows() {
     return Array.from({ length: 6 }).map((_, i) => (
       <tr key={i} className="animate-pulse">
@@ -996,12 +997,26 @@ function HoldingsBreakdown({ data: rawData, loading, error }) {
       )}
     </div>
   );
-}
+});
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
   const navigate = useNavigate();
+
+  // ── Resolve admin role from server session ────────────
+  // Read once on mount. The /api/auth/me endpoint returns the current
+  // session user — we only need the role to decide whether to join the
+  // WS admin room (so audit:new events are received).
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    fetch("/api/auth/me", { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.success && data?.data?.role === "admin") setIsAdmin(true);
+      })
+      .catch(() => {}); // non-critical — WS still works without admin room
+  }, []);
 
   // Filter state
   const [schoolYear, setSchoolYear] = useState(SCHOOL_YEARS[0]);
@@ -1021,7 +1036,7 @@ export default function Dashboard() {
     updateKpiStats(newStats);
   }, [updateKpiStats]);
 
-  useWebSocket({ onStatsUpdate: handleStatsUpdate });
+  useWebSocket({ isAdmin, onStatsUpdate: handleStatsUpdate });
 
   // KPI cards
   const stats = useMemo(() => {
@@ -1079,7 +1094,30 @@ export default function Dashboard() {
 
   return (
     <main className="flex flex-col gap-4 lg:gap-5" aria-label="Library Analytics Dashboard">
-      <h1 className="sr-only">Analytics Dashboard Overview</h1>
+      
+      {/* ── Page Header ── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
+            style={{ color: "var(--text-primary)" }}>
+            <Library size={22} style={{ color: "var(--accent-amber)" }} />
+            Library Analytics Dashboard
+          </h1>
+          <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
+            Real-time statistics, charts, and actionable library insights
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={refresh}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-all hover:opacity-90 active:scale-[.98]"
+            style={{ background: "var(--accent-amber)", boxShadow: "0 2px 8px rgba(238,162,58,.3)" }}
+          >
+            <RefreshCw size={14} /> Refresh All
+          </button>
+        </div>
+      </div>
 
       {/* KPI Stats */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">

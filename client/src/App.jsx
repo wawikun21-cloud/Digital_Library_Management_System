@@ -5,20 +5,32 @@ import authApi from "./services/api/authApi";
 import { useLocalStorage } from "./hooks/useLocalStorage";
 import { STORAGE_KEYS } from "./constants/index.js";
 
-// ── Lazy-loaded pages — each becomes its own JS chunk ────────────────────────
-const Dashboard       = lazy(() => import("./pages/Dashboard"));
-const Books           = lazy(() => import("./pages/Books"));
-const Borrowed        = lazy(() => import("./pages/Borrowed"));
-const Attendance      = lazy(() => import("./pages/Attendance"));
-const Students        = lazy(() => import("./pages/Students"));
-const Faculty         = lazy(() => import("./pages/Faculty"));
-const RecentlyDeleted = lazy(() => import("./pages/RecentlyDeleted"));
-const LexoraBooks     = lazy(() => import("./pages/LexoraBooks"));
-const Login           = lazy(() => import("./pages/Login"));
-const LandingPage     = lazy(() => import("./landing/landingpage"));
-const KioskAttendance = lazy(() => import("./pages/KioskAttendance"));
+// ── Lazy-loaded pages ─────────────────────────────────────────────────────────
+const Dashboard          = lazy(() => import("./pages/Dashboard"));
+const Books              = lazy(() => import("./pages/Books"));
+const Borrowed           = lazy(() => import("./pages/Borrowed"));
+const Attendance         = lazy(() => import("./pages/Attendance"));
+const Students           = lazy(() => import("./pages/Students"));
+const Faculty            = lazy(() => import("./pages/Faculty"));
+const RecentlyDeleted    = lazy(() => import("./pages/RecentlyDeleted"));
+const LexoraBooks        = lazy(() => import("./pages/LexoraBooks"));
+const Login              = lazy(() => import("./pages/Login"));
+const LandingPage        = lazy(() => import("./landing/landingpage"));
+const KioskAttendance    = lazy(() => import("./pages/KioskAttendance"));
+const AuditLog           = lazy(() => import("./pages/AuditLog"));
+const AttendanceDashboard = lazy(() => import("./pages/AttendanceDashboard")); // ← NEW
+const StudentsDashboard   = lazy(() => import("./pages/StudentsDashboard"));   // ← NEW
 
-// ── Apply theme to <html> immediately on first paint ─────────────────────────
+// ── Pages each role may access ────────────────────────────────────────────────
+export const STAFF_ALLOWED_PATHS = [
+  "/dashboard/attendance",
+  "/dashboard/students",
+  "/dashboard/faculty",
+  "/dashboard/attendance/kiosk",
+  "/dashboard/attendance/dashboard", // ← NEW
+];
+
+// ── Apply saved theme immediately on first paint ──────────────────────────────
 const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
 if (savedTheme) {
   document.documentElement.setAttribute(
@@ -27,82 +39,43 @@ if (savedTheme) {
   );
 }
 
-// ── Spinner shown inside the content area while a lazy chunk loads ────────────
-// This intentionally does NOT fill the whole screen so the sidebar/topbar
-// remain visible and it never looks like a full page reload.
+// ── Loaders ───────────────────────────────────────────────────────────────────
 function PageLoader() {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100%",
-        minHeight: "60vh",
-        background: "transparent",
-      }}
-    >
-      <div
-        style={{
-          width: "32px",
-          height: "32px",
-          border: "3px solid var(--border-color, #e5e7eb)",
-          borderTop: "3px solid var(--primary, #6366f1)",
-          borderRadius: "50%",
-          animation: "spin 0.7s linear infinite",
-        }}
-      />
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
+                  height:"100%", minHeight:"60vh", background:"transparent" }}>
+      <div style={{ width:"32px", height:"32px",
+                    border:"3px solid var(--border-color,#e5e7eb)",
+                    borderTop:"3px solid var(--primary,#6366f1)",
+                    borderRadius:"50%", animation:"spin 0.7s linear infinite" }} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
 
-// ── Full-screen loader ONLY for top-level public routes (Login / Landing) ────
 function FullPageLoader() {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100vh",
-        background: "var(--bg-main, #fff)",
-      }}
-    >
-      <div
-        style={{
-          width: "32px",
-          height: "32px",
-          border: "3px solid var(--border-color, #e5e7eb)",
-          borderTop: "3px solid var(--primary, #6366f1)",
-          borderRadius: "50%",
-          animation: "spin 0.7s linear infinite",
-        }}
-      />
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
+                  height:"100vh", background:"var(--bg-main,#fff)" }}>
+      <div style={{ width:"32px", height:"32px",
+                    border:"3px solid var(--border-color,#e5e7eb)",
+                    borderTop:"3px solid var(--primary,#6366f1)",
+                    borderRadius:"50%", animation:"spin 0.7s linear infinite" }} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
 
-// ── Wraps every dashboard child route so Layout stays mounted ─────────────────
 function Page({ children }) {
   return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
 }
 
+// ── ProtectedRoute ────────────────────────────────────────────────────────────
 function ProtectedRoute({ children }) {
   const [status, setStatus] = useState("checking");
   const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
 
   useEffect(() => {
-    if (user) {
-      setStatus("ok");
-      authApi.me().catch(() => {
-        localStorage.removeItem(STORAGE_KEYS.LEXORA_USER);
-        sessionStorage.removeItem("lexora_user");
-        setStatus("unauth");
-      });
-      return;
-    }
     authApi.me()
       .then(() => setStatus("ok"))
       .catch(() => {
@@ -110,10 +83,24 @@ function ProtectedRoute({ children }) {
         localStorage.removeItem(STORAGE_KEYS.LEXORA_USER);
         setStatus("unauth");
       });
-  }, [user]);
+  }, []);
 
-  if (status === "checking") return null;
+  if (status === "checking") return <FullPageLoader />;
   if (status === "unauth")   return <Navigate to="/login" replace />;
+  return children;
+}
+
+function AdminOnlyRoute({ children }) {
+  const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
+  const role = user?.role ?? "admin";
+  if (role === "staff") return <Navigate to="/dashboard/attendance" replace />;
+  return children;
+}
+
+function StaffBlockedRoute({ children }) {
+  const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
+  const role = user?.role ?? "admin";
+  if (role === "staff") return <Navigate to="/dashboard/attendance" replace />;
   return children;
 }
 
@@ -128,9 +115,14 @@ function LandingRouteGuard() {
 
   if (status === "checking") return null;
   if (status === "authed")   return <Navigate to="/dashboard" replace />;
-  return <LandingPage />;
+  return (
+    <Suspense fallback={<FullPageLoader />}>
+      <LandingPage />
+    </Suspense>
+  );
 }
 
+// ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
   const [darkMode, setDarkMode] = useLocalStorage(STORAGE_KEYS.THEME, false);
 
@@ -142,18 +134,13 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {/*
-        Top-level Suspense: only kicks in for the public routes (Login, Landing).
-        Dashboard child routes use their own <Page> wrapper below so that
-        the Layout (sidebar + topbar) is NEVER unmounted during navigation.
-      */}
       <Suspense fallback={<FullPageLoader />}>
         <Routes>
           {/* Public routes */}
           <Route path="/"      element={<LandingRouteGuard />} />
           <Route path="/login" element={<Login />} />
 
-          {/* Protected routes — Layout stays mounted; only outlet swaps */}
+          {/* Protected routes */}
           <Route
             path="/dashboard"
             element={
@@ -162,18 +149,52 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index                   element={<Page><Dashboard /></Page>}       />
-            <Route path="books"            element={<Page><Books /></Page>}           />
-            <Route path="lexora-books"     element={<Page><LexoraBooks /></Page>}     />
-            <Route path="borrowed"         element={<Page><Borrowed /></Page>}        />
-            <Route path="attendance"       element={<Page><Attendance /></Page>}      />
-            <Route path="students"         element={<Page><Students /></Page>}        />
-            <Route path="faculty"          element={<Page><Faculty /></Page>}         />
-            <Route path="attendance/kiosk" element={<Page><KioskAttendance /></Page>} />
-            <Route path="deleted"          element={<Page><RecentlyDeleted /></Page>} />
+            <Route
+              index
+              element={
+                <AdminOnlyRoute>
+                  <Page><Dashboard /></Page>
+                </AdminOnlyRoute>
+              }
+            />
+
+            {/* Admin-only pages */}
+            <Route path="books"
+              element={<StaffBlockedRoute><Page><Books /></Page></StaffBlockedRoute>}
+            />
+            <Route path="lexora-books"
+              element={<StaffBlockedRoute><Page><LexoraBooks /></Page></StaffBlockedRoute>}
+            />
+            <Route path="borrowed"
+              element={<StaffBlockedRoute><Page><Borrowed /></Page></StaffBlockedRoute>}
+            />
+            <Route path="deleted"
+              element={<StaffBlockedRoute><Page><RecentlyDeleted /></Page></StaffBlockedRoute>}
+            />
+            <Route path="audit-log"
+              element={<StaffBlockedRoute><Page><AuditLog /></Page></StaffBlockedRoute>}
+            />
+
+            {/* Shared pages (admin + staff) */}
+            <Route path="attendance"              element={<Page><Attendance /></Page>} />
+            <Route path="students"                element={<Page><Students /></Page>} />
+            <Route path="faculty"                 element={<Page><Faculty /></Page>} />
+            <Route path="attendance/kiosk"        element={<Page><KioskAttendance /></Page>} />
+
+            {/* ── NEW: Library Attendance Dashboard ── */}
+            <Route
+              path="attendance/dashboard"
+              element={<Page><AttendanceDashboard /></Page>}
+            />
+
+            {/* ── NEW: Students Dashboard ── */}
+            <Route
+              path="students-dashboard"
+              element={<Page><StudentsDashboard /></Page>}
+            />
           </Route>
 
-          {/* Catch-all → landing */}
+          {/* Catch-all */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

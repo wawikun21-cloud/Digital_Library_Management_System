@@ -2,10 +2,11 @@
 //  services/schedulerService.js
 //
 //  Runs daily background jobs:
+//    • 02:00 — purge audit_logs older than 1 year (NEW)
 //    • 08:00 — send "due tomorrow" reminders
-//    • 08:05 — send overdue notices (day 1, 3, 7 only to avoid spam)
+//    • 08:05 — send overdue notices (day 1, 3, 7, 14, 30)
 //
-//  Wire up in app.js / server.js:
+//  Wire up in index.js:
 //    require("./services/schedulerService").start();
 // ─────────────────────────────────────────────────────────
 
@@ -22,8 +23,8 @@ const OVERDUE_NOTICE_DAYS = new Set([1, 3, 7, 14, 30]);
 function localDateStr(offset = 0) {
   const d = new Date();
   d.setDate(d.getDate() + offset);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const y   = d.getFullYear();
+  const m   = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
@@ -50,6 +51,15 @@ function scheduleDaily(hh, mm, label, fn) {
   console.log(
     `[Scheduler] "${label}" scheduled — next run at ${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")} local time`
   );
+}
+
+// ─────────────────────────────────────────────────────────
+//  Job 0 — Audit log purge (records older than 1 year)
+// ─────────────────────────────────────────────────────────
+async function purgeAuditLogs() {
+  const AuditLog = require("../models/AuditLog");
+  const deleted  = await AuditLog.purgeOldRecords();
+  console.log(`[Scheduler] Audit log purge — removed ${deleted} record(s) older than 1 year.`);
 }
 
 // ─────────────────────────────────────────────────────────
@@ -152,9 +162,10 @@ async function sendOverdueNotices() {
 //  Public API
 // ─────────────────────────────────────────────────────────
 function start() {
-  scheduleDaily(8, 0,  "Due-date reminders", sendDueReminders);
-  scheduleDaily(8, 5,  "Overdue notices",     sendOverdueNotices);
-  console.log("[Scheduler] ✅ Email scheduler started.");
+  scheduleDaily(2,  0,  "Audit log purge (1-year)",  purgeAuditLogs);
+  scheduleDaily(8,  0,  "Due-date reminders",         sendDueReminders);
+  scheduleDaily(8,  5,  "Overdue notices",            sendOverdueNotices);
+  console.log("[Scheduler] ✅ Email + maintenance scheduler started.");
 }
 
-module.exports = { start, sendDueReminders, sendOverdueNotices };
+module.exports = { start, sendDueReminders, sendOverdueNotices, purgeAuditLogs };

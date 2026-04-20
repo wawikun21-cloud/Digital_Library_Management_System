@@ -4,6 +4,7 @@
 
 const TransactionModel    = require("../models/Transaction");
 const analyticsService    = require("../services/analyticsService");
+const auditService        = require("../services/auditService");
 const { broadcast }       = require("../utils/websocket");
 const { successResponse, errorResponse } = require("../utils/responseFormatter");
 const { sendBorrowConfirmation } = require("../services/emailService");
@@ -63,6 +64,19 @@ const TransactionsController = {
         });
       }
 
+      // ── Audit: BORROW ────────────────────────────────
+      await auditService.logAction(req, {
+        entity_type : "transaction",
+        entity_id   : txn.id ?? null,
+        action      : "BORROW",
+        old_data    : null,
+        new_data    : {
+          book_title    : txn.book_title    ?? null,
+          borrower_name : txn.borrower_name ?? null,
+          due_date      : txn.due_date      ?? null,
+        },
+      });
+
       // Broadcast new transaction event + updated KPI stats
       broadcast("transaction:new", txn);
       await pushStatsUpdate();
@@ -74,11 +88,21 @@ const TransactionsController = {
     }
   },
 
-  /** PUT /api/transactions/:id — update metadata */
+  /** PUT /api/transactions/:id — update / renew metadata */
   updateTransaction: async (req, res) => {
     try {
       const result = await TransactionModel.update(req.params.id, req.body);
       if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
+
+      // ── Audit: UPDATE (renew / edit) ─────────────────
+      await auditService.logAction(req, {
+        entity_type : "transaction",
+        entity_id   : Number(req.params.id),
+        action      : "UPDATE",
+        old_data    : null,
+        new_data    : req.body,
+      });
+
       res.json(successResponse(result.data, "Transaction updated successfully"));
     } catch (error) {
       console.error("[TransactionsController] PUT", error.message);
@@ -91,6 +115,19 @@ const TransactionsController = {
     try {
       const result = await TransactionModel.returnBook(req.params.id);
       if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
+
+      // ── Audit: RETURN ────────────────────────────────
+      await auditService.logAction(req, {
+        entity_type : "transaction",
+        entity_id   : Number(req.params.id),
+        action      : "RETURN",
+        old_data    : null,
+        new_data    : {
+          book_title    : result.data?.book_title    ?? null,
+          borrower_name : result.data?.borrower_name ?? null,
+          returned_at   : result.data?.returned_at   ?? new Date().toISOString(),
+        },
+      });
 
       broadcast("transaction:returned", result.data);
       await pushStatsUpdate();
@@ -107,6 +144,15 @@ const TransactionsController = {
     try {
       const result = await TransactionModel.delete(req.params.id);
       if (!result.success) return res.status(404).json(errorResponse(result.error, 404));
+
+      // ── Audit: DELETE ────────────────────────────────
+      await auditService.logAction(req, {
+        entity_type : "transaction",
+        entity_id   : Number(req.params.id),
+        action      : "DELETE",
+        old_data    : null,
+        new_data    : null,
+      });
 
       broadcast("transaction:deleted", { id: req.params.id });
       await pushStatsUpdate();

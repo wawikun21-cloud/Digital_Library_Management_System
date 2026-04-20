@@ -5,28 +5,29 @@
 const express                = require("express");
 const router                 = express.Router();
 const TransactionModel       = require("../models/Transaction");
-const TransactionsController = require("../controllers/transactionsController"); // ← added
+const TransactionsController = require("../controllers/transactionsController");
+const { requireAuth, requireAdmin } = require("../middleware/authMiddleware");
 
 // ── Static routes first ───────────────────────────────────
 
-router.get("/active", async (req, res) => {
+router.get("/active", requireAuth, requireAdmin, async (req, res) => {
   const result = await TransactionModel.getActiveBorrows();
   res.status(result.success ? 200 : 400).json(result);
 });
 
-router.get("/overdue", async (req, res) => {
+router.get("/overdue", requireAuth, requireAdmin, async (req, res) => {
   const result = await TransactionModel.getOverdueBorrows();
   res.status(result.success ? 200 : 400).json(result);
 });
 
-router.get("/stats", async (req, res) => {
+router.get("/stats", requireAuth, requireAdmin, async (req, res) => {
   const result = await TransactionModel.getStats();
   res.status(result.success ? 200 : 400).json(result);
 });
 
 // ── Borrower / book search ────────────────────────────────
 
-router.get("/lookup/student/:idNumber", async (req, res) => {
+router.get("/lookup/student/:idNumber", requireAuth, requireAdmin, async (req, res) => {
   try {
     const result = await TransactionModel.lookupStudent(req.params.idNumber);
     res.status(result.success ? 200 : 404).json(result);
@@ -35,7 +36,7 @@ router.get("/lookup/student/:idNumber", async (req, res) => {
   }
 });
 
-router.get("/lookup/faculty", async (req, res) => {
+router.get("/lookup/faculty", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { q = "" } = req.query;
     const result = await TransactionModel.searchFaculty(q);
@@ -45,7 +46,7 @@ router.get("/lookup/faculty", async (req, res) => {
   }
 });
 
-router.get("/search/books", async (req, res) => {
+router.get("/search/books", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { q = "" } = req.query;
     const result = await TransactionModel.searchBooks(q);
@@ -57,44 +58,28 @@ router.get("/search/books", async (req, res) => {
 
 // ── CRUD ──────────────────────────────────────────────────
 
-router.get("/", async (req, res) => {
+router.get("/", requireAuth, requireAdmin, async (req, res) => {
   const result = await TransactionModel.getAll();
   res.status(result.success ? 200 : 400).json(result);
 });
 
-router.get("/book/:bookId", async (req, res) => {
+router.get("/book/:bookId", requireAuth, requireAdmin, async (req, res) => {
   const result = await TransactionModel.getByBookId(req.params.bookId);
   res.status(result.success ? 200 : 400).json(result);
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", requireAuth, requireAdmin, async (req, res) => {
   const result = await TransactionModel.getById(req.params.id);
   res.status(result.success ? 200 : 404).json(result);
 });
 
-/**
- * POST /api/transactions
- * → controller: saves borrow + sends confirmation email + broadcasts WS
- */
-router.post("/", TransactionsController.createTransaction); // ← changed
+router.post("/", requireAuth, requireAdmin, TransactionsController.createTransaction);
 
-/**
- * PUT /api/transactions/:id
- * → controller: updates metadata + broadcasts WS
- */
-router.put("/:id", TransactionsController.updateTransaction); // ← changed
+router.put("/:id", requireAuth, requireAdmin, TransactionsController.updateTransaction);
 
-/**
- * PUT /api/transactions/:id/return
- * → controller: marks returned + broadcasts WS
- */
-router.put("/:id/return", TransactionsController.returnTransaction); // ← changed
+router.put("/:id/return", requireAuth, requireAdmin, TransactionsController.returnTransaction);
 
-/**
- * PUT /api/transactions/:id/extend
- * Extend the due date by N days (no email side-effect needed)
- */
-router.put("/:id/extend", async (req, res) => {
+router.put("/:id/extend", requireAuth, requireAdmin, async (req, res) => {
   try {
     const days   = Number(req.body.days) || 1;
     const result = await TransactionModel.extend(req.params.id, days);
@@ -104,16 +89,8 @@ router.put("/:id/extend", async (req, res) => {
   }
 });
 
-/**
- * PUT /api/transactions/:id/pay-fine
- * → controller: marks fine paid + broadcasts WS
- */
-router.put("/:id/pay-fine", TransactionsController.payFine); // ← changed
+router.put("/:id/pay-fine", requireAuth, requireAdmin, TransactionsController.payFine);
 
-/**
- * DELETE /api/transactions/:id
- * → controller: soft-deletes + broadcasts WS
- */
-router.delete("/:id", TransactionsController.deleteTransaction); // ← changed
+router.delete("/:id", requireAuth, requireAdmin, TransactionsController.deleteTransaction);
 
 module.exports = router;

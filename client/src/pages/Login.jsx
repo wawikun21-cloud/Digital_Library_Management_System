@@ -41,8 +41,20 @@ export default function Login() {
 
     try {
       const { user } = await authApi.login(formData.username.trim(), formData.password);
+      // FIX: Always write to localStorage so useLocalStorage() can read the role.
+      // useLocalStorage (used in App.jsx, Layout.jsx, Sidebar.jsx) only reads
+      // from localStorage — if we only write to sessionStorage the role is
+      // never visible to those hooks, causing Admin to appear as Staff and
+      // Staff to be unable to reach their allowed pages.
+      localStorage.setItem("lexora_user", JSON.stringify(user));
       sessionStorage.setItem("lexora_user", JSON.stringify(user));
-      if (formData.rememberMe) localStorage.setItem("lexora_user", JSON.stringify(user));
+      // "Remember Me" controls persistence across browser restarts.
+      // Without it we clear localStorage on logout (handled in authApi/logout).
+      // The flag is stored so the logout handler knows whether to clear it.
+      if (!formData.rememberMe) {
+        // Mark the entry as session-only so logout can clean it up correctly.
+        sessionStorage.setItem("lexora_remember", "false");
+      }
       navigate("/dashboard", { replace: true });
     } catch (err) {
       setError(err.message || "Login failed. Please try again.");
