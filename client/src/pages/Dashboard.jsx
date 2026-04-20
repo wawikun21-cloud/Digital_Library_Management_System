@@ -10,7 +10,7 @@
  * — Holdings breakdown table with NEMCO vs Lexora progress bars (bottom).
  */
 
-import { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate }   from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -235,7 +235,7 @@ const MEDAL = [
   { bg: "rgba(188,143,71,0.15)", border: "rgba(188,143,71,0.4)", text: "#795548", label: "🥉" },
 ];
 
-function MostBorrowedBooks({ data, loading, error }) {
+const MostBorrowedBooks = React.memo(function MostBorrowedBooks({ data, loading, error }) {
   const total   = data.reduce((s, r) => s + r.borrows, 0);
   const maxBorrows = data.length > 0 ? data[0].borrows : 1;
 
@@ -457,9 +457,9 @@ function MostBorrowedBooks({ data, loading, error }) {
       </div>
     </div>
   );
-}
+});
 
-function AttendanceCount({ data, loading, error, semester, month }) {
+const AttendanceCount = React.memo(function AttendanceCount({ data, loading, error, semester, month }) {
   const total = data.reduce((s, r) => s + r.visits, 0);
   const peak  = data.reduce((mx, r) => r.visits > mx.visits ? r : mx, { visits: 0, x: "—" });
   return (
@@ -502,9 +502,9 @@ function AttendanceCount({ data, loading, error, semester, month }) {
       )}
     </Card>
   );
-}
+});
 
-function TotalFinesCollected({ data, loading, error }) {
+const TotalFinesCollected = React.memo(function TotalFinesCollected({ data, loading, error }) {
   const totCollected   = data.reduce((s, r) => s + r.collected,   0);
   const totUncollected = data.reduce((s, r) => s + r.uncollected, 0);
   return (
@@ -544,9 +544,9 @@ function TotalFinesCollected({ data, loading, error }) {
       )}
     </Card>
   );
-}
+});
 
-function OverdueBooks({ data, loading, error }) {
+const OverdueBooks = React.memo(function OverdueBooks({ data, loading, error }) {
   const totCrit = data.reduce((s, r) => s + r.critical, 0);
   const totWarn = data.reduce((s, r) => s + r.warning,  0);
   const totMin  = data.reduce((s, r) => s + r.minor,    0);
@@ -588,11 +588,11 @@ function OverdueBooks({ data, loading, error }) {
       )}
     </Card>
   );
-}
+});
 
 // ── Holdings Breakdown ────────────────────────────────────────────────────────
 
-function HoldingsBreakdown({ data: rawData, loading, error }) {
+const HoldingsBreakdown = React.memo(function HoldingsBreakdown({ data: rawData, loading, error }) {
   const data        = Array.isArray(rawData) ? rawData : [];
   const totalNemco  = data.reduce((s, r) => s + r.nemco,  0);
   const totalLexora = data.reduce((s, r) => s + r.lexora, 0);
@@ -997,12 +997,26 @@ function HoldingsBreakdown({ data: rawData, loading, error }) {
       )}
     </div>
   );
-}
+});
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
   const navigate = useNavigate();
+
+  // ── Resolve admin role from server session ────────────
+  // Read once on mount. The /api/auth/me endpoint returns the current
+  // session user — we only need the role to decide whether to join the
+  // WS admin room (so audit:new events are received).
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    fetch("/api/auth/me", { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.success && data?.data?.role === "admin") setIsAdmin(true);
+      })
+      .catch(() => {}); // non-critical — WS still works without admin room
+  }, []);
 
   // Filter state
   const [schoolYear, setSchoolYear] = useState(SCHOOL_YEARS[0]);
@@ -1022,7 +1036,7 @@ export default function Dashboard() {
     updateKpiStats(newStats);
   }, [updateKpiStats]);
 
-  useWebSocket({ onStatsUpdate: handleStatsUpdate });
+  useWebSocket({ isAdmin, onStatsUpdate: handleStatsUpdate });
 
   // KPI cards
   const stats = useMemo(() => {

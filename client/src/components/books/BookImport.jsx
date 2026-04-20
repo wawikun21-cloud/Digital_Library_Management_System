@@ -169,10 +169,10 @@ function isHeaderRow(row) {
  * Empty cells are stored as null — the server must honour these so that
  * the admin can fill them in later.
  */
-async function parseExcel(buffer) {
+async function parseExcel(buffer, sheetName) {
   const XLSX = await import("xlsx");
   const wb   = XLSX.read(buffer, { type: "array", cellDates: true });
-  const ws   = wb.Sheets[wb.SheetNames[0]];
+  const ws   = wb.Sheets[sheetName ?? wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 
   const dataStart = findDataStart(rows);
@@ -347,6 +347,10 @@ const BookImport = forwardRef(function BookImport({ onImportComplete, onStepChan
   const [parseError, setParseError]   = useState("");
   const [dupAlert, setDupAlert]       = useState(null);
   const [checking, setChecking]       = useState(false);
+  // Sheet selection
+  const [sheets, setSheets]           = useState([]);       // all sheet names in the workbook
+  const [selectedSheets, setSelectedSheets] = useState([]); // currently chosen sheets
+  const fileBufferRef                 = useRef(null);       // keep buffer so re-parsing on sheet change is cheap
 
   /* ── helpers ────────────────────────────────────────────────── */
   const setStepAndNotify = useCallback(
@@ -355,6 +359,42 @@ const BookImport = forwardRef(function BookImport({ onImportComplete, onStepChan
       onStepChange?.(s, books ?? parsed);
     },
     [onStepChange, parsed],
+  );
+
+  /* ── Sheet-aware parse helper ───────────────────────────────── */
+  const parseAndAdvance = useCallback(
+    async (buffer, sheetNames) => {
+      try {
+        const names = Array.isArray(sheetNames) ? sheetNames : [sheetNames];
+        // Parse each selected sheet and merge, deduping by accession number
+        const seenAcc = new Set();
+        const merged  = [];
+        for (const name of names) {
+          const books = await parseExcel(buffer, name);
+          for (const b of books) {
+            // Dedup accession numbers across sheets
+            b.accessionNumbers = b.accessionNumbers.filter((a) => {
+              if (seenAcc.has(a)) return false;
+              seenAcc.add(a);
+              return true;
+            });
+            if (b.accessionNumbers.length > 0 || b.title) merged.push(b);
+          }
+        }
+        if (merged.length === 0) {
+          setParseError(
+            "No book records found in the selected sheet(s). Make sure they match the expected column layout.",
+          );
+          return;
+        }
+        setParsed(merged);
+        setPreview(merged.slice(0, 8));
+        setStepAndNotify(2, merged);
+      } catch (err) {
+        setParseError(`Failed to parse sheet: ${err.message}`);
+      }
+    },
+    [setStepAndNotify],
   );
 
   /* ── File ingestion ─────────────────────────────────────────── */
@@ -371,23 +411,31 @@ const BookImport = forwardRef(function BookImport({ onImportComplete, onStepChan
       const reader = new FileReader();
       reader.onload = async (e) => {
         try {
-          const books = await parseExcel(new Uint8Array(e.target.result));
-          if (books.length === 0) {
-            setParseError(
-              "No book records found. Make sure the file matches the expected column layout.",
-            );
-            return;
+          const buffer = new Uint8Array(e.target.result);
+          fileBufferRef.current = buffer;
+
+          const XLSX  = await import("xlsx");
+          const wb    = XLSX.read(buffer, { type: "array" });
+          const names = wb.SheetNames;
+
+          if (names.length === 1) {
+            // Single sheet — skip picker, parse immediately
+            setSheets([]);
+            setSelectedSheets([names[0]]);
+            await parseAndAdvance(buffer, names[0]);
+          } else {
+            // Multiple sheets — select all by default and parse immediately (like Lexora)
+            setSheets(names);
+            setSelectedSheets(names);
+            await parseAndAdvance(buffer, names);
           }
-          setParsed(books);
-          setPreview(books.slice(0, 8));
-          setStepAndNotify(2, books);
         } catch (err) {
-          setParseError(`Failed to parse file: ${err.message}`);
+          setParseError(`Failed to read file: ${err.message}`);
         }
       };
       reader.readAsArrayBuffer(file);
     },
-    [setStepAndNotify],
+    [parseAndAdvance],
   );
 
   const onInputChange = (e) => handleFile(e.target.files[0]);
@@ -401,6 +449,10 @@ const BookImport = forwardRef(function BookImport({ onImportComplete, onStepChan
 
   /* ── Pre-flight duplicate check ─────────────────────────────── */
   const startImport = async () => {
+    if (sheets.length > 1 && selectedSheets.length === 0) {
+      setParseError("No sheet selected. Please select at least one sheet to import.");
+      return;
+    }
     setChecking(true);
     try {
       const res  = await fetch(`${API_BASE}/books/check-duplicates`, {
@@ -484,6 +536,8 @@ const BookImport = forwardRef(function BookImport({ onImportComplete, onStepChan
       setProgress({ current: chunkEnd, total, title: chunk[chunk.length - 1]?.title || "" });
     }
 
+    const totalCopiesSaved = parsed.reduce((s, b) => s + (b.accessionNumbers?.length ?? 0), 0);
+
     const summary = {
       success:      true,
       imported:     importedCount,
@@ -491,11 +545,12 @@ const BookImport = forwardRef(function BookImport({ onImportComplete, onStepChan
       errors:       allFailed.length,
       errorsDetail: allFailed,
       data:         allImported,
+      totalCopies:  totalCopiesSaved,
     };
 
     setResults(summary);
     setStepAndNotify(4);
-    if (allImported.length > 0) onImportComplete?.(allImported);
+    if (allImported.length > 0) onImportComplete?.(allImported, summary);
   };
 
   /* ── Reset ──────────────────────────────────────────────────── */
@@ -509,6 +564,9 @@ const BookImport = forwardRef(function BookImport({ onImportComplete, onStepChan
     setParseError("");
     setDupAlert(null);
     setChecking(false);
+    setSheets([]);
+    setSelectedSheets([]);
+    fileBufferRef.current = null;
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -786,6 +844,92 @@ const BookImport = forwardRef(function BookImport({ onImportComplete, onStepChan
               </span>
             )}
           </div>
+
+          {/* Sheet selector — shown in Step 2 when workbook has multiple sheets (identical to Lexora) */}
+          {sheets.length > 1 && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: "var(--text-secondary)" }}>
+                  Select Sheets to Import
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      setSelectedSheets(sheets);
+                      setParseError("");
+                      await parseAndAdvance(fileBufferRef.current, sheets);
+                    }}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-md"
+                    style={{ color: "var(--accent-amber)", background: "rgba(184,122,0,0.08)", border: "1px solid rgba(184,122,0,0.2)" }}
+                  >
+                    Select All
+                  </button>
+                  <button
+                    onClick={() => { setSelectedSheets([]); setParsed([]); setPreview([]); }}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-md"
+                    style={{ color: "var(--text-secondary)", background: "var(--bg-subtle)", border: "1px solid var(--border-light)" }}
+                  >
+                    Clear All
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5 max-h-[160px] overflow-y-auto pr-1">
+                {sheets.map((name) => {
+                  const checked = selectedSheets.includes(name);
+                  return (
+                    <label
+                      key={name}
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-colors"
+                      style={{
+                        background: checked ? "rgba(184,122,0,0.08)" : "var(--bg-subtle)",
+                        border: `1.5px solid ${checked ? "rgba(184,122,0,0.3)" : "var(--border-light)"}`,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={async () => {
+                          const next = checked
+                            ? selectedSheets.filter((n) => n !== name)
+                            : [...selectedSheets, name];
+                          setSelectedSheets(next);
+                          setParseError("");
+                          if (next.length > 0) {
+                            await parseAndAdvance(fileBufferRef.current, next);
+                          } else {
+                            setParsed([]);
+                            setPreview([]);
+                          }
+                        }}
+                        className="accent-amber-500 w-3.5 h-3.5 shrink-0"
+                      />
+                      <span className="text-[11px] font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+                        {name}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {/* Selected count banner */}
+              {parsed.length > 0 ? (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px]"
+                     style={{ background: "rgba(34,197,94,0.07)", border: "1.5px solid rgba(34,197,94,0.2)", color: "#15803d" }}>
+                  <CheckCircle2 size={12} style={{ flexShrink: 0 }} />
+                  <span>
+                    <strong>{parsed.length}</strong> title{parsed.length !== 1 ? "s" : ""} selected for import
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px]"
+                     style={{ background: "rgba(220,38,38,0.07)", border: "1.5px solid rgba(220,38,38,0.2)", color: "#b91c1c" }}>
+                  <XCircle size={12} style={{ flexShrink: 0 }} />
+                  <span>No sheet selected. Select at least one sheet to enable import.</span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Preview table */}
           <div>

@@ -3,7 +3,8 @@
 //  Attendance API Service - Frontend API calls for attendance
 // ─────────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
+// Empty string → same-origin → Vite proxy forwards to server (cookie sent correctly)
+const API_BASE = import.meta.env.VITE_API_URL || "";
 
 /** Shared fetch options — always send the session cookie */
 const withCreds = (opts = {}) => ({

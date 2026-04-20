@@ -53,9 +53,17 @@ const TrashModel = {
 
       // Mark as deleted
       await conn.query(
-        `UPDATE ${table} SET deleted_at = NOW(), deleted_by = ? WHERE id = ?`,
+        `UPDATE ${table} SET is_deleted = 1, deleted_at = NOW(), deleted_by = ? WHERE id = ?`,
         [deletedBy, entityId]
       );
+
+      // For books also soft-delete all copies
+      if (entityType === "book") {
+        await conn.query(
+          `UPDATE book_copies SET is_deleted = 1, deleted_at = NOW() WHERE book_id = ? AND is_deleted = 0`,
+          [entityId]
+        );
+      }
 
       // For students/faculty also set is_active = 0
       if (entityType === "student" || entityType === "faculty") {
@@ -114,7 +122,7 @@ const TrashModel = {
 
       // Check record still exists
       const [recordRows] = await conn.query(
-        `SELECT id FROM ${table} WHERE id = ? AND deleted_at IS NOT NULL`, [log.entity_id]
+        `SELECT id FROM ${table} WHERE id = ? AND (is_deleted = 1 OR deleted_at IS NOT NULL)`, [log.entity_id]
       );
       if (!recordRows.length) {
         await conn.rollback();
@@ -123,9 +131,25 @@ const TrashModel = {
 
       // Restore
       await conn.query(
-        `UPDATE ${table} SET deleted_at = NULL, deleted_by = NULL WHERE id = ?`,
+        `UPDATE ${table} SET is_deleted = 0, deleted_at = NULL, deleted_by = NULL WHERE id = ?`,
         [log.entity_id]
       );
+
+      // For books: restore all soft-deleted copies and re-sync quantity
+      if (log.entity_type === "book") {
+        await conn.query(
+          `UPDATE book_copies SET is_deleted = 0, deleted_at = NULL WHERE book_id = ? AND is_deleted = 1`,
+          [log.entity_id]
+        );
+        const [[{ cnt }]] = await conn.query(
+          `SELECT COUNT(*) AS cnt FROM book_copies WHERE book_id = ? AND is_deleted = 0`,
+          [log.entity_id]
+        );
+        await conn.query(
+          `UPDATE books SET quantity = ? WHERE id = ?`,
+          [cnt, log.entity_id]
+        );
+      }
 
       // Re-activate students/faculty
       if (log.entity_type === "student" || log.entity_type === "faculty") {

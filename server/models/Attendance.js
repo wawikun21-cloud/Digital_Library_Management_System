@@ -259,7 +259,7 @@ const AttendanceModel = {
         `SELECT * FROM attendance WHERE id = ?`, [record.id]
       );
 
-      console.log(`✅ Checked OUT: ${rows[0].student_name} (${studentIdNumber}) — ${duration} min`);
+      console.log(`✅ Checked OUT: ${rows[0].student_name} (${studentIdNumber}) — ${rows[0].duration ?? 0} min`);
       return { success: true, data: rows[0] };
     } catch (error) {
       console.error("[AttendanceModel.checkOut] Error:", error.message);

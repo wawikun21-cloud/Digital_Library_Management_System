@@ -57,6 +57,7 @@ export default function Students() {
   const [importSchoolYear, setImportSchoolYear] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [importErrors, setImportErrors]     = useState({});  // field-level errors for import modal
   const fileInputRef = useRef(null);
 
   // ── Toast state ─────────────────────────────────────
@@ -194,6 +195,15 @@ export default function Students() {
 
   // ── Handle bulk import ───────────────────────────────
   const handleBulkImport = async (studentsData) => {
+    // ── Validate required import fields before touching the server ──
+    const errs = {};
+    if (!importCourse.trim())     errs.importCourse     = 'Course is required before importing.';
+    if (!importSchoolYear.trim()) errs.importSchoolYear = 'School Year is required before importing.';
+    if (Object.keys(errs).length) {
+      setImportErrors(errs);
+      return;
+    }
+    setImportErrors({});
     setIsImporting(true);
     setImportProgress(0);
 
@@ -440,8 +450,9 @@ export default function Students() {
               <User size={16} style={{ color: '#1e3a7b' }} />
             </div>
             <div>
-              <p className="text-[20px] font-bold leading-none" style={{ color: 'var(--text-primary)' }}>{stats.total}</p>
-              <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>Total Students</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide leading-none" style={{ color: 'var(--text-muted)' }}>Total</p>
+              <p className="text-[20px] font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>{stats.total}</p>
+              <p className="text-[10.5px]" style={{ color: 'var(--text-muted)' }}>students enrolled</p>
             </div>
           </div>
 
@@ -456,8 +467,9 @@ export default function Students() {
                 <Building2 size={16} style={{ color: '#b87a1a' }} />
               </div>
               <div className="min-w-0">
-                <p className="text-[20px] font-bold leading-none" style={{ color: 'var(--text-primary)' }}>{course.count}</p>
-                <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>{course.student_course}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide leading-none" style={{ color: 'var(--text-muted)' }}>Top Course</p>
+                <p className="text-[20px] font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>{course.count}</p>
+                <p className="text-[10.5px] font-semibold truncate" style={{ color: '#b87a1a' }}>{course.student_course}</p>
               </div>
             </div>
           ))}
@@ -465,24 +477,26 @@ export default function Students() {
           {/* Year Level Cards */}
           {stats.byYearLevel.slice(0, 4).map((yearLevel, idx) => {
             const yrColors = [
-              { bg: 'rgba(238,162,58,0.12)', text: '#b87a1a' },
-              { bg: 'rgba(30,58,123,0.1)',   text: '#2d4fa3' },
-              { bg: 'rgba(30,58,123,0.06)',  text: '#1e3a7b' },
-              { bg: 'rgba(238,162,58,0.08)', text: '#c8860e' },
+              { bg: 'rgba(59,130,246,0.1)',  text: '#2563eb', label: '1st Year' },
+              { bg: 'rgba(16,185,129,0.1)',  text: '#059669', label: '2nd Year' },
+              { bg: 'rgba(168,85,247,0.1)',  text: '#7c3aed', label: '3rd Year' },
+              { bg: 'rgba(239,68,68,0.1)',   text: '#dc2626', label: '4th Year' },
             ];
             const c = yrColors[idx] || yrColors[0];
+            const shortLabel = yearLevel.student_yr_level?.replace(' Year', 'yr') || c.label;
             return (
               <div key={yearLevel.student_yr_level}
                 className="flex items-center gap-3 px-4 py-3 rounded-xl"
-                style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+                style={{ background: 'var(--bg-surface)', border: `1px solid var(--border)` }}
               >
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
                   style={{ background: c.bg }}>
                   <GraduationCap size={16} style={{ color: c.text }} />
                 </div>
                 <div>
-                  <p className="text-[20px] font-bold leading-none" style={{ color: 'var(--text-primary)' }}>{yearLevel.count}</p>
-                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{yearLevel.student_yr_level}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide leading-none" style={{ color: 'var(--text-muted)' }}>{yearLevel.student_yr_level}</p>
+                  <p className="text-[20px] font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>{yearLevel.count}</p>
+                  <p className="text-[10.5px] font-semibold" style={{ color: c.text }}>students</p>
                 </div>
               </div>
             );
@@ -911,6 +925,7 @@ export default function Students() {
                   setImportCourse('');
                   setImportSchoolYear('');
                   setImportProgress(0);
+                  setImportErrors({});
                 }}
                 disabled={isImporting}
                 className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -1020,9 +1035,12 @@ export default function Students() {
                   <select
                     required
                     value={importCourse}
-                    onChange={(e) => setImportCourse(e.target.value)}
+                    onChange={(e) => {
+                      setImportCourse(e.target.value);
+                      setImportErrors(p => ({ ...p, importCourse: '' }));
+                    }}
                     className="w-full px-3 py-2.5 rounded-lg text-[13px] outline-none transition-all focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 appearance-none"
-                    style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', color: 'var(--text-primary)' }}
+                    style={{ background: 'var(--bg-input)', border: `1.5px solid ${importErrors.importCourse ? '#dc2626' : 'var(--border)'}`, color: 'var(--text-primary)' }}
                   >
                     <option value="">Select a course</option>
                     {['BSIT', 'BEED', 'BSED', 'BA', 'BSCRIM'].map(course => (
@@ -1032,6 +1050,11 @@ export default function Students() {
                   <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
                     style={{ color: 'var(--text-muted)' }} />
                 </div>
+                {importErrors.importCourse && (
+                  <p className="text-[11.5px] font-semibold mt-1.5 flex items-center gap-1" style={{ color: '#dc2626' }}>
+                    <AlertCircle size={12} /> {importErrors.importCourse}
+                  </p>
+                )}
               </div>
 
               {/* ── School Year Selection ───────────────────── */}
@@ -1043,9 +1066,12 @@ export default function Students() {
                   <select
                     required
                     value={importSchoolYear}
-                    onChange={(e) => setImportSchoolYear(e.target.value)}
+                    onChange={(e) => {
+                      setImportSchoolYear(e.target.value);
+                      setImportErrors(p => ({ ...p, importSchoolYear: '' }));
+                    }}
                     className="w-full px-3 py-2.5 rounded-lg text-[13px] outline-none transition-all focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 appearance-none"
-                    style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', color: 'var(--text-primary)' }}
+                    style={{ background: 'var(--bg-input)', border: `1.5px solid ${importErrors.importSchoolYear ? '#dc2626' : 'var(--border)'}`, color: 'var(--text-primary)' }}
                   >
                     <option value="">Select school year</option>
                     {(() => {
@@ -1065,6 +1091,11 @@ export default function Students() {
                 <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
                   All students in this import batch will be tagged with this school year.
                 </p>
+                {importErrors.importSchoolYear && (
+                  <p className="text-[11.5px] font-semibold mt-1.5 flex items-center gap-1" style={{ color: '#dc2626' }}>
+                    <AlertCircle size={12} /> {importErrors.importSchoolYear}
+                  </p>
+                )}
               </div>
 
               {/* ── Download Template ───────────────────────── */}
@@ -1133,6 +1164,7 @@ export default function Students() {
                     setImportCourse('');
                     setImportSchoolYear('');
                     setImportProgress(0);
+                    setImportErrors({});
                     if (fileInputRef.current) fileInputRef.current.value = '';
                   }}
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold text-white transition-all hover:opacity-90 active:scale-[.98]"
@@ -1147,7 +1179,7 @@ export default function Students() {
                   onClick={() => handleBulkImport(parsedStudentsData)}
                   disabled={isImporting}
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold text-white transition-all hover:opacity-90 active:scale-[.98] disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{ background: 'linear-gradient(135deg, #2d7a47, #38a169)', boxShadow: '0 2px 8px rgba(45,122,71,.3)' }}
+                  style={{ background: 'linear-gradient(135deg, #0a0064, #0003c7)', boxShadow: '0 2px 8px rgba(45,122,71,.3)' }}
                 >
                   {isImporting ? (
                     <>
@@ -1170,6 +1202,7 @@ export default function Students() {
                   setImportCourse('');
                   setImportSchoolYear('');
                   setImportProgress(0);
+                  setImportErrors({});
                 }}
                 disabled={isImporting}
                 className="px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-all hover:opacity-80 active:scale-[.98] disabled:opacity-50 disabled:cursor-not-allowed"

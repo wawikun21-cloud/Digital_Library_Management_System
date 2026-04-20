@@ -6,18 +6,20 @@ import { useLocalStorage } from "./hooks/useLocalStorage";
 import { STORAGE_KEYS } from "./constants/index.js";
 
 // ── Lazy-loaded pages ─────────────────────────────────────────────────────────
-const Dashboard       = lazy(() => import("./pages/Dashboard"));
-const Books           = lazy(() => import("./pages/Books"));
-const Borrowed        = lazy(() => import("./pages/Borrowed"));
-const Attendance      = lazy(() => import("./pages/Attendance"));
-const Students        = lazy(() => import("./pages/Students"));
-const Faculty         = lazy(() => import("./pages/Faculty"));
-const RecentlyDeleted = lazy(() => import("./pages/RecentlyDeleted"));
-const LexoraBooks     = lazy(() => import("./pages/LexoraBooks"));
-const Login           = lazy(() => import("./pages/Login"));
-const LandingPage     = lazy(() => import("./landing/landingpage"));
-const KioskAttendance = lazy(() => import("./pages/KioskAttendance"));
-const AuditLog        = lazy(() => import("./pages/AuditLog"));   // ← NEW
+const Dashboard          = lazy(() => import("./pages/Dashboard"));
+const Books              = lazy(() => import("./pages/Books"));
+const Borrowed           = lazy(() => import("./pages/Borrowed"));
+const Attendance         = lazy(() => import("./pages/Attendance"));
+const Students           = lazy(() => import("./pages/Students"));
+const Faculty            = lazy(() => import("./pages/Faculty"));
+const RecentlyDeleted    = lazy(() => import("./pages/RecentlyDeleted"));
+const LexoraBooks        = lazy(() => import("./pages/LexoraBooks"));
+const Login              = lazy(() => import("./pages/Login"));
+const LandingPage        = lazy(() => import("./landing/landingpage"));
+const KioskAttendance    = lazy(() => import("./pages/KioskAttendance"));
+const AuditLog           = lazy(() => import("./pages/AuditLog"));
+const AttendanceDashboard = lazy(() => import("./pages/AttendanceDashboard")); // ← NEW
+const StudentsDashboard   = lazy(() => import("./pages/StudentsDashboard"));   // ← NEW
 
 // ── Pages each role may access ────────────────────────────────────────────────
 export const STAFF_ALLOWED_PATHS = [
@@ -25,6 +27,7 @@ export const STAFF_ALLOWED_PATHS = [
   "/dashboard/students",
   "/dashboard/faculty",
   "/dashboard/attendance/kiosk",
+  "/dashboard/attendance/dashboard", // ← NEW
 ];
 
 // ── Apply saved theme immediately on first paint ──────────────────────────────
@@ -80,7 +83,6 @@ function ProtectedRoute({ children }) {
         localStorage.removeItem(STORAGE_KEYS.LEXORA_USER);
         setStatus("unauth");
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (status === "checking") return <FullPageLoader />;
@@ -88,11 +90,6 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-/**
- * AdminOnlyRoute
- * Staff → redirect to /dashboard/attendance.
- * Admin → render children.
- */
 function AdminOnlyRoute({ children }) {
   const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
   const role = user?.role ?? "admin";
@@ -100,10 +97,6 @@ function AdminOnlyRoute({ children }) {
   return children;
 }
 
-/**
- * StaffBlockedRoute
- * Wraps routes that staff must NOT access.
- */
 function StaffBlockedRoute({ children }) {
   const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
   const role = user?.role ?? "admin";
@@ -147,7 +140,7 @@ export default function App() {
           <Route path="/"      element={<LandingRouteGuard />} />
           <Route path="/login" element={<Login />} />
 
-          {/* Protected routes — Layout stays mounted; only outlet swaps */}
+          {/* Protected routes */}
           <Route
             path="/dashboard"
             element={
@@ -165,7 +158,7 @@ export default function App() {
               }
             />
 
-            {/* ── Admin-only pages ── */}
+            {/* Admin-only pages */}
             <Route path="books"
               element={<StaffBlockedRoute><Page><Books /></Page></StaffBlockedRoute>}
             />
@@ -178,25 +171,30 @@ export default function App() {
             <Route path="deleted"
               element={<StaffBlockedRoute><Page><RecentlyDeleted /></Page></StaffBlockedRoute>}
             />
-
-            {/* ── Audit Trail — admin only ── */}
-            <Route
-              path="audit-log"
-              element={
-                <StaffBlockedRoute>
-                  <Page><AuditLog /></Page>
-                </StaffBlockedRoute>
-              }
+            <Route path="audit-log"
+              element={<StaffBlockedRoute><Page><AuditLog /></Page></StaffBlockedRoute>}
             />
 
-            {/* ── Shared pages (admin + staff) ── */}
-            <Route path="attendance"       element={<Page><Attendance /></Page>} />
-            <Route path="students"         element={<Page><Students /></Page>} />
-            <Route path="faculty"          element={<Page><Faculty /></Page>} />
-            <Route path="attendance/kiosk" element={<Page><KioskAttendance /></Page>} />
+            {/* Shared pages (admin + staff) */}
+            <Route path="attendance"              element={<Page><Attendance /></Page>} />
+            <Route path="students"                element={<Page><Students /></Page>} />
+            <Route path="faculty"                 element={<Page><Faculty /></Page>} />
+            <Route path="attendance/kiosk"        element={<Page><KioskAttendance /></Page>} />
+
+            {/* ── NEW: Library Attendance Dashboard ── */}
+            <Route
+              path="attendance/dashboard"
+              element={<Page><AttendanceDashboard /></Page>}
+            />
+
+            {/* ── NEW: Students Dashboard ── */}
+            <Route
+              path="students-dashboard"
+              element={<Page><StudentsDashboard /></Page>}
+            />
           </Route>
 
-          {/* Catch-all → landing */}
+          {/* Catch-all */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

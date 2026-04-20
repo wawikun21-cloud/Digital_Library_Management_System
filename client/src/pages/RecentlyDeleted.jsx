@@ -12,6 +12,7 @@ import {
   permanentDeleteTrashItem,
   permanentDeleteAllTrash,
 } from "../services/api/trashApi";
+import { useWebSocket } from "../hooks/useWebsocket";
 
 // ── Entity type config ────────────────────────────────────
 const TYPE_CONFIG = {
@@ -94,6 +95,38 @@ export default function RecentlyDeleted() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // ── Real-time trash sync via Socket.io (admin room) ──
+  //
+  // When another admin tab restores, permanently-deletes, or empties
+  // trash, this view stays in sync without a manual refresh.
+  //
+  // All three events are sent only to the "admins" WS room, so
+  // non-admin sessions never receive them.
+  useWebSocket({
+    isAdmin: true, // join the admins room to receive trash:* events
+
+    onTrashRestored: ({ entityType, entityId }) => {
+      // The restored item is no longer in trash — remove it from local state.
+      // We match by entityType + entityId since we don't have the trashLogId here.
+      setItems(prev => prev.filter(
+        i => !(i.entity_type === entityType && i.entity_id === entityId)
+      ));
+    },
+
+    onTrashDeleted: ({ trashLogId }) => {
+      if (!trashLogId) return;
+      setItems(prev => prev.filter(i => i.id !== trashLogId));
+    },
+
+    onTrashEmptied: ({ entityType }) => {
+      if (entityType === "all") {
+        setItems([]);
+      } else {
+        setItems(prev => prev.filter(i => i.entity_type !== entityType));
+      }
+    },
+  });
 
   // ── Toast ────────────────────────────────────────────────
   const showToast = (message, type = "info") =>

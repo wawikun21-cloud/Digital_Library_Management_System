@@ -27,6 +27,7 @@ import { getStudentByStudentIdNumber, getAllStudents } from "../services/api/stu
 import StatsCard from "../components/StatsCard";
 import Toast from "../components/Toast";
 import useDebounce from "../hooks/useDebounce";
+import { useWebSocket } from "../hooks/useWebsocket";
 
 const pad = (n) => String(n).padStart(2, "0");
 
@@ -292,7 +293,7 @@ function RfidRegistrationModal({ onClose, onRegistered, onToast }) {
       if (res.success) {
         const name = getFullName(selectedStudent) || selectedStudent.student_id_number;
         onToast?.(`RFID card registered to ${name}`, "success");
-        onRegistered(res.data, selectedStudent);
+        setTimeout(() => onRegistered(res.data, selectedStudent), 350);
       } else {
         const msg = res.error || "Registration failed. Please try again.";
         setRegError(msg);
@@ -1029,6 +1030,56 @@ export default function Attendance() {
   }, [showToast]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ── Real-time attendance sync via Socket.io ───────────
+  //
+  // The server broadcasts "attendance:update" on every tap / check-in /
+  // check-out so any open Attendance tab reflects the current state
+  // without a manual refresh.
+  //
+  // Strategy:
+  //   checked_in  — prepend to records, prepend to active list.
+  //   checked_out — update the matching record in-place (add check_out_time),
+  //                 remove from the active list.
+  //   deleted     — remove the record by id.
+  //
+  // Duplicate guard: if the local handler (handleTap / handleCheckOut)
+  // already mutated state optimistically, the WS event carries the same
+  // id — the map/filter no-ops harmlessly.
+  useWebSocket({
+    onAttendanceUpdate: ({ action, data }) => {
+      if (!data?.id) return;
+
+      if (action === "checked_in") {
+        setRecords(prev => {
+          if (prev.some(r => r.id === data.id)) return prev;
+          return [data, ...prev];
+        });
+        setActive(prev => {
+          if (prev.some(r => r.id === data.id)) return prev;
+          return [data, ...prev];
+        });
+        // Bump stats counter live
+        setStats(prev => prev ? { ...prev, active: (prev.active || 0) + 1, total: (prev.total || 0) + 1 } : prev);
+      }
+
+      if (action === "checked_out") {
+        setRecords(prev => prev.map(r => r.id === data.id ? { ...r, ...data } : r));
+        setActive(prev => prev.filter(r => r.id !== data.id));
+        setStats(prev => prev ? {
+          ...prev,
+          active:       Math.max(0, (prev.active || 0) - 1),
+          checkedOut:   (prev.checkedOut || 0) + 1,
+        } : prev);
+      }
+    },
+
+    onAttendanceDeleted: ({ id }) => {
+      if (!id) return;
+      setRecords(prev => prev.filter(r => r.id !== id));
+      setActive(prev => prev.filter(r => r.id !== id));
+    },
+  });
 
   useEffect(() => {
     if (!debouncedId?.trim()) { setStudentInfo(null); return; }

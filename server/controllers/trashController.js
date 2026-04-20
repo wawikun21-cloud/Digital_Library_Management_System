@@ -6,6 +6,7 @@
 const TrashModel = require("../models/Trash");
 const auditService = require("../services/auditService");
 const { successResponse, errorResponse } = require("../utils/responseFormatter");
+const { broadcast, broadcastToAdmins } = require("../utils/websocket");
 
 const TrashController = {
 
@@ -35,6 +36,9 @@ const TrashController = {
         action: "RESTORE"
       });
       
+      // WS: notify admins that an item was restored (catalog may have changed)
+      try { broadcastToAdmins("trash:restored", { entityType: result.entityType, entityId: result.entityId }); }
+      catch (e) { console.error("[WS] trash:restored", e.message); }
       res.json(successResponse(result, "Item restored successfully"));
     } catch (err) {
       console.error("[TrashController.restore]", err.message);
@@ -62,6 +66,9 @@ const TrashController = {
         action: "PERMANENT_DELETE"
       });
       
+      // WS: notify admins that an item was permanently removed
+      try { broadcastToAdmins("trash:deleted", { trashLogId, entityType: logEntry.entity_type, entityId: logEntry.entity_id }); }
+      catch (e) { console.error("[WS] trash:deleted", e.message); }
       res.json(successResponse(null, "Item permanently deleted"));
     } catch (err) {
       console.error("[TrashController.permanentDelete]", err.message);
@@ -83,6 +90,9 @@ const TrashController = {
         old_data: { count: result.count }
       });
       
+      // WS: notify admins that trash was emptied
+      try { broadcastToAdmins("trash:emptied", { count: result.count, entityType: entityType || "all" }); }
+      catch (e) { console.error("[WS] trash:emptied", e.message); }
       res.json(successResponse({ count: result.count }, `${result.count} item(s) permanently deleted`));
     } catch (err) {
       console.error("[TrashController.permanentDeleteAll]", err.message);

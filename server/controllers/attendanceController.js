@@ -5,6 +5,7 @@
 
 const AttendanceModel = require("../models/Attendance");
 const auditService    = require("../services/auditService");
+const { broadcast }   = require("../utils/websocket");
 
 const AttendanceController = {
 
@@ -100,6 +101,13 @@ const AttendanceController = {
           },
         });
 
+        // ── WS: push live attendance update to all clients ─────────────
+        try {
+          broadcast("attendance:update", { action: result.action, data: result.data });
+        } catch (wsErr) {
+          console.error("[WS broadcast] attendance:update failed:", wsErr.message);
+        }
+
         return res.status(statusCode).json({
           success: true,
           action:  result.action,
@@ -135,6 +143,8 @@ const AttendanceController = {
             student_name      : result.data?.student_name  ?? null,
           },
         });
+        try { broadcast("attendance:update", { action: "checked_in", data: result.data }); }
+        catch (e) { console.error("[WS] attendance:update", e.message); }
         return res.status(201).json({ success: true, data: result.data, message: "Student checked in successfully" });
       }
       const statusCode = result.error?.toLowerCase().includes("not found") ? 404 : 400;
@@ -163,6 +173,8 @@ const AttendanceController = {
             student_name      : result.data?.student_name ?? null,
           },
         });
+        try { broadcast("attendance:update", { action: "checked_out", data: result.data }); }
+        catch (e) { console.error("[WS] attendance:update", e.message); }
         return res.status(200).json({ success: true, data: result.data, message: "Student checked out successfully" });
       }
       return res.status(400).json({ success: false, error: result.error });
@@ -178,6 +190,8 @@ const AttendanceController = {
       const { id } = req.params;
       const result = await AttendanceModel.delete(id);
       if (result.success) {
+        try { broadcast("attendance:deleted", { id: Number(id) }); }
+        catch (e) { console.error("[WS] attendance:deleted", e.message); }
         return res.status(200).json({ success: true, data: result.data, message: "Attendance record deleted successfully" });
       }
       return res.status(400).json({ success: false, error: result.error });

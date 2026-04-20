@@ -230,6 +230,20 @@ export default function Faculty() {
   // ── Bulk import ───────────────────────────────────────
   const handleBulkImport = async () => {
     if (!parsedData) return;
+
+    const validCodes = DEPARTMENTS.map(d => d.code);
+    const invalidRows = parsedData.filter(r => !validCodes.includes(r.department));
+    if (invalidRows.length > 0) {
+      const names = [...new Set(invalidRows.map(r => `"${r.department}"`))]
+        .slice(0, 3).join(', ');
+      const extra = invalidRows.length > 3 ? ` and ${invalidRows.length - 3} more` : '';
+      showToast(
+        `Invalid department code(s): ${names}${extra}. Valid: ${validCodes.join(', ')}.`,
+        'error'
+      );
+      return;
+    }
+
     try {
       const res  = await fetch(`${API_BASE}/api/students/faculty/bulk-import`,
         withCreds({ method: 'POST', body: JSON.stringify(parsedData) })
@@ -941,6 +955,7 @@ export default function Faculty() {
         <Toast
           message={toast.message}
           type={toast.type}
+          isVisible={toast.show}
           onClose={() => setToast(p => ({ ...p, show: false }))}
         />
       )}

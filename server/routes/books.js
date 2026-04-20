@@ -186,6 +186,25 @@ router.post("/check-duplicates", requireAuth, requireAdmin, async (req, res) => 
 // POST /api/books/bulk-import
 router.post("/bulk-import", requireAuth, requireAdmin, booksController.bulkImport);
 
+// POST /api/books/lexora-check-duplicates
+// Lightweight pre-import duplicate check — no writes, read-only.
+router.post("/lexora-check-duplicates", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { books } = req.body;
+    if (!Array.isArray(books) || !books.length) {
+      return res.status(400).json({ success: false, error: "No books provided" });
+    }
+    const result = await LexoraBookModel.checkDuplicates(books);
+    if (!result.success) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+    res.json({ success: true, duplicates: result.duplicates });
+  } catch (err) {
+    console.error("[POST /api/books/lexora-check-duplicates]", err.message);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
+
 // ── DYNAMIC routes — AFTER all static routes ─────────────
 
 // GET /api/books/:id/copies/public  ← NO AUTH — used by the public landing page

@@ -12,6 +12,7 @@ import Pagination       from "../components/books/Pagination";
 import BookModal        from "../components/books/BookModal";
 import FilterBadge      from "../components/FilterBadge";
 import booksApi         from "../services/api/booksApi";
+import { useWebSocket } from "../hooks/useWebsocket";
 
 function isOutOfStock(book) {
   const effectiveStatus = book.display_status || book.status;
@@ -74,6 +75,62 @@ export default function Books() {
   const location = useLocation();
 
   useEffect(() => { fetchBooks(); }, []);
+
+  // ── Real-time stock sync via Socket.io ────────────────
+  //
+  // The server emits "book:stock_update" after every create / update /
+  // delete / bulk-import so the catalog stays current on all open tabs
+  // without manual refresh.
+  //
+  // Strategy by action:
+  //   "created"       — re-fetch so the new book appears with full data.
+  //   "updated"       — re-fetch to get accurate copy counts / status.
+  //   "deleted"       — optimistically remove from local state; the
+  //                     soft-delete already removes it from /api/books.
+  //   "bulk_imported" — re-fetch to pick up all new/updated titles.
+  useWebSocket({
+    onStatsUpdate: () => {}, // handled by Dashboard; no-op here
+    onTransactionNew: () => {
+      // A new borrow changes available_copies — refresh book list
+      fetchBooks();
+    },
+    onTransactionReturned: () => {
+      // A return restores available_copies — refresh book list
+      fetchBooks();
+    },
+  });
+
+  // Also listen to the dedicated book:stock_update event.
+  // useWebSocket doesn't expose it as a named callback yet, so we
+  // use a separate instance scoped to this page only.
+  // (When/if useWebSocket gains an onBookStockUpdate callback, replace this.)
+  useEffect(() => {
+    // Lazy-import to avoid a circular dep if the hook is refactored later
+    import("socket.io-client").then(({ io }) => {
+      const WS_URL = import.meta.env.VITE_WS_URL || window.location.origin;
+      const socket = io(WS_URL, {
+        path:            "/socket.io",
+        transports:      ["websocket", "polling"],
+        withCredentials: true,
+        // Don't reconnect indefinitely — this is a secondary listener
+        reconnectionAttempts: 5,
+      });
+
+      socket.on("book:stock_update", ({ action, book_id }) => {
+        if (action === "deleted") {
+          // Optimistic removal — matches what confirmDelete() already does
+          if (book_id) setBooks(prev => prev.filter(b => b.id !== book_id));
+        } else {
+          // created / updated / bulk_imported — need fresh data from server
+          fetchBooks();
+        }
+      });
+
+      return () => socket.disconnect();
+    });
+  // fetchBooks is stable (defined outside render); no dep needed.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Apply URL filter param on mount (e.g. ?status=OutOfStock) ──
   useEffect(() => {
@@ -207,7 +264,7 @@ const handleSubmit = useCallback(async () => {
   const handleImportComplete = useCallback(async (importedBooks) => {
     setModal(false);
     const total = importedBooks.length;
-    const totalCopies = importedBooks.reduce((s,b) => s + (b.copies?.length ?? 0), 0);
+    const totalCopies = importedBooks.reduce((s,b) => s + (b.quantity ?? 0), 0);
     showToast(
       `Imported ${total} title${total!==1?"s":""} · ${totalCopies} cop${totalCopies!==1?"ies":"y"} saved`,
       "success"
@@ -251,7 +308,7 @@ const handleSubmit = useCallback(async () => {
       if (result.success) {
         // Remove from local list — soft-deleted books won't appear in /api/books
         setBooks(prev => prev.filter(b => b.id !== deleteModal.bookId));
-        setModal(false);
+        handleCloseModal();
         setDeleteModal({ open:false, bookId:null, bookTitle:"" });
         showToast("Book moved to Recently Deleted.", "success");
       } else {

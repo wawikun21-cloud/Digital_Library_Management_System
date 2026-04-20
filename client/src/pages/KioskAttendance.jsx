@@ -16,6 +16,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { tapRfid } from "../services/api/rfidApi";
 import { getActiveAttendance } from "../services/api/attendanceApi";
+import { io } from "socket.io-client";
 import {
   LogIn, LogOut, Clock, Users, Wifi, WifiOff,
   AlertTriangle, CheckCircle2,
@@ -557,16 +558,72 @@ export default function KioskAttendance() {
   const containerRef  = useRef(null);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(containerRef);
 
-  // ── Poll active students every 10s ───────────────────
+  // ── Fetch active students (HTTP) ─────────────────────
+  // Called on mount and as a safety fallback every 60 s.
+  // In normal operation the WS listener below keeps the list
+  // current without polling at all.
   const fetchActive = useCallback(async () => {
-    const res = await getActiveAttendance();
-    if (res.success) setActive(res.data || []);
+    try {
+      const res = await getActiveAttendance();
+      if (res.success) setActive(res.data || []);
+    } catch {
+      // silent on kiosk — WS will recover
+    }
   }, []);
 
+  // ── Real-time active-list sync via Socket.io ──────────
+  //
+  // The server broadcasts "attendance:update" on every tap so the
+  // kiosk active-student grid updates the instant a student checks
+  // in or out — no polling delay, no flicker.
+  //
+  // Event payload: { action: "checked_in"|"checked_out", data: <record> }
+  //
+  //   checked_in  → prepend to active list (duplicate-safe)
+  //   checked_out → remove from active list by id
+  //
+  // A 60 s safety-fallback poll runs in parallel so the grid
+  // self-heals if the WS connection drops briefly.
   useEffect(() => {
+    // Initial load
     fetchActive();
-    const t = setInterval(fetchActive, 10_000);
-    return () => clearInterval(t);
+
+    // WS connection — mirrors useWebsocket.js settings
+    const WS_URL = import.meta.env.VITE_WS_URL || window.location.origin;
+    const socket = io(WS_URL, {
+      path:                 "/socket.io",
+      transports:           ["websocket", "polling"],
+      withCredentials:      true,
+      reconnectionDelay:    2000,
+      reconnectionAttempts: 10,
+    });
+
+    // Shared handler — called by BOTH event names so that:
+    //   • taps from THIS browser  → "attendance:update" (from attendanceController)
+    //   • taps from RFID hardware → "attendance:update" (now also from rfidController)
+    //   • "rfid:tap"              → kept as alias for backwards compatibility
+    const applyAttendanceUpdate = ({ action, data }) => {
+      if (!data?.id) return;
+      if (action === "checked_in") {
+        setActive(prev =>
+          prev.some(r => r.id === data.id) ? prev : [data, ...prev]
+        );
+      } else if (action === "checked_out") {
+        setActive(prev => prev.filter(r => r.id !== data.id));
+      }
+    };
+
+    socket.on("attendance:update", applyAttendanceUpdate);
+    // rfid:tap carries { action, data, rfid_code } — same shape after destructuring
+    socket.on("rfid:tap",         applyAttendanceUpdate);
+
+    // 60 s safety fallback — self-heals if a WS event is missed
+    const fallback = setInterval(fetchActive, 60_000);
+
+    return () => {
+      socket.disconnect();
+      clearInterval(fallback);
+    };
   }, [fetchActive]);
 
   // ── Online / offline indicator ────────────────────────
@@ -608,7 +665,23 @@ export default function KioskAttendance() {
         setUnregistered(rfidCode.trim());
       } else if (res.success) {
         setTapResult(res);
-        fetchActive();
+
+        // ── Optimistic update — no waiting for WS round-trip ──────────
+        // Apply the active-list change IMMEDIATELY from the HTTP response
+        // data so the student card appears at the same time as the TapCard
+        // toast, not after an extra network round-trip.
+        //
+        // The WS "attendance:update" event will arrive shortly after and
+        // the duplicate guard (prev.some r.id === data.id) silently no-ops.
+        if (res.action === "checked_in" && res.data?.id) {
+          setActive(prev =>
+            prev.some(r => r.id === res.data.id)
+              ? prev
+              : [res.data, ...prev]
+          );
+        } else if (res.action === "checked_out" && res.data?.id) {
+          setActive(prev => prev.filter(r => r.id !== res.data.id));
+        }
       } else if (res.error?.toLowerCase().includes("not found")) {
         setNotFound(rfidCode.trim());
       }

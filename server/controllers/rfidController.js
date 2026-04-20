@@ -63,10 +63,19 @@ const RfidController = {
       }
 
       // Broadcast successful tap
+      // "rfid:tap"        — legacy event name (kept for any existing listeners)
+      // "attendance:update" — canonical event name consumed by Attendance.jsx,
+      //                       KioskAttendance.jsx, and all WS subscribers.
+      //                       This is what makes the active-student grid on
+      //                       OTHER open browsers update in real time.
       broadcast("rfid:tap", {
         action: result.action,
         data:   result.data,
         rfid_code: rfid_code.trim(),
+      });
+      broadcast("attendance:update", {
+        action: result.action,   // "checked_in" | "checked_out"
+        data:   result.data,
       });
 
       return res.status(200).json(result);
@@ -184,6 +193,10 @@ const RfidController = {
           data:   result.data,
           rfid_code: rfid_code.trim(),
           simulated: true,
+        });
+        broadcast("attendance:update", {
+          action: result.action,
+          data:   result.data,
         });
       }
 
