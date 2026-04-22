@@ -14,6 +14,7 @@
 const express        = require("express");
 const router         = express.Router();
 const rateLimit      = require("express-rate-limit");
+const { ipKeyGenerator } = require("express-rate-limit");
 const RfidController = require("../controllers/rfidController");
 const { requireAuth, requireAdminOrStaff } = require("../middleware/authMiddleware");
 
@@ -33,7 +34,7 @@ const rfidTapLimiter = rateLimit({
   max:             20,           // max 20 taps per IP per window
   standardHeaders: true,
   legacyHeaders:   false,
-  keyGenerator:    (req) => req.ip,   // explicit — works behind proxies too
+  keyGenerator:    ipKeyGenerator,
   handler: (req, res) => {
     console.warn(`[RateLimit] RFID tap flood from ${req.ip} — blocked`);
     res.status(429).json({

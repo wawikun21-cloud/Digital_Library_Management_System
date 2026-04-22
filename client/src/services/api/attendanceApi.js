@@ -6,6 +6,17 @@
 // Empty string → same-origin → Vite proxy forwards to server (cookie sent correctly)
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
+/** Build query string from global filter object */
+function buildFilterParams(filters = {}) {
+  const p = new URLSearchParams();
+  if (filters.program    && filters.program    !== "All") p.set("program",    filters.program);
+  if (filters.yrLevel    && filters.yrLevel    !== "All") p.set("yrLevel",    filters.yrLevel);
+  if (filters.schoolYear && filters.schoolYear !== "All") p.set("schoolYear", filters.schoolYear);
+  if (filters.dateFrom)  p.set("dateFrom", filters.dateFrom);
+  if (filters.dateTo)    p.set("dateTo",   filters.dateTo);
+  return p.toString();
+}
+
 /** Shared fetch options — always send the session cookie */
 const withCreds = (opts = {}) => ({
   ...opts,
@@ -48,6 +59,137 @@ export async function getAttendanceByStudentId(studentIdNumber) {
     return await res.json();
   } catch (error) {
     console.error("[attendanceApi.getAttendanceByStudentId]", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/** GET /api/attendance/all-low-usage-students — full list for modal */
+export async function getAllLowUsageStudents() {
+  try {
+    const res = await fetch(`${API_BASE}/api/attendance/all-low-usage-students`, withCreds());
+    return await res.json();
+  } catch (error) {
+    console.error("[attendanceApi.getAllLowUsageStudents]", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/** GET /api/attendance/low-usage-students */
+export async function getLowUsageStudents(filters = {}) {
+  try {
+    const qs = buildFilterParams(filters);
+    const res = await fetch(`${API_BASE}/api/attendance/low-usage-students${qs ? `?${qs}` : ""}`, withCreds());
+    return await res.json();
+  } catch (error) {
+    console.error("[attendanceApi.getLowUsageStudents]", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/** GET /api/attendance/session-distribution */
+export async function getSessionDistribution(filters = {}) {
+  try {
+    const qs = buildFilterParams(filters);
+    const res = await fetch(`${API_BASE}/api/attendance/session-distribution${qs ? `?${qs}` : ""}`, withCreds());
+    return await res.json();
+  } catch (error) {
+    console.error("[attendanceApi.getSessionDistribution]", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/** GET /api/attendance/other-insights */
+export async function getOtherInsights(filters = {}) {
+  try {
+    const qs = buildFilterParams(filters);
+    const res = await fetch(`${API_BASE}/api/attendance/other-insights${qs ? `?${qs}` : ""}`, withCreds());
+    return await res.json();
+  } catch (error) {
+    console.error("[attendanceApi.getOtherInsights]", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/** GET /api/attendance/visits-over-time?groupBy=Daily|Weekly|Monthly */
+export async function getVisitsOverTime(groupBy = "Daily", filters = {}) {
+  try {
+    const qs = buildFilterParams(filters);
+    const base = `${API_BASE}/api/attendance/visits-over-time?groupBy=${encodeURIComponent(groupBy)}`;
+    const res = await fetch(qs ? `${base}&${qs}` : base, withCreds());
+    return await res.json();
+  } catch (error) {
+    console.error("[attendanceApi.getVisitsOverTime]", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/** GET /api/attendance/peak-hours */
+export async function getPeakHours(filters = {}) {
+  try {
+    const qs = buildFilterParams(filters);
+    const res = await fetch(`${API_BASE}/api/attendance/peak-hours${qs ? `?${qs}` : ""}`, withCreds());
+    return await res.json();
+  } catch (error) {
+    console.error("[attendanceApi.getPeakHours]", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/** GET /api/attendance/visits-by-day */
+export async function getVisitsByDay(filters = {}) {
+  try {
+    const qs = buildFilterParams(filters);
+    const res = await fetch(`${API_BASE}/api/attendance/visits-by-day${qs ? `?${qs}` : ""}`, withCreds());
+    return await res.json();
+  } catch (error) {
+    console.error("[attendanceApi.getVisitsByDay]", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/** GET /api/attendance/all-top-students — full ranked list for modal */
+export async function getAllTopStudents() {
+  try {
+    const res = await fetch(`${API_BASE}/api/attendance/all-top-students`, withCreds());
+    return await res.json();
+  } catch (error) {
+    console.error("[attendanceApi.getAllTopStudents]", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/** GET /api/attendance/top-students — top 50 by total hours */
+export async function getTopStudents(filters = {}) {
+  try {
+    const qs = buildFilterParams(filters);
+    const res = await fetch(`${API_BASE}/api/attendance/top-students${qs ? `?${qs}` : ""}`, withCreds());
+    return await res.json();
+  } catch (error) {
+    console.error("[attendanceApi.getTopStudents]", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/** GET /api/attendance/program-usage — visits/hours grouped by program */
+export async function getProgramUsage(filters = {}) {
+  try {
+    const qs = buildFilterParams(filters);
+    const res = await fetch(`${API_BASE}/api/attendance/program-usage${qs ? `?${qs}` : ""}`, withCreds());
+    return await res.json();
+  } catch (error) {
+    console.error("[attendanceApi.getProgramUsage]", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/** GET /api/attendance/dashboard-stats — KPI stats for AttendanceDashboard */
+export async function getAttendanceDashboardStats(filters = {}) {
+  try {
+    const qs = buildFilterParams(filters);
+    const res = await fetch(`${API_BASE}/api/attendance/dashboard-stats${qs ? `?${qs}` : ""}`, withCreds());
+    return await res.json();
+  } catch (error) {
+    console.error("[attendanceApi.getAttendanceDashboardStats]", error);
     return { success: false, error: error.message };
   }
 }
@@ -127,6 +269,17 @@ export default {
   getAllAttendance,
   getActiveAttendance,
   getAttendanceByStudentId,
+  getAttendanceDashboardStats,
+  getTopStudents,
+  getAllTopStudents,
+  getProgramUsage,
+  getVisitsOverTime,
+  getPeakHours,
+  getVisitsByDay,
+  getLowUsageStudents,
+  getAllLowUsageStudents,
+  getSessionDistribution,
+  getOtherInsights,
   getAttendanceStats,
   tapAttendance,
   checkIn,

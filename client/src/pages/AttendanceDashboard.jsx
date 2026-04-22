@@ -9,7 +9,8 @@
  *   • Low/No Usage Students table + Session Duration donut + Other Insights panel
  */
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { getAttendanceDashboardStats, getTopStudents, getAllTopStudents, getProgramUsage, getVisitsOverTime, getPeakHours, getVisitsByDay, getLowUsageStudents, getAllLowUsageStudents, getSessionDistribution, getOtherInsights } from "../services/api/attendanceApi";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer,
@@ -17,9 +18,10 @@ import {
 } from "recharts";
 import {
   Users, Clock, Timer, TrendingUp, GraduationCap, UserCheck,
-  ChevronDown, SlidersHorizontal, Info, CalendarDays,
-  Trophy, Star, ArrowUpRight, Download,
+  ChevronDown, Info, CalendarDays,
+  Trophy, Star, ArrowUpRight, Download, RefreshCw, X, FileDown,
 } from "lucide-react";
+import { useWebSocket } from "../hooks/useWebsocket";
 
 // ── Palette (matches project tokens) ─────────────────────────────────────────
 const C = {
@@ -135,20 +137,16 @@ function KpiCard({ icon: Icon, iconBg, iconColor, label, value, sub }) {
   return (
     <div style={{
       background: "var(--bg-surface)", border: "1px solid var(--border)",
-      borderRadius: 12, padding: "16px 18px", display: "flex",
-      alignItems: "center", gap: 14, boxShadow: "var(--shadow-sm)",
-      transition: "box-shadow .2s, transform .2s",
-    }}
-      onMouseEnter={e => { e.currentTarget.style.boxShadow = "var(--shadow-md)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
-      onMouseLeave={e => { e.currentTarget.style.boxShadow = "var(--shadow-sm)"; e.currentTarget.style.transform = ""; }}
-    >
-      <div style={{ width: 44, height: 44, borderRadius: 11, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-        <Icon size={22} color={iconColor} />
+      borderRadius: 10, padding: "13px 15px", display: "flex",
+      alignItems: "center", gap: 11, boxShadow: "0 1px 3px rgba(0,0,0,.05)",
+    }}>
+      <div style={{ width: 38, height: 38, borderRadius: 9, background: iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <Icon size={18} color={iconColor} />
       </div>
       <div style={{ minWidth: 0 }}>
-        <p style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500, marginBottom: 2 }}>{label}</p>
-        <p style={{ fontSize: 22, fontWeight: 800, color: "var(--text-primary)", lineHeight: 1, marginBottom: 3 }}>{value}</p>
-        {sub && <p style={{ fontSize: 11, color: "var(--text-muted)" }}>{sub}</p>}
+        <p style={{ margin: "0 0 1px", fontSize: 10, color: "var(--text-muted)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</p>
+        <p style={{ margin: "0 0 2px", fontSize: 20, fontWeight: 800, color: "var(--text-primary)", lineHeight: 1 }}>{value}</p>
+        {sub && <p style={{ margin: 0, fontSize: 10, color: "var(--text-muted)" }}>{sub}</p>}
       </div>
     </div>
   );
@@ -166,12 +164,12 @@ function SCard({ title, action, children, info }) {
         display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{title}</span>
-          {info && <Info size={13} style={{ color: "var(--text-muted)", cursor: "default" }} />}
+          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>{title}</span>
+          {info && <Info size={12} style={{ color: "var(--text-muted)", cursor: "default" }} />}
         </div>
         {action}
       </div>
-      <div style={{ padding: 18 }}>{children}</div>
+      <div style={{ padding: 14 }}>{children}</div>
     </div>
   );
 }
@@ -194,12 +192,12 @@ function TabBtn({ label, active, onClick }) {
 function DropBtn({ label }) {
   return (
     <button style={{
-      display: "flex", alignItems: "center", gap: 5, padding: "6px 12px",
-      fontSize: 12, fontWeight: 600, borderRadius: 8, cursor: "pointer",
-      background: "var(--bg-subtle)", border: "1px solid var(--border-light)",
-      color: "var(--text-secondary)",
+      display: "inline-flex", alignItems: "center", gap: 3, padding: "3px 9px",
+      fontSize: 11, fontWeight: 500, borderRadius: 5, cursor: "pointer",
+      background: "var(--bg-surface)", border: "1px solid var(--border)",
+      color: "var(--text-primary)",
     }}>
-      {label} <ChevronDown size={13} />
+      {label} <ChevronDown size={10} style={{ color: "var(--text-muted)" }} />
     </button>
   );
 }
@@ -231,7 +229,7 @@ function RankBadge({ rank }) {
     <span style={{
       display: "inline-flex", alignItems: "center", justifyContent: "center",
       width: 24, height: 24, borderRadius: "50%", fontSize: 11, fontWeight: 800,
-      background: color ? color : "var(--bg-subtle)",
+      background: color || "var(--bg-subtle)",
       color: color ? "#fff" : "var(--text-muted)",
     }}>
       {rank <= 3 ? <Trophy size={12} /> : rank}
@@ -239,67 +237,885 @@ function RankBadge({ rank }) {
   );
 }
 
+// ── Top Students Modal ────────────────────────────────────────────────────────
+function TopStudentsModal({ onClose }) {
+  const [allStudents, setAllStudents] = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [filterProgram,  setFilterProgram]  = useState("All");
+  const [filterYrLevel,  setFilterYrLevel]  = useState("All");
+  const [filterSemester, setFilterSemester] = useState("All");
+  const [sortBy, setSortBy] = useState("Total Hours");
+
+  useEffect(() => {
+    getAllTopStudents().then(res => {
+      if (res.success) setAllStudents(res.data);
+      setLoading(false);
+    });
+  }, []);
+
+  const handleBackdrop = (e) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  // Derive filter options dynamically from data
+  const programs  = ["All", ...Array.from(new Set(allStudents.map(s => s.program).filter(p => p !== "—"))).sort()];
+  const yrLevels  = ["All", ...Array.from(new Set(allStudents.map(s => s.yrLevel).filter(y => y !== "—"))).sort()];
+  const semesters = ["All", ...Array.from(new Set(allStudents.map(s => s.semester).filter(x => x !== "—"))).sort()];
+
+  // Filter
+  const filtered = allStudents.filter(s => {
+    if (filterProgram  !== "All" && s.program  !== filterProgram)  return false;
+    if (filterYrLevel  !== "All" && s.yrLevel  !== filterYrLevel)  return false;
+    if (filterSemester !== "All" && s.semester !== filterSemester) return false;
+    return true;
+  });
+
+  // Re-rank after filtering, preserve sort choice
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortBy === "Visits")    return b.visits - a.visits;
+    if (sortBy === "Avg Time")  return (parseInt(b.avg) || 0) - (parseInt(a.avg) || 0);
+    return b.totalMinutes - a.totalMinutes; // "Total Hours" default
+  });
+
+  const ranked = sorted.map((s, i) => ({ ...s, rank: i + 1 }));
+
+  const selStyle = {
+    fontSize: 11, fontWeight: 500, padding: "4px 8px", borderRadius: 6, cursor: "pointer",
+    background: "var(--bg-subtle)", border: "1px solid var(--border)",
+    color: "var(--text-primary)", outline: "none",
+  };
+
+  // ── PDF download ─────────────────────────────────────────────────────────────
+  const downloadPDF = async () => {
+    if (!window._jsPDFLoaded) {
+      await new Promise((resolve, reject) => {
+        const s1 = document.createElement("script");
+        s1.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+        s1.onload = () => {
+          const s2 = document.createElement("script");
+          s2.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js";
+          s2.onload = () => { window._jsPDFLoaded = true; resolve(); };
+          s2.onerror = reject;
+          document.head.appendChild(s2);
+        };
+        s1.onerror = reject;
+        document.head.appendChild(s1);
+      });
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc  = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    const navy = [19, 47, 69];
+    const amber = [238, 162, 58];
+    const pageW = doc.internal.pageSize.getWidth();
+
+    // Header
+    doc.setFillColor(...navy);
+    doc.rect(0, 0, pageW, 52, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(15);
+    doc.text("Top Students by Total Hours Report", 30, 22);
+
+    const parts = [];
+    if (filterProgram  !== "All") parts.push(`Program: ${filterProgram}`);
+    if (filterYrLevel  !== "All") parts.push(`Year Level: ${filterYrLevel}`);
+    if (filterSemester !== "All") parts.push(`Semester: ${filterSemester}`);
+    parts.push(`Sorted by: ${sortBy}`);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(200, 215, 225);
+    doc.text(parts.join("  |  "), 30, 36);
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    doc.setTextColor(180, 200, 215);
+    doc.text(`Generated: ${dateStr}   •   ${ranked.length} student${ranked.length !== 1 ? "s" : ""}`, 30, 48);
+
+    // Table
+    doc.autoTable({
+      startY: 62,
+      head: [["Rank", "Student Name", "Course / Program", "Year Level", "Semester", "Visits", "Total Hours", "Avg Time / Visit"]],
+      body: ranked.map(s => [s.rank, s.name, s.program, s.yrLevel, s.semester, s.visits, s.hours, s.avg]),
+      styles: {
+        fontSize: 9,
+        cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
+        lineColor: [220, 228, 235],
+        lineWidth: 0.4,
+        textColor: [30, 40, 50],
+      },
+      headStyles: { fillColor: navy, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8.5, halign: "left" },
+      alternateRowStyles: { fillColor: [245, 248, 251] },
+      columnStyles: {
+        0: { cellWidth: 30, halign: "center" },
+        5: { halign: "center" },
+      },
+      // Amber highlight for top 3 ranks
+      didParseCell(data) {
+        if (data.section === "body" && data.column.index === 0) {
+          const rank = Number(data.cell.raw);
+          if (rank === 1) data.cell.styles.textColor = [180, 120, 0];
+          if (rank <= 3) data.cell.styles.fontStyle = "bold";
+        }
+      },
+      margin: { left: 30, right: 30 },
+    });
+
+    // Footer
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= pageCount; p++) {
+      doc.setPage(p);
+      const y = doc.internal.pageSize.getHeight() - 14;
+      doc.setDrawColor(...amber);
+      doc.setLineWidth(1);
+      doc.line(30, y - 6, pageW - 30, y - 6);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(120, 130, 145);
+      doc.text("Digital Library Management System  —  Confidential", 30, y);
+      doc.text(`Page ${p} of ${pageCount}`, pageW - 30, y, { align: "right" });
+    }
+
+    const slug = [
+      filterProgram  !== "All" ? filterProgram  : "All-Programs",
+      filterYrLevel  !== "All" ? filterYrLevel.replace(/\s+/g, "-")  : null,
+      filterSemester !== "All" ? filterSemester.replace(/\s+/g, "-") : null,
+    ].filter(Boolean).join("_");
+    doc.save(`TopStudents_${slug}_${now.toISOString().slice(0, 10)}.pdf`);
+  };
+
+  return (
+    <div
+      onClick={handleBackdrop}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "rgba(0,0,0,.45)", backdropFilter: "blur(2px)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+      }}
+    >
+      <div style={{
+        background: "var(--bg-surface)", borderRadius: 14,
+        border: "1px solid var(--border)", boxShadow: "var(--shadow-lg)",
+        width: "100%", maxWidth: 900,
+        maxHeight: "85vh", display: "flex", flexDirection: "column", overflow: "hidden",
+      }}>
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "16px 20px", borderBottom: "1px solid var(--border-light)", flexShrink: 0,
+        }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: "var(--text-primary)" }}>
+              Top Students by Total Hours
+            </p>
+            <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-muted)" }}>
+              {ranked.length} student{ranked.length !== 1 ? "s" : ""} matching filters
+            </p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              onClick={downloadPDF}
+              disabled={loading || ranked.length === 0}
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 7,
+                cursor: loading || ranked.length === 0 ? "not-allowed" : "pointer",
+                background: loading || ranked.length === 0 ? "rgba(238,162,58,.35)" : "#17006b",
+                border: "none", color: "#fff",
+                boxShadow: loading || ranked.length === 0 ? "none" : "0 2px 8px rgba(238,162,58,.35)",
+                opacity: loading || ranked.length === 0 ? 0.6 : 1,
+                transition: "opacity .15s",
+              }}
+            >
+              <FileDown size={13} /> Download PDF
+            </button>
+            <button onClick={onClose} style={{
+              background: "var(--bg-subtle)", border: "1px solid var(--border)",
+              borderRadius: 8, padding: "5px 7px", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <X size={14} color="var(--text-secondary)" />
+            </button>
+          </div>
+        </div>
+
+        {/* Filter Bar */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10, padding: "12px 20px",
+          borderBottom: "1px solid var(--border-light)", flexShrink: 0, flexWrap: "wrap",
+        }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".4px" }}>Course / Program</span>
+            <select value={filterProgram} onChange={e => setFilterProgram(e.target.value)} style={selStyle}>
+              {programs.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".4px" }}>Year Level</span>
+            <select value={filterYrLevel} onChange={e => setFilterYrLevel(e.target.value)} style={selStyle}>
+              {yrLevels.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".4px" }}>Semester</span>
+            <select value={filterSemester} onChange={e => setFilterSemester(e.target.value)} style={selStyle}>
+              {semesters.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".4px" }}>Sort By</span>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={selStyle}>
+              {["Total Hours", "Visits", "Avg Time"].map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          {(filterProgram !== "All" || filterYrLevel !== "All" || filterSemester !== "All" || sortBy !== "Total Hours") && (
+            <button
+              onClick={() => { setFilterProgram("All"); setFilterYrLevel("All"); setFilterSemester("All"); setSortBy("Total Hours"); }}
+              style={{
+                alignSelf: "flex-end", fontSize: 11, fontWeight: 600, padding: "4px 10px",
+                borderRadius: 6, cursor: "pointer", border: "1px solid rgba(239,68,68,.25)",
+                background: "rgba(239,68,68,.06)", color: "#ef4444",
+              }}
+            >
+              Reset
+            </button>
+          )}
+        </div>
+
+        {/* Table */}
+        <div style={{ overflowY: "auto", flex: 1 }}>
+          {loading ? (
+            <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>Loading…</div>
+          ) : ranked.length === 0 ? (
+            <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>No students match the selected filters.</div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+              <thead style={{ position: "sticky", top: 0, background: "var(--bg-surface)", zIndex: 1 }}>
+                <tr>
+                  {["Rank", "Student Name", "Course / Program", "Year Level", "Semester", "Visits", "Total Hours", "Avg Time / Visit"].map(h => (
+                    <th key={h} style={{
+                      textAlign: "left", fontSize: 10, fontWeight: 700, color: "var(--text-muted)",
+                      textTransform: "uppercase", letterSpacing: ".4px",
+                      padding: "10px 10px 10px 0", paddingLeft: h === "Rank" ? 20 : 0,
+                      borderBottom: "1px solid var(--border-light)",
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {ranked.map((s, i) => (
+                  <tr key={i} style={{ borderBottom: "1px solid var(--border-light)" }}>
+                    <td style={{ padding: "9px 10px 9px 20px" }}><RankBadge rank={s.rank} /></td>
+                    <td style={{ padding: "9px 10px 9px 0", fontWeight: 600, color: "var(--text-primary)" }}>{s.name}</td>
+                    <td style={{ padding: "9px 10px 9px 0" }}><ProgramBadge prog={s.program} /></td>
+                    <td style={{ padding: "9px 10px 9px 0", color: "var(--text-secondary)", fontSize: 12 }}>{s.yrLevel}</td>
+                    <td style={{ padding: "9px 10px 9px 0", color: "var(--text-secondary)", fontSize: 12 }}>{s.semester}</td>
+                    <td style={{ padding: "9px 10px 9px 0", color: "var(--text-secondary)", fontWeight: 600 }}>{s.visits}</td>
+                    <td style={{ padding: "9px 10px 9px 0", fontWeight: 700, color: "var(--text-primary)" }}>{s.hours}</td>
+                    <td style={{ padding: "9px 0", color: "var(--text-secondary)" }}>{s.avg}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Low Usage Modal ───────────────────────────────────────────────────────────
+function LowUsageModal({ onClose }) {
+  const [allStudents, setAllStudents] = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [filterProgram,  setFilterProgram]  = useState("All");
+  const [filterYrLevel,  setFilterYrLevel]  = useState("All");
+  const [filterSemester, setFilterSemester] = useState("All");
+
+  useEffect(() => {
+    getAllLowUsageStudents().then(res => {
+      if (res.success) setAllStudents(res.data);
+      setLoading(false);
+    });
+  }, []);
+
+  // Close on backdrop click
+  const handleBackdrop = (e) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  // Derive filter options from data
+  const programs  = ["All", ...Array.from(new Set(allStudents.map(s => s.program).filter(p => p !== "—"))).sort()];
+  const yrLevels  = ["All", ...Array.from(new Set(allStudents.map(s => s.yrLevel).filter(y => y !== "—"))).sort()];
+  const semesters = ["All", ...Array.from(new Set(allStudents.map(s => s.semester).filter(x => x !== "—"))).sort()];
+
+  const filtered = allStudents.filter(s => {
+    if (filterProgram  !== "All" && s.program  !== filterProgram)  return false;
+    if (filterYrLevel  !== "All" && s.yrLevel  !== filterYrLevel)  return false;
+    if (filterSemester !== "All" && s.semester !== filterSemester) return false;
+    return true;
+  });
+
+  const selStyle = {
+    fontSize: 11, fontWeight: 500, padding: "4px 8px", borderRadius: 6, cursor: "pointer",
+    background: "var(--bg-subtle)", border: "1px solid var(--border)",
+    color: "var(--text-primary)", outline: "none",
+  };
+
+  // ── PDF download (client-side via jsPDF + autotable) ────────────────────────
+  const downloadPDF = async () => {
+    // Lazy-load jsPDF and autotable from CDN
+    if (!window._jsPDFLoaded) {
+      await new Promise((resolve, reject) => {
+        const s1 = document.createElement("script");
+        s1.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+        s1.onload = () => {
+          const s2 = document.createElement("script");
+          s2.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js";
+          s2.onload = () => { window._jsPDFLoaded = true; resolve(); };
+          s2.onerror = reject;
+          document.head.appendChild(s2);
+        };
+        s1.onerror = reject;
+        document.head.appendChild(s1);
+      });
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+
+    // ── Header block ──────────────────────────────────────────────────────────
+    const navy  = [19, 47, 69];
+    const amber = [238, 162, 58];
+    const pageW = doc.internal.pageSize.getWidth();
+
+    doc.setFillColor(...navy);
+    doc.rect(0, 0, pageW, 52, "F");
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(15);
+    doc.text("Low / No Usage Students Report", 30, 22);
+
+    // Active filter summary line
+    const parts = [];
+    if (filterProgram  !== "All") parts.push(`Program: ${filterProgram}`);
+    if (filterYrLevel  !== "All") parts.push(`Year Level: ${filterYrLevel}`);
+    if (filterSemester !== "All") parts.push(`Semester: ${filterSemester}`);
+    const filterLine = parts.length ? parts.join("  |  ") : "All Students";
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(200, 215, 225);
+    doc.text(filterLine, 30, 36);
+
+    // Generated date + count
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    doc.setTextColor(180, 200, 215);
+    doc.text(`Generated: ${dateStr}   •   ${filtered.length} student${filtered.length !== 1 ? "s" : ""}`, 30, 48);
+
+    // ── Table ─────────────────────────────────────────────────────────────────
+    doc.autoTable({
+      startY: 62,
+      head: [["#", "Student Name", "Course / Program", "Year Level", "Semester", "Visits", "Total Hours", "Last Visit"]],
+      body: filtered.map((s, i) => [
+        i + 1,
+        s.name,
+        s.program,
+        s.yrLevel,
+        s.semester,
+        s.visits,
+        s.hours,
+        s.last,
+      ]),
+      styles: {
+        fontSize: 9,
+        cellPadding: { top: 5, bottom: 5, left: 6, right: 6 },
+        lineColor: [220, 228, 235],
+        lineWidth: 0.4,
+        textColor: [30, 40, 50],
+      },
+      headStyles: {
+        fillColor: navy,
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        fontSize: 8.5,
+        halign: "left",
+      },
+      alternateRowStyles: { fillColor: [245, 248, 251] },
+      columnStyles: {
+        0: { cellWidth: 24, halign: "center" },
+        5: { halign: "center" },
+        6: { halign: "center" },
+      },
+      // Amber accent on rows with 0 visits
+      didParseCell(data) {
+        if (data.section === "body" && data.column.index === 5) {
+          const visits = Number(data.cell.raw);
+          if (visits === 0) {
+            data.cell.styles.textColor = [220, 50, 50];
+            data.cell.styles.fontStyle = "bold";
+          }
+        }
+      },
+      margin: { left: 30, right: 30 },
+    });
+
+    // ── Footer on every page ──────────────────────────────────────────────────
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= pageCount; p++) {
+      doc.setPage(p);
+      const y = doc.internal.pageSize.getHeight() - 14;
+      doc.setDrawColor(...amber);
+      doc.setLineWidth(1);
+      doc.line(30, y - 6, pageW - 30, y - 6);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(120, 130, 145);
+      doc.text("Digital Library Management System  —  Confidential", 30, y);
+      doc.text(`Page ${p} of ${pageCount}`, pageW - 30, y, { align: "right" });
+    }
+
+    // ── Build filename from filters ───────────────────────────────────────────
+    const slug = [
+      filterProgram  !== "All" ? filterProgram  : "All-Programs",
+      filterYrLevel  !== "All" ? filterYrLevel.replace(/\s+/g, "-")  : null,
+      filterSemester !== "All" ? filterSemester.replace(/\s+/g, "-") : null,
+    ].filter(Boolean).join("_");
+    doc.save(`LowUsage_${slug}_${now.toISOString().slice(0, 10)}.pdf`);
+  };
+
+  return (
+    <div
+      onClick={handleBackdrop}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "rgba(0,0,0,.45)", backdropFilter: "blur(2px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 20,
+      }}
+    >
+      <div style={{
+        background: "var(--bg-surface)", borderRadius: 14,
+        border: "1px solid var(--border)", boxShadow: "var(--shadow-lg)",
+        width: "100%", maxWidth: 820,
+        maxHeight: "85vh", display: "flex", flexDirection: "column",
+        overflow: "hidden",
+      }}>
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "16px 20px", borderBottom: "1px solid var(--border-light)",
+          flexShrink: 0,
+        }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: "var(--text-primary)" }}>
+              Low / No Usage Students
+            </p>
+            <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-muted)" }}>
+              {filtered.length} student{filtered.length !== 1 ? "s" : ""} matching filters
+            </p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              onClick={downloadPDF}
+              disabled={loading || filtered.length === 0}
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                fontSize: 11, fontWeight: 700, padding: "5px 12px",
+                borderRadius: 7, cursor: loading || filtered.length === 0 ? "not-allowed" : "pointer",
+                background: loading || filtered.length === 0 ? "rgba(238,162,58,.35)" : "#17006b",
+                border: "none", color: "#fff",
+                boxShadow: loading || filtered.length === 0 ? "none" : "0 2px 8px rgba(238,162,58,.35)",
+                opacity: loading || filtered.length === 0 ? 0.6 : 1,
+                transition: "opacity .15s",
+              }}
+            >
+              <FileDown size={13} /> Download PDF
+            </button>
+            <button onClick={onClose} style={{
+              background: "var(--bg-subtle)", border: "1px solid var(--border)",
+              borderRadius: 8, padding: "5px 7px", cursor: "pointer", display: "flex",
+              alignItems: "center", justifyContent: "center",
+            }}>
+              <X size={14} color="var(--text-secondary)" />
+            </button>
+          </div>
+        </div>
+
+        {/* Filter Bar */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10, padding: "12px 20px",
+          borderBottom: "1px solid var(--border-light)", flexShrink: 0, flexWrap: "wrap",
+        }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".4px" }}>Course / Program</span>
+            <select value={filterProgram} onChange={e => setFilterProgram(e.target.value)} style={selStyle}>
+              {programs.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".4px" }}>Year Level</span>
+            <select value={filterYrLevel} onChange={e => setFilterYrLevel(e.target.value)} style={selStyle}>
+              {yrLevels.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".4px" }}>Semester</span>
+            <select value={filterSemester} onChange={e => setFilterSemester(e.target.value)} style={selStyle}>
+              {semesters.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          {(filterProgram !== "All" || filterYrLevel !== "All" || filterSemester !== "All") && (
+            <button
+              onClick={() => { setFilterProgram("All"); setFilterYrLevel("All"); setFilterSemester("All"); }}
+              style={{
+                alignSelf: "flex-end", fontSize: 11, fontWeight: 600, padding: "4px 10px",
+                borderRadius: 6, cursor: "pointer", border: "1px solid rgba(239,68,68,.25)",
+                background: "rgba(239,68,68,.06)", color: "#ef4444",
+              }}
+            >
+              Reset
+            </button>
+          )}
+        </div>
+
+        {/* Table */}
+        <div style={{ overflowY: "auto", flex: 1 }}>
+          {loading ? (
+            <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
+              Loading…
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
+              No students match the selected filters.
+            </div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+              <thead style={{ position: "sticky", top: 0, background: "var(--bg-surface)", zIndex: 1 }}>
+                <tr>
+                  {["#", "Student Name", "Course / Program", "Year Level", "Semester", "Visits", "Total Hours", "Last Visit"].map(h => (
+                    <th key={h} style={{
+                      textAlign: "left", fontSize: 10, fontWeight: 700, color: "var(--text-muted)",
+                      textTransform: "uppercase", letterSpacing: ".4px",
+                      padding: "10px 10px 10px 0", paddingLeft: h === "#" ? 20 : 0,
+                      borderBottom: "1px solid var(--border-light)",
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((s, i) => (
+                  <tr key={i} style={{ borderBottom: "1px solid var(--border-light)" }}>
+                    <td style={{ padding: "9px 10px 9px 20px", color: "var(--text-muted)", fontSize: 11 }}>{i + 1}</td>
+                    <td style={{ padding: "9px 10px 9px 0", fontWeight: 600, color: "var(--text-primary)" }}>{s.name}</td>
+                    <td style={{ padding: "9px 10px 9px 0" }}><ProgramBadge prog={s.program} /></td>
+                    <td style={{ padding: "9px 10px 9px 0", color: "var(--text-secondary)", fontSize: 12 }}>{s.yrLevel}</td>
+                    <td style={{ padding: "9px 10px 9px 0", color: "var(--text-secondary)", fontSize: 12 }}>{s.semester}</td>
+                    <td style={{ padding: "9px 10px 9px 0", color: s.visits === 0 ? C.rose : "var(--text-secondary)", fontWeight: 700 }}>{s.visits}</td>
+                    <td style={{ padding: "9px 10px 9px 0", color: "var(--text-secondary)" }}>{s.hours}</td>
+                    <td style={{ padding: "9px 0", color: "var(--text-muted)", fontSize: 11 }}>{s.last}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function AttendanceDashboard() {
   const [programTab, setProgramTab] = useState("By Visits");
   const [visitsFilter, setVisitsFilter] = useState("Daily");
+  const [showLowUsageModal, setShowLowUsageModal] = useState(false);
+  const [showTopStudentsModal, setShowTopStudentsModal] = useState(false);
+
+  // ── Global dashboard filters ───────────────────────────────────────────────
+  const [globalFilter, setGlobalFilter] = useState({
+    program: "All", yrLevel: "All", schoolYear: "All", dateFrom: "", dateTo: "",
+  });
+  const gf = globalFilter; // shorthand
+
+  // ── Real KPI data ──────────────────────────────────────────────────────────
+  const [kpi, setKpi] = useState(null);
+  const [topStudents, setTopStudents] = useState(TOP_STUDENTS);
+  const [programData, setProgramData] = useState(PROGRAM_DATA);
+  const [visitsOverTime, setVisitsOverTime] = useState(VISITS_OVER_TIME);
+  const [peakHours, setPeakHours] = useState(PEAK_HOURS);
+  const [visitsByDay, setVisitsByDay] = useState(DAYS_OF_WEEK);
+  const [lowUsage, setLowUsage] = useState(LOW_USAGE);
+  const [sessionDist, setSessionDist] = useState(SESSION_DIST);
+  const [sessionTotal, setSessionTotal] = useState(3842);
+  const [otherInsights, setOtherInsights] = useState(null);
+
+  // Ref to track latest visitsFilter for WS callback (avoids stale closure)
+  const visitsFilterRef = useRef(visitsFilter);
+  useEffect(() => {
+    visitsFilterRef.current = visitsFilter;
+  }, [visitsFilter]);
+
+  // ── Data fetching functions ───────────────────────────────────────────────
+  const fetchAllData = async (filters = gf) => {
+    await Promise.all([
+      getAttendanceDashboardStats(filters).then(res => {
+        if (res.success) setKpi(res.data);
+      }),
+      getTopStudents(filters).then(res => {
+        if (res.success && res.data.length > 0) setTopStudents(res.data);
+      }),
+      getProgramUsage(filters).then(res => {
+        if (res.success && res.data.length > 0) setProgramData(res.data);
+      }),
+      getPeakHours(filters).then(res => {
+        if (res.success && res.data.length > 0) setPeakHours(res.data);
+      }),
+      getVisitsByDay(filters).then(res => {
+        if (res.success && res.data.length > 0) setVisitsByDay(res.data);
+      }),
+      getLowUsageStudents(filters).then(res => {
+        if (res.success && res.data.length > 0) setLowUsage(res.data);
+      }),
+      getSessionDistribution(filters).then(res => {
+        if (res.success && res.data.length > 0) {
+          setSessionDist(res.data);
+          setSessionTotal(res.totalVisits ?? 0);
+        }
+      }),
+      getOtherInsights(filters).then(res => {
+        if (res.success) setOtherInsights(res.data);
+      }),
+    ]);
+  };
+
+  const refetchAllData = async () => {
+    setKpi(null);
+    await fetchAllData(gf);
+    getVisitsOverTime(visitsFilterRef.current, gf).then(res => {
+      if (res.success && res.data.length > 0) setVisitsOverTime(res.data);
+    });
+  };
+
+  // ── WebSocket real-time updates ────────────────────────────────────────────
+  useWebSocket({
+    isAdmin: false,
+    onAttendanceUpdate: (payload) => {
+      console.log("[WS] Attendance update:", payload.action, payload.data);
+      refetchAllData();
+    },
+  });
+
+  // ── Initial load ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    fetchAllData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-fetch ALL data whenever global filters change
+  useEffect(() => {
+    setKpi(null);
+    fetchAllData(globalFilter);
+    getVisitsOverTime(visitsFilterRef.current, globalFilter).then(res => {
+      if (res.success && res.data.length > 0) setVisitsOverTime(res.data);
+    });
+  }, [globalFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-fetch visits over time whenever groupBy changes (keep current global filter)
+  useEffect(() => {
+    getVisitsOverTime(visitsFilter, globalFilter).then(res => {
+      if (res.success && res.data.length > 0) setVisitsOverTime(res.data);
+    });
+  }, [visitsFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Helpers to format values (show "—" while loading)
+  const totalVisits = kpi
+    ? kpi.totalVisits.toLocaleString()
+    : "—";
+
+  const totalHours = kpi
+    ? (() => {
+        const h = Math.floor(kpi.totalMinutes / 60);
+        return `${h.toLocaleString()} hrs`;
+      })()
+    : "—";
+
+  const avgDuration = kpi
+    ? (() => {
+        const h = Math.floor(kpi.avgDurationMinutes / 60);
+        const m = kpi.avgDurationMinutes % 60;
+        return h > 0 ? `${h}h ${m}m` : `${m}m`;
+      })()
+    : "—";
+
+  const peakHourLabel = kpi ? kpi.peakHourLabel : "—";
+  const peakHourSub   = kpi ? `${kpi.peakHourCount} check-ins` : "No data yet";
+
+  const mostActiveProgram = kpi ? kpi.mostActiveProgram : "—";
+  const mostActiveSub     = kpi ? `${kpi.mostActiveProgramVisits.toLocaleString()} visits` : "—";
 
   return (
-    <main style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <main style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {showLowUsageModal    && <LowUsageModal    onClose={() => setShowLowUsageModal(false)} />}
+      {showTopStudentsModal && <TopStudentsModal  onClose={() => setShowTopStudentsModal(false)} />}
 
-      {/* ── Page Header ── */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      {/* ── Page Header + Inline Filters (matches screenshot) ── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+        {/* Left: title */}
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text-primary)", margin: 0, display: "flex", alignItems: "center", gap: 9 }}>
-            <span style={{ width: 34, height: 34, borderRadius: 9, background: "rgba(238,162,58,.15)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-              <Users size={18} color={C.amber} />
-            </span>
-            Library Attendance Dashboard
+          <h1 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 7 }}>
+            <Users size={17} color={C.amber} /> Library Attendance Dashboard
           </h1>
-          <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: "4px 0 0" }}>
+          <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>
             Monitor student library usage, visits, and engagement
           </p>
         </div>
 
-        {/* Filters row */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <DropBtn label="📅  May 1 – May 31, 2025" />
-          <DropBtn label="Course / Program: All" />
-          <DropBtn label="Year Level: All" />
-          <button style={{
-            display: "flex", alignItems: "center", gap: 6, padding: "7px 14px",
-            fontSize: 12, fontWeight: 700, borderRadius: 8, cursor: "pointer",
-            background: "rgba(99,102,241,.1)", border: "1.5px solid rgba(99,102,241,.3)",
-            color: C.indigo,
-          }}>
-            <SlidersHorizontal size={13} /> More Filters
-          </button>
+        {/* Right: Date Range + filters + actions */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+
+          {/* Date Range — from/to date inputs hidden behind a single display */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".4px" }}>Date Range</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input
+                type="date"
+                value={globalFilter.dateFrom}
+                onChange={e => setGlobalFilter(f => ({ ...f, dateFrom: e.target.value }))}
+                style={{
+                  fontSize: 11, padding: "3px 7px", borderRadius: 5, cursor: "pointer",
+                  background: "var(--bg-surface)", border: "1px solid var(--border)",
+                  color: "var(--text-primary)", outline: "none",
+                }}
+              />
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>–</span>
+              <input
+                type="date"
+                value={globalFilter.dateTo}
+                onChange={e => setGlobalFilter(f => ({ ...f, dateTo: e.target.value }))}
+                style={{
+                  fontSize: 11, padding: "3px 7px", borderRadius: 5, cursor: "pointer",
+                  background: "var(--bg-surface)", border: "1px solid var(--border)",
+                  color: "var(--text-primary)", outline: "none",
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Course / Program */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".4px" }}>Course / Program</span>
+            <select
+              value={globalFilter.program}
+              onChange={e => setGlobalFilter(f => ({ ...f, program: e.target.value }))}
+              style={{
+                fontSize: 11, fontWeight: 500, padding: "3px 24px 3px 8px", borderRadius: 5,
+                background: "var(--bg-surface)", border: "1px solid var(--border)",
+                color: "var(--text-primary)", outline: "none", cursor: "pointer",
+                appearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E\")",
+                backgroundRepeat: "no-repeat", backgroundPosition: "right 7px center",
+              }}
+            >
+              {["All", ...Array.from(new Set(programData.map(p => p.program).filter(p => p !== "Others"))).sort(), "Others"].map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Year Level */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".4px" }}>Year Level</span>
+            <select
+              value={globalFilter.yrLevel}
+              onChange={e => setGlobalFilter(f => ({ ...f, yrLevel: e.target.value }))}
+              style={{
+                fontSize: 11, fontWeight: 500, padding: "3px 24px 3px 8px", borderRadius: 5,
+                background: "var(--bg-surface)", border: "1px solid var(--border)",
+                color: "var(--text-primary)", outline: "none", cursor: "pointer",
+                appearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E\")",
+                backgroundRepeat: "no-repeat", backgroundPosition: "right 7px center",
+              }}
+            >
+              {["All", "1st Year", "2nd Year", "3rd Year", "4th Year"].map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Semester / School Year */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".4px" }}>Semester</span>
+            <select
+              value={globalFilter.schoolYear}
+              onChange={e => setGlobalFilter(f => ({ ...f, schoolYear: e.target.value }))}
+              style={{
+                fontSize: 11, fontWeight: 500, padding: "3px 24px 3px 8px", borderRadius: 5,
+                background: "var(--bg-surface)", border: "1px solid var(--border)",
+                color: "var(--text-primary)", outline: "none", cursor: "pointer",
+                appearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E\")",
+                backgroundRepeat: "no-repeat", backgroundPosition: "right 7px center",
+              }}
+            >
+              {["All", "2024-2025", "2023-2024", "2022-2023"].map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Clear Filters — only visible when any filter is active */}
+          {(globalFilter.program !== "All" || globalFilter.yrLevel !== "All" || globalFilter.schoolYear !== "All" || globalFilter.dateFrom || globalFilter.dateTo) && (
+            <button
+              onClick={() => setGlobalFilter({ program: "All", yrLevel: "All", schoolYear: "All", dateFrom: "", dateTo: "" })}
+              style={{
+                alignSelf: "flex-end", display: "flex", alignItems: "center", gap: 5,
+                fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 6,
+                cursor: "pointer", border: "1px solid rgba(239,68,68,.25)",
+                background: "rgba(239,68,68,.06)", color: "#ef4444",
+              }}
+            >
+              <X size={10} /> Clear
+            </button>
+          )}
+
+          {/* Refresh */}
           <button
-            onClick={() => {}}
+            onClick={refetchAllData}
             style={{
-              display: "flex", alignItems: "center", gap: 6, padding: "7px 14px",
-              fontSize: 12, fontWeight: 700, borderRadius: 8, cursor: "pointer",
-              background: C.amber, border: "none", color: "#fff",
-              boxShadow: "0 2px 8px rgba(238,162,58,.35)",
+              alignSelf: "flex-end", display: "flex", alignItems: "center", gap: 5,
+              padding: "4px 10px", fontSize: 11, fontWeight: 700, borderRadius: 6,
+              cursor: "pointer", background: "rgba(239,68,68,.06)",
+              border: "1.5px solid rgba(239,68,68,.2)", color: "#ef4444",
             }}
           >
-            <Download size={13} /> Export Report
+            <RefreshCw size={11} />
+          </button>
+
+          {/* Export Report */}
+          <button style={{
+            alignSelf: "flex-end", display: "flex", alignItems: "center", gap: 5,
+            padding: "4px 12px", fontSize: 11, fontWeight: 700, borderRadius: 6,
+            cursor: "pointer", background: C.amber, border: "none", color: "#fff",
+            boxShadow: "0 2px 8px rgba(238,162,58,.35)",
+          }}>
+            <Download size={11} /> Export
           </button>
         </div>
       </div>
 
       {/* ── KPI Cards ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
-        <KpiCard icon={Users}        iconBg="rgba(99,102,241,.12)"  iconColor={C.indigo}  label="Total Library Visits"    value="3,842"          sub={<span style={{ color: C.green }}>↑ 12.6% vs Apr 1 – Apr 30</span>} />
-        <KpiCard icon={Clock}        iconBg="rgba(34,197,94,.12)"   iconColor="#16a34a"   label="Total Hours Logged"      value="2,456 hrs"      sub={<span style={{ color: C.green }}>↑ 15.3% vs Apr 1 – Apr 30</span>} />
-        <KpiCard icon={Timer}        iconBg="rgba(238,162,58,.15)"  iconColor={C.amber}   label="Average Session Duration" value="1h 18m"        sub={<span style={{ color: C.green }}>↑ 8.1% vs Apr 1 – Apr 30</span>} />
-        <KpiCard icon={TrendingUp}   iconBg="rgba(45,212,191,.12)"  iconColor={C.mint}    label="Peak Hour Today"         value="2:00 PM – 3:00 PM" sub="256 check-ins" />
-        <KpiCard icon={GraduationCap} iconBg="rgba(168,85,247,.12)" iconColor={C.purple}  label="Most Active Program"     value="BSIT"           sub="812 visits" />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 12 }}>
+        <KpiCard icon={Users}        iconBg="rgba(99,102,241,.12)"  iconColor={C.indigo}  label="Total Library Visits"    value={totalVisits}     sub={<span style={{ color: C.green }}>All-time check-ins</span>} />
+        <KpiCard icon={Clock}        iconBg="rgba(34,197,94,.12)"   iconColor="#16a34a"   label="Total Hours Logged"      value={totalHours}      sub={<span style={{ color: C.green }}>Completed sessions</span>} />
+        <KpiCard icon={Timer}        iconBg="rgba(238,162,58,.15)"  iconColor={C.amber}   label="Average Session Duration" value={avgDuration}    sub={<span style={{ color: C.green }}>Per completed session</span>} />
+        <KpiCard icon={TrendingUp}   iconBg="rgba(45,212,191,.12)"  iconColor={C.mint}    label="Peak Hour Today"         value={peakHourLabel}   sub={peakHourSub} />
+        <KpiCard icon={GraduationCap} iconBg="rgba(168,85,247,.12)" iconColor={C.purple}  label="Most Active Program"     value={mostActiveProgram} sub={mostActiveSub} />
         <KpiCard icon={UserCheck}    iconBg="rgba(50,102,127,.12)"  iconColor={C.teal}    label="Current Occupancy"       value="78 / 120"       sub="65% capacity" />
       </div>
 
       {/* ── Row 2: Top Students + Program Usage ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
 
         {/* Top 50 Students */}
         <SCard
@@ -320,39 +1136,41 @@ export default function AttendanceDashboard() {
               </tr>
             </thead>
             <tbody>
-              {TOP_STUDENTS.map((s, i) => (
-                <tr key={s.rank} style={{ borderBottom: s.rank === 5 ? "none" : "1px solid var(--border-light)" }}>
-                  {s.rank === 50
-                    ? (
-                      <>
-                        <td colSpan={6} style={{ padding: "6px 0", color: "var(--text-muted)", fontSize: 12 }}>…</td>
-                      </>
-                    ) : (
-                      <>
-                        <td style={{ padding: "10px 10px 10px 0" }}><RankBadge rank={s.rank} /></td>
-                        <td style={{ padding: "10px 10px 10px 0", fontWeight: 600, color: "var(--text-primary)" }}>{s.name}</td>
-                        <td style={{ padding: "10px 10px 10px 0" }}><ProgramBadge prog={s.program} /></td>
-                        <td style={{ padding: "10px 10px 10px 0", color: "var(--text-secondary)", fontWeight: 600 }}>{s.visits}</td>
-                        <td style={{ padding: "10px 10px 10px 0", fontWeight: 700, color: "var(--text-primary)" }}>{s.hours}</td>
-                        <td style={{ padding: "10px 0",           color: "var(--text-secondary)" }}>{s.avg}</td>
-                      </>
-                    )
-                  }
+              {topStudents.slice(0, 5).map((s) => (
+                <tr key={s.rank} style={{ borderBottom: "1px solid var(--border-light)" }}>
+                  <td style={{ padding: "10px 10px 10px 0" }}><RankBadge rank={s.rank} /></td>
+                  <td style={{ padding: "10px 10px 10px 0", fontWeight: 600, color: "var(--text-primary)" }}>{s.name}</td>
+                  <td style={{ padding: "10px 10px 10px 0" }}><ProgramBadge prog={s.program} /></td>
+                  <td style={{ padding: "10px 10px 10px 0", color: "var(--text-secondary)", fontWeight: 600 }}>{s.visits}</td>
+                  <td style={{ padding: "10px 10px 10px 0", fontWeight: 700, color: "var(--text-primary)" }}>{s.hours}</td>
+                  <td style={{ padding: "10px 0",           color: "var(--text-secondary)" }}>{s.avg}</td>
                 </tr>
               ))}
-              {/* Row 50 */}
-              <tr>
-                <td style={{ padding: "10px 10px 0 0" }}><RankBadge rank={50} /></td>
-                <td style={{ padding: "10px 10px 0 0", fontWeight: 600, color: "var(--text-primary)" }}>Patrick Valdez</td>
-                <td style={{ padding: "10px 10px 0 0" }}><ProgramBadge prog="BSBA" /></td>
-                <td style={{ padding: "10px 10px 0 0", color: "var(--text-secondary)", fontWeight: 600 }}>8</td>
-                <td style={{ padding: "10px 10px 0 0", fontWeight: 700, color: "var(--text-primary)" }}>9h 20m</td>
-                <td style={{ padding: "10px 0 0",      color: "var(--text-secondary)" }}>1h 10m</td>
-              </tr>
+              {topStudents.length > 5 && (
+                <tr>
+                  <td colSpan={6} style={{ padding: "6px 0", color: "var(--text-muted)", fontSize: 12 }}>…</td>
+                </tr>
+              )}
+              {topStudents.length > 5 && (() => {
+                const last = topStudents[topStudents.length - 1];
+                return (
+                  <tr>
+                    <td style={{ padding: "10px 10px 0 0" }}><RankBadge rank={last.rank} /></td>
+                    <td style={{ padding: "10px 10px 0 0", fontWeight: 600, color: "var(--text-primary)" }}>{last.name}</td>
+                    <td style={{ padding: "10px 10px 0 0" }}><ProgramBadge prog={last.program} /></td>
+                    <td style={{ padding: "10px 10px 0 0", color: "var(--text-secondary)", fontWeight: 600 }}>{last.visits}</td>
+                    <td style={{ padding: "10px 10px 0 0", fontWeight: 700, color: "var(--text-primary)" }}>{last.hours}</td>
+                    <td style={{ padding: "10px 0 0",      color: "var(--text-secondary)" }}>{last.avg}</td>
+                  </tr>
+                );
+              })()}
             </tbody>
           </table>
           <div style={{ marginTop: 14, textAlign: "center" }}>
-            <button style={{ fontSize: 12, fontWeight: 700, color: C.teal, background: "none", border: "none", cursor: "pointer" }}>
+            <button
+              onClick={() => setShowTopStudentsModal(true)}
+              style={{ fontSize: 12, fontWeight: 700, color: C.teal, background: "none", border: "none", cursor: "pointer" }}
+            >
               View All
             </button>
           </div>
@@ -372,13 +1190,13 @@ export default function AttendanceDashboard() {
         >
           <div style={{ height: 240 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={PROGRAM_DATA} barSize={28} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={programData} barSize={28} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid vertical={false} stroke="var(--border-light)" />
                 <XAxis dataKey="program" tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
                 <Tooltip content={<ChartTip />} cursor={{ fill: "rgba(50,102,127,.07)" }} />
-                <Bar dataKey="visits" fill={C.teal} radius={[5, 5, 0, 0]}>
-                  {PROGRAM_DATA.map((_, i) => (
+                <Bar dataKey={programTab === "By Total Hours" ? "totalHours" : programTab === "By Avg Hours / Student" ? "avgMinPerStudent" : "visits"} fill={C.teal} radius={[5, 5, 0, 0]}>
+                  {programData.map((_, i) => (
                     <Cell key={i} fill={i === 0 ? C.indigo : C.teal} />
                   ))}
                 </Bar>
@@ -394,13 +1212,22 @@ export default function AttendanceDashboard() {
       </div>
 
       {/* ── Row 3: Visits Over Time + Peak Hours + Visits by Day ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr 1fr", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.1fr 1fr", gap: 14 }}>
 
         {/* Visits Over Time */}
-        <SCard title="Visits Over Time" action={<DropBtn label={visitsFilter} />}>
+        <SCard title="Visits Over Time" action={
+          <button onClick={() => setVisitsFilter(f => f === "Daily" ? "Weekly" : f === "Weekly" ? "Monthly" : "Daily")} style={{
+            display: "inline-flex", alignItems: "center", gap: 3, padding: "3px 9px",
+            fontSize: 11, fontWeight: 500, borderRadius: 5, cursor: "pointer",
+            background: "var(--bg-surface)", border: "1px solid var(--border)",
+            color: "var(--text-primary)",
+          }}>
+            {visitsFilter} <ChevronDown size={10} style={{ color: "var(--text-muted)" }} />
+          </button>
+        }>
           <div style={{ height: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={VISITS_OVER_TIME} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+              <LineChart data={visitsOverTime} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid vertical={false} stroke="var(--border-light)" />
                 <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false}
                   interval={3} />
@@ -418,15 +1245,16 @@ export default function AttendanceDashboard() {
         <SCard title="Peak Hours" action={<span style={{ fontSize: 11, color: "var(--text-muted)" }}>(Average Check-ins)</span>}>
           <div style={{ height: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={PEAK_HOURS} barSize={18} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={peakHours} barSize={18} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid vertical={false} stroke="var(--border-light)" />
                 <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
                 <Tooltip content={<ChartTip />} cursor={{ fill: "rgba(45,212,191,.07)" }} />
                 <Bar dataKey="avg" fill={C.mint} radius={[4, 4, 0, 0]}>
-                  {PEAK_HOURS.map((d, i) => (
-                    <Cell key={i} fill={d.hour === "2PM" ? C.amber : C.mint} />
-                  ))}
+                  {peakHours.map((d, i) => {
+                    const peakVal = Math.max(...peakHours.map(h => h.avg));
+                    return <Cell key={i} fill={d.avg === peakVal ? C.amber : C.mint} />;
+                  })}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -437,15 +1265,16 @@ export default function AttendanceDashboard() {
         <SCard title="Visits by Day of Week">
           <div style={{ height: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={DAYS_OF_WEEK} barSize={32} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={visitsByDay} barSize={32} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid vertical={false} stroke="var(--border-light)" />
                 <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} domain={[0, 1000]} />
                 <Tooltip content={<ChartTip />} cursor={{ fill: "rgba(34,197,94,.07)" }} />
                 <Bar dataKey="visits" fill={C.green} radius={[5, 5, 0, 0]}>
-                  {DAYS_OF_WEEK.map((d, i) => (
-                    <Cell key={i} fill={d.day === "Wed" ? C.amber : C.green} />
-                  ))}
+                  {visitsByDay.map((d, i) => {
+                    const peakVal = Math.max(...visitsByDay.map(v => v.visits));
+                    return <Cell key={i} fill={d.visits === peakVal ? C.amber : C.green} />;
+                  })}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -454,7 +1283,7 @@ export default function AttendanceDashboard() {
       </div>
 
       {/* ── Row 4: Low Usage + Session Dist + Other Insights ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
 
         {/* Low / No Usage Students */}
         <SCard title="Low / No Usage Students" info action={
@@ -475,8 +1304,8 @@ export default function AttendanceDashboard() {
               </tr>
             </thead>
             <tbody>
-              {LOW_USAGE.map((s, i) => (
-                <tr key={i} style={{ borderBottom: i < LOW_USAGE.length - 1 ? "1px solid var(--border-light)" : "none" }}>
+              {lowUsage.slice(0, 5).map((s, i) => (
+                <tr key={i} style={{ borderBottom: i < Math.min(lowUsage.length, 5) - 1 ? "1px solid var(--border-light)" : "none" }}>
                   <td style={{ padding: "9px 8px 9px 0", fontWeight: 600, color: "var(--text-primary)" }}>{s.name}</td>
                   <td style={{ padding: "9px 8px 9px 0" }}><ProgramBadge prog={s.program} /></td>
                   <td style={{ padding: "9px 8px 9px 0", color: s.visits === 0 ? C.rose : "var(--text-secondary)", fontWeight: 700 }}>{s.visits}</td>
@@ -487,7 +1316,10 @@ export default function AttendanceDashboard() {
             </tbody>
           </table>
           <div style={{ marginTop: 12, textAlign: "center" }}>
-            <button style={{ fontSize: 12, fontWeight: 700, color: C.teal, background: "none", border: "none", cursor: "pointer" }}>
+            <button
+              onClick={() => setShowLowUsageModal(true)}
+              style={{ fontSize: 12, fontWeight: 700, color: C.teal, background: "none", border: "none", cursor: "pointer" }}
+            >
               View All Low Usage Students
             </button>
           </div>
@@ -500,14 +1332,14 @@ export default function AttendanceDashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={SESSION_DIST}
+                    data={sessionDist}
                     cx="50%" cy="50%"
                     innerRadius={52} outerRadius={80}
                     startAngle={90} endAngle={-270}
                     dataKey="pct"
                     paddingAngle={1.5}
                   >
-                    {SESSION_DIST.map((d, i) => (
+                    {sessionDist.map((d, i) => (
                       <Cell key={i} fill={d.color} stroke="none" />
                     ))}
                   </Pie>
@@ -517,13 +1349,13 @@ export default function AttendanceDashboard() {
                 position: "absolute", inset: 0,
                 display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
               }}>
-                <span style={{ fontSize: 20, fontWeight: 800, color: "var(--text-primary)", lineHeight: 1 }}>3,842</span>
+                <span style={{ fontSize: 20, fontWeight: 800, color: "var(--text-primary)", lineHeight: 1 }}>{sessionTotal.toLocaleString()}</span>
                 <span style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>Total Visits</span>
               </div>
             </div>
 
             <div style={{ width: "100%", marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-              {SESSION_DIST.map((d, i) => (
+              {sessionDist.map((d, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                     <span style={{ width: 10, height: 10, borderRadius: "50%", background: d.color, flexShrink: 0 }} />
@@ -544,19 +1376,27 @@ export default function AttendanceDashboard() {
             {[
               {
                 icon: Clock, iconBg: "rgba(99,102,241,.12)", iconColor: C.indigo,
-                label: "Longest Session Today", value: "5h 42m", sub: "Mark Anthony Lim (BSIT)",
+                label: "Longest Session Today",
+                value: otherInsights ? otherInsights.longestSession : "—",
+                sub:   otherInsights ? otherInsights.longestSub     : "Loading…",
               },
               {
                 icon: CalendarDays, iconBg: "rgba(34,197,94,.12)", iconColor: "#16a34a",
-                label: "Busiest Day", value: "Wednesday", sub: "782 visits",
+                label: "Busiest Day",
+                value: otherInsights ? otherInsights.busiestDay : "—",
+                sub:   otherInsights ? otherInsights.busiestSub : "Loading…",
               },
               {
                 icon: Trophy, iconBg: "rgba(238,162,58,.15)", iconColor: C.amber,
-                label: "Most Consistent User", value: "Maria Santos (BSN)", sub: "Visited 20 of 22 days",
+                label: "Most Consistent User",
+                value: otherInsights ? otherInsights.consistentUser : "—",
+                sub:   otherInsights ? otherInsights.consistentSub  : "Loading…",
               },
               {
                 icon: Users, iconBg: "rgba(168,85,247,.12)", iconColor: C.purple,
-                label: "Unique Students This Month", value: "1,342", sub: "35% of total enrollment",
+                label: "Unique Students This Month",
+                value: otherInsights ? otherInsights.freshmenCount : "—",
+                sub:   otherInsights ? otherInsights.freshmenSub   : "Loading…",
               },
             ].map((item, i, arr) => (
               <div key={i} style={{
