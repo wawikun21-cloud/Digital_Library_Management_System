@@ -208,13 +208,15 @@ const TransactionModel = {
       if (borrowerIdNumber) {
         [rows] = await pool.query(
           `SELECT COUNT(*) AS cnt FROM borrowed_books
-           WHERE borrower_id_number = ? AND status = 'Borrowed'`,
+           WHERE borrower_id_number = ? AND status = 'Borrowed'
+             AND deleted_at IS NULL`,
           [borrowerIdNumber]
         );
       } else {
         [rows] = await pool.query(
           `SELECT COUNT(*) AS cnt FROM borrowed_books
-           WHERE borrower_name = ? AND borrower_id_number IS NULL AND status = 'Borrowed'`,
+           WHERE borrower_name = ? AND borrower_id_number IS NULL AND status = 'Borrowed'
+             AND deleted_at IS NULL`,
           [borrowerName]
         );
       }
@@ -293,7 +295,13 @@ const TransactionModel = {
       // 4. Enforce max 2 active borrows — students only, faculty are unlimited
       if ((borrower_type || "student") === "student") {
         const countResult = await this.getActiveBorrowCount(borrower_id_number, borrower_name);
-        if (countResult.success && countResult.count >= 2) {
+        // Fail-closed: if the count query errors, block the borrow rather
+        // than silently skipping the limit check (was fail-open before).
+        if (!countResult.success) {
+          await conn.rollback();
+          return { success: false, error: "Could not verify borrower's active borrow count" };
+        }
+        if (countResult.count >= 2) {
           await conn.rollback();
           return { success: false, error: "Borrower already has 2 books borrowed (maximum reached)" };
         }

@@ -338,20 +338,21 @@ const AttendanceModel = {
       const { clauses, params } = buildAttendanceFilter(filters);
       const where = `WHERE ${clauses.join(" AND ")} AND a.status = 'checked_out' AND a.duration IS NOT NULL`;
 
-      const [rows] = await pool.query(`
-        SELECT
-          a.student_id_number,
-          a.student_name,
-          a.student_course,
-          COUNT(*)                          AS visits,
-          COALESCE(SUM(a.duration), 0)      AS totalMinutes,
-          COALESCE(AVG(a.duration), 0)      AS avgMinutes
-        FROM attendance a
-        ${where}
-        GROUP BY a.student_id_number, a.student_name, a.student_course
-        ORDER BY totalMinutes DESC
-        LIMIT 50
-      `, params);
+       const [rows] = await pool.query(`
+         SELECT
+           a.student_id_number,
+           a.student_name,
+           a.student_course,
+           a.student_yr_level,
+           COUNT(*)                          AS visits,
+           COALESCE(SUM(a.duration), 0)      AS totalMinutes,
+           COALESCE(AVG(a.duration), 0)      AS avgMinutes
+         FROM attendance a
+         ${where}
+         GROUP BY a.student_id_number, a.student_name, a.student_course, a.student_yr_level
+         ORDER BY totalMinutes DESC
+         LIMIT 50
+       `, params);
 
       const data = rows.map((r, i) => {
         const totalH = Math.floor(r.totalMinutes / 60);
@@ -363,6 +364,7 @@ const AttendanceModel = {
           rank:    i + 1,
           name:    r.student_name,
           program: r.student_course || "—",
+          yrLevel: r.student_yr_level || "—",
           visits:  Number(r.visits),
           hours:   totalH > 0 ? `${totalH}h ${totalM}m` : `${totalM}m`,
           avg:     avgH   > 0 ? `${avgH}h ${avgMm}m`   : `${avgMm}m`,
@@ -371,7 +373,30 @@ const AttendanceModel = {
 
       return { success: true, data };
     } catch (error) {
-      console.error("[AttendanceModel.getTopStudents] Error:", error.message);
+      console.error("[AttendanceModel.getOtherInsights] Error:", error.message);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * Get distinct school_years that have attendance data
+   * Returns: ["2024-2025", "2023-2024", ...] sorted DESC
+   */
+  async getSchoolYears() {
+    try {
+      const [rows] = await pool.query(`
+        SELECT DISTINCT school_year
+        FROM attendance
+        WHERE school_year IS NOT NULL
+          AND school_year != ''
+          AND is_deleted = 0
+        ORDER BY school_year DESC
+      `);
+
+      const data = rows.map(r => r.school_year).filter(Boolean);
+      return { success: true, data };
+    } catch (error) {
+      console.error("[AttendanceModel.getSchoolYears] Error:", error.message);
       return { success: false, error: error.message };
     }
   },

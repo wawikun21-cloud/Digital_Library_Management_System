@@ -67,9 +67,6 @@ function buildDateFilter(dateCol, { semester, month, schoolYear } = {}) {
 
 // ─────────────────────────────────────────────────────────
 //  1. KPI STATS — filtered by semester/month/schoolYear
-//     • nemcoTotal / lexoraTotal  → books added in period (created_at)
-//     • returned / borrowed / overdue → activity in period (borrow_date)
-//     • nemcoOutOfStock → out-of-stock books added in period
 // ─────────────────────────────────────────────────────────
 async function getBookStats(filters = {}) {
   try {
@@ -78,7 +75,8 @@ async function getBookStats(filters = {}) {
     const ncAnd = ncCl.length ? `AND ${ncCl.join(" AND ")}` : "";
 
     const [[nemco]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM books b WHERE b.is_deleted = 0 ${ncAnd}`, ncPr
+      `SELECT COUNT(*) AS total FROM books b WHERE b.is_deleted = 0 ${ncAnd}`,
+      [...ncPr]
     );
     const [[oos]] = await pool.query(
       `SELECT COUNT(*) AS total
@@ -91,42 +89,71 @@ async function getBookStats(filters = {}) {
        ) cc ON cc.book_id = b.id
        WHERE b.is_deleted = 0
          AND cc.avail_copies = 0 ${ncAnd}`,
-      ncPr
+      [...ncPr]
     );
 
-    // LEXORA books added in this period
+    // LEXORA books — no is_deleted column on this table
     const { clauses: lxCl, params: lxPr } = buildDateFilter("lb.created_at", filters);
     const lxAnd = lxCl.length ? `AND ${lxCl.join(" AND ")}` : "";
-
     const [[lexora]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM lexora_books lb WHERE lb.is_deleted = 0 ${lxAnd}`, lxPr
+      `SELECT COUNT(*) AS total FROM lexora_books lb WHERE 1=1 ${lxAnd}`,
+      lxPr
     );
 
-    // Borrow activity in this period
+    // Borrow activity — FIX: spread params for every sequential call so
+    // mysql2 never sees an already-consumed reference
     const { clauses: bbCl, params: bbPr } = buildDateFilter("bb.borrow_date", filters);
     const bbAnd = bbCl.length ? `AND ${bbCl.join(" AND ")}` : "";
 
     const [[returned]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM borrowed_books bb WHERE bb.status = 'Returned' ${bbAnd}`, bbPr
+      `SELECT COUNT(*) AS total FROM borrowed_books bb
+       WHERE bb.is_deleted = 0 AND bb.status = 'Returned' ${bbAnd}`,
+      [...bbPr]
     );
     const [[borrowed]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM borrowed_books bb WHERE bb.status = 'Borrowed' ${bbAnd}`, bbPr
+      `SELECT COUNT(*) AS total FROM borrowed_books bb
+       WHERE bb.is_deleted = 0 AND bb.status = 'Borrowed' ${bbAnd}`,
+      [...bbPr]
     );
     const [[overdue]] = await pool.query(
       `SELECT COUNT(*) AS total FROM borrowed_books bb
-       WHERE bb.status = 'Borrowed' AND bb.due_date < CURDATE() ${bbAnd}`,
-      bbPr
+       WHERE bb.is_deleted = 0 AND bb.status = 'Borrowed' AND bb.due_date < CURDATE() ${bbAnd}`,
+      [...bbPr]
+    );
+
+    // Global copy KPIs (always all-time — not date-scoped)
+    const [[totalCopies]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM book_copies WHERE is_deleted = 0`
+    );
+    const [[availableCopies]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM book_copies WHERE is_deleted = 0 AND status = 'Available'`
+    );
+    const [[addedNemcoMonth]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM books
+       WHERE is_deleted = 0 AND created_at >= DATE_SUB(NOW(), INTERVAL 1 MONTH)`
+    );
+    const [[addedLexoraMonth]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM lexora_books
+       WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 MONTH)`
     );
 
     return {
       success: true,
       data: {
+        // Original fields (for main Dashboard compatibility)
         nemcoTotal:      Number(nemco.total),
         lexoraTotal:     Number(lexora.total),
         nemcoOutOfStock: Number(oos.total),
         returned:        Number(returned.total),
         borrowed:        Number(borrowed.total),
         overdue:         Number(overdue.total),
+        // BookDashboard KPIs
+        totalBooks:      Number(nemco.total) + Number(lexora.total),
+        totalCopies:     Number(totalCopies.total),
+        availableCopies: Number(availableCopies.total),
+        borrowedBooks:   Number(borrowed.total),
+        overdueBooks:    Number(overdue.total),
+        addedThisMonth:  Number(addedNemcoMonth.total) + Number(addedLexoraMonth.total),
       },
     };
   } catch (err) {
@@ -137,29 +164,45 @@ async function getBookStats(filters = {}) {
 
 // ─────────────────────────────────────────────────────────
 //  2. MOST BORROWED
+//  FIX A: SELECT now includes genre, total_copies, available_copies
+//         so BookDashboard tables no longer show "—" for every field.
+//  FIX:   GROUP BY extended to include b.genre (required by ONLY_FULL_GROUP_BY).
 // ─────────────────────────────────────────────────────────
 async function getMostBorrowed(filters = {}) {
   try {
     const { clauses, params } = buildDateFilter("t.borrow_date", filters);
-    const whereStr = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+    const whereStr = clauses.length ? `WHERE t.is_deleted = 0 AND ${clauses.join(" AND ")}` : "WHERE t.is_deleted = 0";
 
     const [rows] = await pool.query(
-      `SELECT b.id, b.title, b.author, COUNT(t.id) AS borrows
+      `SELECT
+         b.id,
+         b.title,
+         b.author,
+         b.genre,
+         COUNT(t.id)                                              AS borrows,
+         COUNT(bc.id)                                            AS total_copies,
+         SUM(bc.status = 'Available' AND bc.is_deleted = 0)      AS available_copies
        FROM borrowed_books t
-       INNER JOIN books b ON t.book_id = b.id
+       INNER JOIN books b       ON t.book_id = b.id AND b.is_deleted = 0
+       LEFT  JOIN book_copies bc ON bc.book_id = b.id
        ${whereStr}
-       GROUP BY b.id, b.title, b.author
+       GROUP BY b.id, b.title, b.author, b.genre
        ORDER BY borrows DESC
        LIMIT 10`,
       params
     );
 
     const data = rows.map(r => ({
-      id:      r.id,
-      short:   r.title.length > 22 ? r.title.slice(0, 21) + "…" : r.title,
-      title:   r.title,
-      author:  r.author,
-      borrows: Number(r.borrows),
+      id:               r.id,
+      short:            r.title
+                          ? (r.title.length > 22 ? r.title.slice(0, 21) + "…" : r.title)
+                          : "—",
+      title:            r.title            ?? "—",
+      author:           r.author           ?? "—",
+      genre:            r.genre            ?? "—",
+      borrows:          Number(r.borrows),
+      total_copies:     Number(r.total_copies     ?? 0),
+      available_copies: Number(r.available_copies ?? 0),
     }));
 
     return { success: true, data };
@@ -386,33 +429,87 @@ async function getOverdue(filters = {}) {
 }
 
 // ─────────────────────────────────────────────────────────
-//  6. HOLDINGS BREAKDOWN — filtered by created_at
-//     Shows books that were added during the selected semester/month
+//  6. BOOKS BY STATUS
+//  FIX E: Single query with explicit priority hierarchy so a book
+//  cannot be counted in two segments simultaneously:
+//    Borrowed  → has an active Borrowed transaction (highest priority)
+//    Reserved  → has a Reserved copy (no active borrow)
+//    Available → has ≥1 Available copy (no active borrow or reserve)
+//    OutOfStock → everything else
+// ─────────────────────────────────────────────────────────
+async function getBooksByStatus(filters = {}) {
+  try {
+    const { clauses: ncCl, params: ncPr } = buildDateFilter("b.created_at", filters);
+    const ncAnd = ncCl.length ? `AND ${ncCl.join(" AND ")}` : "";
+
+    const [rows] = await pool.query(`
+      SELECT
+        SUM(computed_status = 'Borrowed')    AS borrowed,
+        SUM(computed_status = 'Reserved')    AS reserved,
+        SUM(computed_status = 'Available')   AS available,
+        SUM(computed_status = 'OutOfStock')  AS outOfStock
+      FROM (
+        SELECT
+          b.id,
+          CASE
+            WHEN COUNT(CASE WHEN bb.status = 'Borrowed' AND bb.is_deleted = 0 THEN 1 END) > 0
+              THEN 'Borrowed'
+            WHEN SUM(CASE WHEN bc.status = 'Reserved' AND bc.is_deleted = 0 THEN 1 ELSE 0 END) > 0
+              THEN 'Reserved'
+            WHEN SUM(CASE WHEN bc.status = 'Available' AND bc.is_deleted = 0 THEN 1 ELSE 0 END) > 0
+              THEN 'Available'
+            ELSE 'OutOfStock'
+          END AS computed_status
+        FROM books b
+        LEFT JOIN book_copies    bc ON bc.book_id = b.id
+        LEFT JOIN borrowed_books bb ON bb.book_id = b.id
+        WHERE b.is_deleted = 0 ${ncAnd}
+        GROUP BY b.id
+      ) sub`,
+      [...ncPr]
+    );
+
+    const r = rows[0] || {};
+    return {
+      success: true,
+      data: {
+        available:  Number(r.available  ?? 0),
+        outOfStock: Number(r.outOfStock ?? 0),
+        borrowed:   Number(r.borrowed   ?? 0),
+        reserved:   Number(r.reserved   ?? 0),
+      },
+    };
+  } catch (err) {
+    console.error("[analyticsService.getBooksByStatus]", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+//  7. HOLDINGS BREAKDOWN
 // ─────────────────────────────────────────────────────────
 async function getHoldingsBreakdown(filters = {}) {
   try {
-    // NEMCO books added in this period
     const { clauses: ncCl, params: ncPr } = buildDateFilter("b.created_at", filters);
     const ncAnd = ncCl.length ? `AND ${ncCl.join(" AND ")}` : "";
 
     const [nemcoRows] = await pool.query(
-      `SELECT TRIM(UPPER(COALESCE(NULLIF(TRIM(b.collection),''),'UNCATEGORIZED'))) AS category, COUNT(*) AS total
+      `SELECT TRIM(UPPER(COALESCE(NULLIF(TRIM(b.collection),''),'UNCATEGORIZED'))) AS category,
+              COUNT(*) AS total
        FROM books b
-       WHERE b.is_deleted = 0
-         ${ncAnd}
+       WHERE b.is_deleted = 0 ${ncAnd}
        GROUP BY category ORDER BY category ASC`,
-      ncPr
+      [...ncPr]
     );
 
-    // LEXORA books added in this period
     const { clauses: lxCl, params: lxPr } = buildDateFilter("lb.created_at", filters);
     const lxAnd = lxCl.length ? `AND ${lxCl.join(" AND ")}` : "";
 
     const [lexoraRows] = await pool.query(
-      `SELECT TRIM(UPPER(COALESCE(NULLIF(TRIM(lb.program),''),'UNCATEGORIZED'))) AS category, COUNT(*) AS total
+      `SELECT TRIM(UPPER(COALESCE(NULLIF(TRIM(lb.program),''),'UNCATEGORIZED'))) AS category,
+              COUNT(*) AS total
        FROM lexora_books lb
-       WHERE lb.is_deleted = 0
-         ${lxAnd}
+       WHERE 1=1 ${lxAnd}
        GROUP BY category ORDER BY category ASC`,
       lxPr
     );
@@ -446,5 +543,6 @@ module.exports = {
   getAttendance,
   getFines,
   getOverdue,
+  getBooksByStatus,
   getHoldingsBreakdown,
 };

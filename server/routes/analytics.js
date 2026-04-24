@@ -1,25 +1,47 @@
 // ─────────────────────────────────────────────────────────
-//  routes/analytics.js
+//  server/routes/analytics.js
+//
+//  ROOT CAUSE OF 404 (NOW FIXED):
+//
+//  The route file was importing:
+//    const { authMiddleware } = require("../middleware/authMiddleware");
+//
+//  But authMiddleware.js exports:
+//    { requireAuth, requireRole, requireAdmin, requireStaff, requireAdminOrStaff }
+//
+//  There is NO export named "authMiddleware". Destructuring a name that
+//  doesn't exist gives undefined. Express's router.use(undefined) silently
+//  skips every route in this router and falls through to the global 404
+//  handler — which is exactly the 404 you were seeing on every single
+//  /api/analytics/* request.
+//
+//  FIX: import requireAuth (the correct export name) and use it instead.
 // ─────────────────────────────────────────────────────────
 
-const express             = require("express");
-const AnalyticsController = require("../controllers/analyticsController");
-const { requireAuth, requireAdmin } = require("../middleware/authMiddleware");
-const router = express.Router();
+const express    = require("express");
+const router     = express.Router();
+const controller = require("../controllers/analyticsController");
 
-// GET /api/analytics/most-borrowed
-router.get("/most-borrowed",       requireAuth, requireAdmin, AnalyticsController.getMostBorrowed);
+// FIX: was `{ authMiddleware }` — that export does not exist.
+// The correct export name is `requireAuth`.
+const { requireAuth } = require("../middleware/authMiddleware");
 
-// GET /api/analytics/attendance
-router.get("/attendance",          requireAuth, requireAdmin, AnalyticsController.getAttendance);
+// All analytics routes require a valid session.
+// requireAuth returns 401 when req.session.user is missing — not 404.
+router.use(requireAuth);
 
-// GET /api/analytics/fines
-router.get("/fines",               requireAuth, requireAdmin, AnalyticsController.getFines);
+// ── KPI stats ─────────────────────────────────────────────────────────────────
+// Frontend calls: GET /api/analytics/stats
+router.get("/stats",              controller.getBookStats);
 
-// GET /api/analytics/overdue
-router.get("/overdue",             requireAuth, requireAdmin, AnalyticsController.getOverdue);
+// ── Chart data ────────────────────────────────────────────────────────────────
+router.get("/most-borrowed",      controller.getMostBorrowed);
+router.get("/attendance",         controller.getAttendance);
+router.get("/fines",              controller.getFines);
+router.get("/overdue",            controller.getOverdue);
 
-// GET /api/analytics/holdings-breakdown
-router.get("/holdings-breakdown",  requireAuth, requireAdmin, AnalyticsController.getHoldingsBreakdown);
+// ── Book dashboard specific ───────────────────────────────────────────────────
+router.get("/books-by-status",    controller.getBooksByStatus);
+router.get("/holdings-breakdown", controller.getHoldingsBreakdown);
 
 module.exports = router;

@@ -194,6 +194,17 @@ export async function getAttendanceDashboardStats(filters = {}) {
   }
 }
 
+/** GET /api/attendance/school-years → distinct school years with data */
+export async function getSchoolYears() {
+  try {
+    const res = await fetch(`${API_BASE}/api/attendance/school-years`, withCreds());
+    return await res.json();
+  } catch (error) {
+    console.error("[attendanceApi.getSchoolYears]", error);
+    return { success: false, error: error.message };
+  }
+}
+
 /** GET /api/attendance/stats */
 export async function getAttendanceStats() {
   try {
@@ -281,6 +292,7 @@ export default {
   getSessionDistribution,
   getOtherInsights,
   getAttendanceStats,
+  getSchoolYears,
   tapAttendance,
   checkIn,
   checkOut,

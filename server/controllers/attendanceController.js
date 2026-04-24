@@ -346,7 +346,21 @@ const AttendanceController = {
       }
       return res.status(400).json({ success: false, error: result.error });
     } catch (error) {
-      console.error("[AttendanceController.getDashboardStats]", error);
+      console.error("[AttendanceController.getDashboardStats] Error:", error.message);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  /** GET /api/attendance/school-years → distinct school years with attendance data */
+  async getSchoolYears(req, res) {
+    try {
+      const result = await AttendanceModel.getSchoolYears();
+      if (result.success) {
+        return res.status(200).json({ success: true, data: result.data, message: "School years retrieved successfully" });
+      }
+      return res.status(400).json({ success: false, error: result.error });
+    } catch (error) {
+      console.error("[AttendanceController.getSchoolYears] Error:", error.message);
       return res.status(500).json({ success: false, error: "Internal server error" });
     }
   },

@@ -23,6 +23,9 @@ router.get("/stats", requireAuth, AttendanceController.getAttendanceStats);
 /** GET /api/attendance/dashboard-stats → KPI stats for AttendanceDashboard */
 router.get("/dashboard-stats", requireAuth, AttendanceController.getDashboardStats);
 
+/** GET /api/attendance/school-years → distinct school years with data */
+router.get("/school-years", requireAuth, AttendanceController.getSchoolYears);
+
 /** GET /api/attendance/top-students → top 50 students by total hours */
 router.get("/top-students", requireAuth, AttendanceController.getTopStudents);
 

@@ -66,6 +66,10 @@ export function useWebSocket({
       withCredentials:      true,           // send session cookie on handshake
       reconnectionDelay:    2000,
       reconnectionAttempts: 10,
+      // FIX: prevents stale socket instances from prior HMR cycles from
+      // closing a freshly-opened connection (root cause of the
+      // "WebSocket is closed before the connection is established" error).
+      forceNew:             true,
     });
 
     socketRef.current = socket;
