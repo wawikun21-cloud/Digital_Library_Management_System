@@ -38,6 +38,13 @@ router.get("/", requireAuth, requireAdminOrStaff, StudentsController.getAllStude
 router.get("/stats", requireAuth, requireAdminOrStaff, StudentsController.getStudentStats);
 
 /**
+ * @route   POST /api/students/check-id
+ * @desc    Check if student ID number already exists
+ * @access  Admin + Staff
+ */
+router.post("/check-id", requireAuth, requireAdminOrStaff, StudentsController.checkStudentIdExists);
+
+/**
  * @route   GET /api/students/student-id/:studentIdNumber
  * @desc    Get a student by student ID number
  * @access  Admin + Staff

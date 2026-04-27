@@ -20,7 +20,7 @@ export async function fetchTrash(options = {}) {
 
     const qs  = params.toString();
     const url = qs ? `${API_BASE}/trash?${qs}` : `${API_BASE}/trash`;
-    const res = await fetch(url);
+    const res = await fetch(url, { credentials: "include" });
     return await res.json();
   } catch (error) {
     console.error("[TrashAPI] fetchTrash:", error.message);
@@ -36,6 +36,7 @@ export async function restoreTrashItem(trashLogId) {
   try {
     const res = await fetch(`${API_BASE}/trash/restore/${trashLogId}`, {
       method: "POST",
+      credentials: "include",
     });
     return await res.json();
   } catch (error) {
@@ -52,6 +53,7 @@ export async function permanentDeleteTrashItem(trashLogId) {
   try {
     const res = await fetch(`${API_BASE}/trash/${trashLogId}`, {
       method: "DELETE",
+      credentials: "include",
     });
     return await res.json();
   } catch (error) {
@@ -69,6 +71,7 @@ export async function permanentDeleteAllTrash(entityType = null) {
     const qs  = entityType ? `?entityType=${entityType}` : "";
     const res = await fetch(`${API_BASE}/trash/all${qs}`, {
       method: "DELETE",
+      credentials: "include",
     });
     return await res.json();
   } catch (error) {

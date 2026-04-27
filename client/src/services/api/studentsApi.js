@@ -42,6 +42,19 @@ export async function getStudentByStudentIdNumber(studentIdNumber) {
   }
 }
 
+export async function checkStudentIdExists(student_id_number) {
+  try {
+    const response = await fetch(`${API_BASE}/api/students/check-id`, withCreds({
+      method: "POST",
+      body: JSON.stringify({ student_id_number })
+    }));
+    return await response.json();
+  } catch (error) {
+    console.error("Error checking student ID:", error);
+    return { success: false, error: error.message };
+  }
+}
+
 export async function createStudent(studentData) {
   try {
     const response = await fetch(`${API_BASE}/api/students`,

@@ -55,6 +55,24 @@ const StudentsController = {
     }
   },
 
+  async checkStudentIdExists(req, res) {
+    try {
+      const { student_id_number } = req.body;
+      if (!student_id_number) {
+        return res.status(400).json({ success: false, error: "Student ID number is required" });
+      }
+      const result = await StudentModel.getByStudentIdNumber(student_id_number);
+      if (result.success && result.data) {
+        res.status(200).json({ success: true, exists: true, data: result.data, message: "Student ID number already exists" });
+      } else {
+        res.status(200).json({ success: true, exists: false, message: "Student ID number is available" });
+      }
+    } catch (error) {
+      console.error("[StudentsController.checkStudentIdExists] Error:", error);
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
   async createStudent(req, res) {
     try {
       const studentData = req.body;
@@ -119,7 +137,7 @@ const StudentsController = {
       // Snapshot before delete
       const oldResult = await StudentModel.getById(id);
       const oldData   = oldResult.success
-        ? { name: oldResult.data.name, student_id_number: oldResult.data.student_id_number }
+        ? { name: oldResult.data.student_name, student_id_number: oldResult.data.student_id_number }
         : null;
 
       const result = await StudentModel.delete(id);

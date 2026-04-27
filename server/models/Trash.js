@@ -51,11 +51,28 @@ const TrashModel = {
         return { success: false, error: "Record is already in trash" };
       }
 
-      // Mark as deleted
-      await conn.query(
-        `UPDATE ${table} SET is_deleted = 1, deleted_at = NOW(), deleted_by = ? WHERE id = ?`,
-        [deletedBy, entityId]
-      );
+// Mark as deleted (different columns for different tables)
+      if (entityType === "student" || entityType === "faculty") {
+        // Students/faculty use is_active instead of is_deleted
+        await conn.query(
+          `UPDATE ${table} SET is_active = 0, deleted_at = NOW(), deleted_by = ? WHERE id = ?`,
+          [deletedBy, entityId]
+        );
+      } else {
+        // Other tables use is_deleted
+        await conn.query(
+          `UPDATE ${table} SET is_deleted = 1, deleted_at = NOW(), deleted_by = ? WHERE id = ?`,
+          [deletedBy, entityId]
+        );
+
+        // For books also soft-delete all copies
+        if (entityType === "book") {
+          await conn.query(
+            `UPDATE book_copies SET is_deleted = 1, deleted_at = NOW() WHERE book_id = ? AND is_deleted = 0`,
+            [entityId]
+          );
+        }
+      }
 
       // For books also soft-delete all copies
       if (entityType === "book") {
@@ -121,8 +138,11 @@ const TrashModel = {
       }
 
       // Check record still exists
+      const softDeleteCondition = (log.entity_type === "student" || log.entity_type === "faculty")
+        ? "is_active = 0"
+        : "is_deleted = 1";
       const [recordRows] = await conn.query(
-        `SELECT id FROM ${table} WHERE id = ? AND (is_deleted = 1 OR deleted_at IS NOT NULL)`, [log.entity_id]
+        `SELECT id FROM ${table} WHERE id = ? AND (${softDeleteCondition} OR deleted_at IS NOT NULL)`, [log.entity_id]
       );
       if (!recordRows.length) {
         await conn.rollback();
@@ -130,24 +150,15 @@ const TrashModel = {
       }
 
       // Restore
-      await conn.query(
-        `UPDATE ${table} SET is_deleted = 0, deleted_at = NULL, deleted_by = NULL WHERE id = ?`,
-        [log.entity_id]
-      );
-
-      // For books: restore all soft-deleted copies and re-sync quantity
-      if (log.entity_type === "book") {
+      if (log.entity_type === "student" || log.entity_type === "faculty") {
         await conn.query(
-          `UPDATE book_copies SET is_deleted = 0, deleted_at = NULL WHERE book_id = ? AND is_deleted = 1`,
+          `UPDATE ${table} SET is_active = 1, deleted_at = NULL, deleted_by = NULL WHERE id = ?`,
           [log.entity_id]
         );
-        const [[{ cnt }]] = await conn.query(
-          `SELECT COUNT(*) AS cnt FROM book_copies WHERE book_id = ? AND is_deleted = 0`,
-          [log.entity_id]
-        );
+      } else {
         await conn.query(
-          `UPDATE books SET quantity = ? WHERE id = ?`,
-          [cnt, log.entity_id]
+          `UPDATE ${table} SET is_deleted = 0, deleted_at = NULL, deleted_by = NULL WHERE id = ?`,
+          [log.entity_id]
         );
       }
 
@@ -290,7 +301,7 @@ const TrashModel = {
   // ── Get all trash entries ───────────────────────────────
   async getAll(filters = {}) {
     try {
-      const conditions = ["t.expires_at > NOW()"];
+      const conditions = ["DATE_SUB(NOW(), INTERVAL 30 DAY) < t.deleted_at"];
       const params     = [];
 
       if (filters.entityType && filters.entityType !== "all") {

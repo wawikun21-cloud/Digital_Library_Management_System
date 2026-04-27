@@ -12,8 +12,8 @@ const StudentModel = {
   async getAll() {
     try {
       const [rows] = await pool.query(`
-        SELECT * FROM students 
-        WHERE is_active = true AND deleted_at IS NULL
+        SELECT * FROM students
+        WHERE deleted_at IS NULL
         ORDER BY student_name ASC
       `);
       return { success: true, data: rows };
@@ -76,7 +76,10 @@ const StudentModel = {
         student_contact,
         display_name,
         first_name,
-        last_name
+        last_name,
+        senior_high_school,
+        strand,
+        school_address
       } = studentData;
 
       // Check if student ID number already exists
@@ -89,16 +92,26 @@ const StudentModel = {
         return { success: false, error: "Student ID number already exists" };
       }
 
+      const courseVal = student_course || null;
+      const yrLevelVal = student_yr_level || null;
+      const syVal = student_school_year || null;
+      const emailVal = student_email || null;
+      const contactVal = student_contact || null;
+      const displayVal = display_name || null;
+      const firstVal = first_name || null;
+      const lastVal = last_name || null;
+      const seniorHighSchool = senior_high_school || null;
+      const strandVal = strand || null;
+      const schoolAddress = school_address || null;
+
+      const values = [student_id_number, student_name, courseVal, yrLevelVal, syVal, emailVal, contactVal, displayVal, firstVal, lastVal, seniorHighSchool, strandVal, schoolAddress];
+
       const [result] = await pool.query(
-        `INSERT INTO students (student_id_number, student_name, student_course, student_yr_level, student_school_year, student_email, student_contact, display_name, first_name, last_name)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [student_id_number, student_name, student_course || null, student_yr_level || null, student_school_year || null, student_email || null, student_contact || null, display_name || null, first_name || null, last_name || null]
+        `INSERT INTO students (student_id_number, student_name, student_course, student_yr_level, student_school_year, student_email, student_contact, display_name, first_name, last_name, senior_high_school, strand, school_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        values
       );
 
-      const [rows] = await pool.query(`
-        SELECT * FROM students WHERE id = ?
-      `, [result.insertId]);
-
+      const [rows] = await pool.query(`SELECT * FROM students WHERE id = ?`, [result.insertId]);
       console.log(`✅ Student created: ${student_name} (${student_id_number})`);
       return { success: true, data: rows[0] };
     } catch (error) {
