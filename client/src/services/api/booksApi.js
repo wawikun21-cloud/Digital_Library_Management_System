@@ -81,7 +81,7 @@ export async function fetchBooks(options = {}) {
     const qs  = params.toString();
     const url = qs ? `${API_BASE}/books?${qs}` : `${API_BASE}/books`;
 
-    const response = await fetch(url);
+    const response = await fetch(url, { credentials: "include" });
     return await response.json();
   } catch (error) {
     console.error("[BooksAPI] fetchBooks:", error);
@@ -91,7 +91,7 @@ export async function fetchBooks(options = {}) {
 
 export async function fetchBookById(id) {
   try {
-    const response = await fetch(`${API_BASE}/books/${id}`);
+    const response = await fetch(`${API_BASE}/books/${id}`, { credentials: "include" });
     return await response.json();
   } catch (error) {
     console.error("[BooksAPI] fetchBookById:", error);
@@ -101,7 +101,7 @@ export async function fetchBookById(id) {
 
 export async function fetchBookCopies(id) {
   try {
-    const response = await fetch(`${API_BASE}/books/${id}/copies`);
+    const response = await fetch(`${API_BASE}/books/${id}/copies`, { credentials: "include" });
     return await response.json();
   } catch (error) {
     console.error("[BooksAPI] fetchBookCopies:", error);
@@ -112,9 +112,10 @@ export async function fetchBookCopies(id) {
 export async function createBook(bookData) {
   try {
     const response = await fetch(`${API_BASE}/books`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(buildPayload(bookData)),
+      method:      "POST",
+      headers:     { "Content-Type": "application/json" },
+      credentials: "include",
+      body:        JSON.stringify(buildPayload(bookData)),
     });
     return await response.json();
   } catch (error) {
@@ -126,9 +127,10 @@ export async function createBook(bookData) {
 export async function updateBook(id, bookData) {
   try {
     const response = await fetch(`${API_BASE}/books/${id}`, {
-      method:  "PUT",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(buildPayload(bookData)),
+      method:      "PUT",
+      headers:     { "Content-Type": "application/json" },
+      credentials: "include",
+      body:        JSON.stringify(buildPayload(bookData)),
     });
     return await response.json();
   } catch (error) {
@@ -139,7 +141,7 @@ export async function updateBook(id, bookData) {
 
 export async function deleteBook(id) {
   try {
-    const response = await fetch(`${API_BASE}/books/${id}`, { method: "DELETE" });
+    const response = await fetch(`${API_BASE}/books/${id}`, { method: "DELETE", credentials: "include" });
     return await response.json();
   } catch (error) {
     console.error("[BooksAPI] deleteBook:", error);
@@ -149,7 +151,7 @@ export async function deleteBook(id) {
 
 export async function getBookCount() {
   try {
-    const response = await fetch(`${API_BASE}/books/count/all`);
+    const response = await fetch(`${API_BASE}/books/count/all`, { credentials: "include" });
     return await response.json();
   } catch (error) {
     console.error("[BooksAPI] getBookCount:", error);
@@ -160,9 +162,10 @@ export async function getBookCount() {
 export async function checkDuplicates(books) {
   try {
     const response = await fetch(`${API_BASE}/books/check-duplicates`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ books }),
+      method:      "POST",
+      headers:    { "Content-Type": "application/json" },
+      credentials: "include",
+      body:        JSON.stringify({ books }),
     });
     return await response.json();
   } catch (error) {
@@ -174,9 +177,10 @@ export async function checkDuplicates(books) {
 export async function lexoraImport(books) {
   try {
     const response = await fetch(`${API_BASE}/books/lexora-import`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ books }),
+      method:      "POST",
+      headers:    { "Content-Type": "application/json" },
+      credentials: "include",
+      body:        JSON.stringify({ books }),
     });
     return await response.json();
   } catch (error) {
@@ -187,7 +191,7 @@ export async function lexoraImport(books) {
 
 export async function fetchLexoraBooks() {
   try {
-    const response = await fetch(`${API_BASE}/books/lexora`);
+    const response = await fetch(`${API_BASE}/books/lexora`, { credentials: "include" });
     return await response.json();
   } catch (error) {
     console.error("[BooksAPI] fetchLexoraBooks:", error);
@@ -198,9 +202,10 @@ export async function fetchLexoraBooks() {
 export async function bulkImport(books) {
   try {
     const response = await fetch(`${API_BASE}/books/bulk-import`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ books }),
+      method:      "POST",
+      headers:    { "Content-Type": "application/json" },
+      credentials: "include",
+      body:        JSON.stringify({ books }),
     });
     return await response.json();
   } catch (error) {

@@ -1047,6 +1047,8 @@ export default function Attendance() {
   // already mutated state optimistically, the WS event carries the same
   // id — the map/filter no-ops harmlessly.
   useWebSocket({
+    isAdmin: true,
+
     onAttendanceUpdate: ({ action, data }) => {
       if (!data?.id) return;
 
@@ -1078,6 +1080,14 @@ export default function Attendance() {
       if (!id) return;
       setRecords(prev => prev.filter(r => r.id !== id));
       setActive(prev => prev.filter(r => r.id !== id));
+    },
+
+    onTrashRestored: ({ entityType, entityId }) => {
+      if (entityType === "student") {
+        // Re-fetch students list since a student was restored
+        getAllStudents()
+          .then((res) => { if (res.success) setAllStudents(res.data || []); });
+      }
     },
   });
 

@@ -432,7 +432,12 @@ body: JSON.stringify({
       }
 
       const newTxns = sanitizeTxns(results.map(r => r.data));
-      setTxns(p => [...newTxns, ...p]);
+      // Guard against duplicates: the WS onTransactionNew event may fire
+      // before or after this optimistic update, inserting the same id twice.
+      setTxns(p => {
+        const existingIds = new Set(p.map(t => t.id));
+        return [...newTxns.filter(t => !existingIds.has(t.id)), ...p];
+      });
       closeModal();
       showToast(`${form.books.length} book(s) borrowed successfully!`, "success");
     } catch { showToast("Failed to connect to server", "error"); }

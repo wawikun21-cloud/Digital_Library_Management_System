@@ -19,7 +19,8 @@ const LandingPage        = lazy(() => import("./landing/landingpage"));
 const KioskAttendance    = lazy(() => import("./pages/KioskAttendance"));
 const AuditLog           = lazy(() => import("./pages/AuditLog"));
 const AttendanceDashboard = lazy(() => import("./pages/AttendanceDashboard")); // ← NEW
-const StudentsDashboard   = lazy(() => import("./pages/StudentsDashboard"));   // ← NEW
+const BookDashboard        = lazy(() => import("./pages/BookDashboard"));        // ← NEW
+
 
 // ── Pages each role may access ────────────────────────────────────────────────
 export const STAFF_ALLOWED_PATHS = [
@@ -133,7 +134,7 @@ export default function App() {
   const handleToggleTheme = () => setDarkMode(prev => !prev);
 
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Suspense fallback={<FullPageLoader />}>
         <Routes>
           {/* Public routes */}
@@ -187,11 +188,12 @@ export default function App() {
               element={<Page><AttendanceDashboard /></Page>}
             />
 
-            {/* ── NEW: Students Dashboard ── */}
+            {/* ── Library Book Dashboard ── */}
             <Route
-              path="students-dashboard"
-              element={<Page><StudentsDashboard /></Page>}
+              path="books/dashboard"
+              element={<Page><BookDashboard /></Page>}
             />
+
           </Route>
 
           {/* Catch-all */}

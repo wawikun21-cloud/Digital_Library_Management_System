@@ -20,6 +20,42 @@ router.get("/active", requireAuth, AttendanceController.getActiveAttendance);
 /** GET /api/attendance/stats      → aggregate statistics */
 router.get("/stats", requireAuth, AttendanceController.getAttendanceStats);
 
+/** GET /api/attendance/dashboard-stats → KPI stats for AttendanceDashboard */
+router.get("/dashboard-stats", requireAuth, AttendanceController.getDashboardStats);
+
+/** GET /api/attendance/school-years → distinct school years with data */
+router.get("/school-years", requireAuth, AttendanceController.getSchoolYears);
+
+/** GET /api/attendance/top-students → top 50 students by total hours */
+router.get("/top-students", requireAuth, AttendanceController.getTopStudents);
+
+/** GET /api/attendance/all-top-students → full ranked list for modal */
+router.get("/all-top-students", requireAuth, AttendanceController.getAllTopStudents);
+
+/** GET /api/attendance/program-usage → visits/hours grouped by program */
+router.get("/program-usage", requireAuth, AttendanceController.getProgramUsage);
+
+/** GET /api/attendance/visits-over-time?groupBy=Daily|Weekly|Monthly */
+router.get("/visits-over-time", requireAuth, AttendanceController.getVisitsOverTime);
+
+/** GET /api/attendance/peak-hours → check-ins grouped by hour of day */
+router.get("/peak-hours", requireAuth, AttendanceController.getPeakHours);
+
+/** GET /api/attendance/visits-by-day → check-ins grouped by day of week */
+router.get("/visits-by-day", requireAuth, AttendanceController.getVisitsByDay);
+
+/** GET /api/attendance/low-usage-students → students with 0–1 visits (preview, limit 20) */
+router.get("/low-usage-students", requireAuth, AttendanceController.getLowUsageStudents);
+
+/** GET /api/attendance/all-low-usage-students → full list for modal */
+router.get("/all-low-usage-students", requireAuth, AttendanceController.getAllLowUsageStudents);
+
+/** GET /api/attendance/session-distribution → duration bucket breakdown */
+router.get("/session-distribution", requireAuth, AttendanceController.getSessionDistribution);
+
+/** GET /api/attendance/other-insights → longest session, busiest day, most consistent, freshmen count */
+router.get("/other-insights", requireAuth, AttendanceController.getOtherInsights);
+
 /** GET /api/attendance/student/:studentIdNumber → history for one student */
 router.get("/student/:studentIdNumber", requireAuth, AttendanceController.getAttendanceByStudentId);
 

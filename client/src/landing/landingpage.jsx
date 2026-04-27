@@ -989,11 +989,11 @@ export default function LandingPage() {
                         </div>
                       )}
 
-                      {isNemco && b.total_copies > 0 && (
+                      {/* {isNemco && b.total_copies > 0 && (
                         <div className="detail-copies" style={{ marginBottom:"0.75rem" }}>
                           <strong>{b.available_copies}</strong> of {b.total_copies} {b.total_copies === 1 ? "copy" : "copies"} available
                         </div>
-                      )}
+                      )} */}
 
                       <hr className="detail-divider" />
 
@@ -1049,12 +1049,12 @@ export default function LandingPage() {
                             <div className="detail-field-value">{formatYear(b.year)}</div>
                           </div>
                         )}
-                        {isLexora && b.collection && (
+                        {/* {isLexora && b.collection && (
                           <div>
                             <div className="detail-field-label">Collection</div>
                             <div className="detail-field-value">{b.collection}</div>
                           </div>
-                        )}
+                        )} */}
                         {isLexora && (b.source_url || b.publisher) && (
                           <div className="detail-field-full">
                             <div className="detail-field-label">Source</div>

@@ -223,14 +223,26 @@ export default function Books() {
 // sourcery skip: avoid-function-declarations-in-blocks
   function validate() {
     const e = {};
-    if (!form.title?.trim()) e.title = "Title is required";
 
-    // ── Accession number uniqueness (within this form) ──────────────────────
+    // ── Required: Title ───────────────────────────────────────────────────────
+    if (!form.title?.trim()) {
+      e.title = "Title is required";
+    }
+
+    // ── Required: Accession numbers for all copies ───────────────────────────
     const copies = Array.isArray(form.copies) ? form.copies : [];
+    copies.forEach((c, i) => {
+      const acc = (c.accession_number || "").trim();
+      if (!acc) {
+        e[`copies[${i}].accession_number`] = "Accession number is required";
+      }
+    });
+
+    // ── Uniqueness check: duplicate accession numbers within the form ─────────
     const seen = {};
     copies.forEach((c, i) => {
-      const val = c.accession_number?.trim().toLowerCase();
-      if (!val) return;
+      const val = (c.accession_number || "").trim().toLowerCase();
+      if (!val) return; // skip empty — already caught above
       if (seen[val] !== undefined) {
         e[`copies[${seen[val]}].accession_number`] = "Duplicate accession number";
         e[`copies[${i}].accession_number`]         = "Duplicate accession number";
@@ -244,7 +256,17 @@ export default function Books() {
 
 const handleSubmit = useCallback(async () => {
     const e = validate();
-    if (Object.keys(e).length) { setErrors(e); return; }
+    if (Object.keys(e).length) {
+      setErrors(e);
+      setTimeout(() => {
+        const firstKey = Object.keys(e)[0];
+        if (firstKey) {
+          const el = document.querySelector(`[name="${firstKey}"], [id^="copies"][id*="accession_number"]`);
+          el?.focus();
+        }
+      }, 50);
+      return;
+    }
     try {
       const result = await booksApi.createBook(form);
       if (result.success) {
@@ -253,9 +275,23 @@ const handleSubmit = useCallback(async () => {
         showToast("Book added successfully!", "success");
         fetchBooks();
       } else {
-        showToast(result.error || "Failed to add book", "error");
+        // Server validation error — map details to field errors for inline display
+        if (result.details && typeof result.details === 'object') {
+          setErrors(prev => ({
+            ...prev,
+            ...Object.fromEntries(
+              Object.entries(result.details).map(([k, v]) => [k, String(v)])
+            ),
+          }));
+          // Also show a toast for visibility
+          const firstErr = Object.values(result.details)[0];
+          showToast(String(firstErr), "error");
+        } else {
+          showToast(result.error || "Failed to add book", "error");
+        }
       }
-    } catch {
+    } catch (err) {
+      console.error("Add book error:", err);
       showToast("Failed to connect to server", "error");
     }
   }, [form]);
@@ -333,7 +369,17 @@ const handleSubmit = useCallback(async () => {
 
   const handleUpdate = useCallback(async () => {
     const e = validate();
-    if (Object.keys(e).length) { setErrors(e); return; }
+    if (Object.keys(e).length) {
+      setErrors(e);
+      setTimeout(() => {
+        const firstKey = Object.keys(e)[0];
+        if (firstKey) {
+          const el = document.querySelector(`[name="${firstKey}"], [id^="copies"][id*="accession_number"]`);
+          el?.focus();
+        }
+      }, 50);
+      return;
+    }
     try {
       const result = await booksApi.updateBook(selectedBook.id, form);
       if (result.success) {
@@ -342,9 +388,21 @@ const handleSubmit = useCallback(async () => {
         showToast("Book updated successfully!", "success");
         fetchBooks();
       } else {
-        showToast(result.error || "Failed to update book", "error");
+        if (result.details && typeof result.details === 'object') {
+          setErrors(prev => ({
+            ...prev,
+            ...Object.fromEntries(
+              Object.entries(result.details).map(([k, v]) => [k, String(v)])
+            ),
+          }));
+          const firstErr = Object.values(result.details)[0];
+          showToast(String(firstErr), "error");
+        } else {
+          showToast(result.error || "Failed to update book", "error");
+        }
       }
-    } catch {
+    } catch (err) {
+      console.error("Update book error:", err);
       showToast("Failed to connect to server", "error");
     }
   }, [form, selectedBook, books]);

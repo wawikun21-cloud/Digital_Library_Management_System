@@ -20,10 +20,10 @@ const NAV_ITEMS = [
     roles: ["admin"],
     children: [
       { to: "/dashboard/attendance/dashboard", label: "Attendance Dashboard", Icon: LayoutDashboard },
-      { to: "/dashboard/students-dashboard",   label: "Students Dashboard",   Icon: Users2          },
+      { to: "/dashboard/books/dashboard",      label: "Book Dashboard",      Icon: BookOpen },
     ],
   },
-  { to: "/dashboard/books",        label: "Books",            Icon: BookOpen,      roles: ["admin"] },
+  { to: "/dashboard/books",        label: "Books",            Icon: BookOpen,      roles: ["admin"], end: true },
   { to: "/dashboard/lexora-books", label: "Lexora Books",     Icon: Globe,         roles: ["admin"] },
   { to: "/dashboard/borrowed",     label: "Borrowed",         Icon: ClipboardList, roles: ["admin"] },
   {
@@ -171,11 +171,11 @@ function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme, userRole }) {
 }
 
 function NavItem({ item, collapsed }) {
-  const { to, label, Icon } = item;
+  const { to, label, Icon, end } = item;
   return (
     <NavLink
       to={to}
-      end={to === "/dashboard"}
+      end={end ?? to === "/dashboard"}
       title={collapsed ? label : undefined}
       className={({ isActive }) => [
         "flex items-center rounded-lg text-sm font-medium",

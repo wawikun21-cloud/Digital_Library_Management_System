@@ -7,6 +7,17 @@ const AttendanceModel = require("../models/Attendance");
 const auditService    = require("../services/auditService");
 const { broadcast }   = require("../utils/websocket");
 
+/** Extract and sanitize dashboard filter params from req.query */
+function parseFilters(query = {}) {
+  return {
+    program:    query.program    || null,
+    yrLevel:    query.yrLevel    || null,
+    schoolYear: query.schoolYear || null,
+    dateFrom:   query.dateFrom   || null,
+    dateTo:     query.dateTo     || null,
+  };
+}
+
 const AttendanceController = {
 
   /** GET /api/attendance — all records */
@@ -180,6 +191,176 @@ const AttendanceController = {
       return res.status(400).json({ success: false, error: result.error });
     } catch (error) {
       console.error("[AttendanceController.checkOut]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  /** GET /api/attendance/all-low-usage-students */
+  async getAllLowUsageStudents(req, res) {
+    try {
+      const result = await AttendanceModel.getAllLowUsageStudents();
+      if (result.success) {
+        return res.status(200).json({ success: true, data: result.data, message: "All low usage students retrieved successfully" });
+      }
+      return res.status(400).json({ success: false, error: result.error });
+    } catch (error) {
+      console.error("[AttendanceController.getAllLowUsageStudents]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  /** GET /api/attendance/low-usage-students */
+  async getLowUsageStudents(req, res) {
+    try {
+      const result = await AttendanceModel.getLowUsageStudents(parseFilters(req.query));
+      if (result.success) {
+        return res.status(200).json({ success: true, data: result.data, message: "Low usage students retrieved successfully" });
+      }
+      return res.status(400).json({ success: false, error: result.error });
+    } catch (error) {
+      console.error("[AttendanceController.getLowUsageStudents]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  /** GET /api/attendance/session-distribution */
+  async getSessionDistribution(req, res) {
+    try {
+      const result = await AttendanceModel.getSessionDistribution(parseFilters(req.query));
+      if (result.success) {
+        return res.status(200).json({ success: true, data: result.data, totalVisits: result.totalVisits, message: "Session distribution retrieved successfully" });
+      }
+      return res.status(400).json({ success: false, error: result.error });
+    } catch (error) {
+      console.error("[AttendanceController.getSessionDistribution]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  /** GET /api/attendance/other-insights */
+  async getOtherInsights(req, res) {
+    try {
+      const result = await AttendanceModel.getOtherInsights(parseFilters(req.query));
+      if (result.success) {
+        return res.status(200).json({ success: true, data: result.data, message: "Other insights retrieved successfully" });
+      }
+      return res.status(400).json({ success: false, error: result.error });
+    } catch (error) {
+      console.error("[AttendanceController.getOtherInsights]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  /** GET /api/attendance/visits-over-time?groupBy=Daily|Weekly|Monthly */
+  async getVisitsOverTime(req, res) {
+    try {
+      const groupBy = ["Daily","Weekly","Monthly"].includes(req.query.groupBy)
+        ? req.query.groupBy : "Daily";
+      const result = await AttendanceModel.getVisitsOverTime(groupBy, parseFilters(req.query));
+      if (result.success) {
+        return res.status(200).json({ success: true, data: result.data, message: "Visits over time retrieved successfully" });
+      }
+      return res.status(400).json({ success: false, error: result.error });
+    } catch (error) {
+      console.error("[AttendanceController.getVisitsOverTime]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  /** GET /api/attendance/peak-hours */
+  async getPeakHours(req, res) {
+    try {
+      const result = await AttendanceModel.getPeakHours(parseFilters(req.query));
+      if (result.success) {
+        return res.status(200).json({ success: true, data: result.data, message: "Peak hours retrieved successfully" });
+      }
+      return res.status(400).json({ success: false, error: result.error });
+    } catch (error) {
+      console.error("[AttendanceController.getPeakHours]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  /** GET /api/attendance/visits-by-day */
+  async getVisitsByDay(req, res) {
+    try {
+      const result = await AttendanceModel.getVisitsByDay(parseFilters(req.query));
+      if (result.success) {
+        return res.status(200).json({ success: true, data: result.data, message: "Visits by day retrieved successfully" });
+      }
+      return res.status(400).json({ success: false, error: result.error });
+    } catch (error) {
+      console.error("[AttendanceController.getVisitsByDay]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  /** GET /api/attendance/all-top-students */
+  async getAllTopStudents(req, res) {
+    try {
+      const result = await AttendanceModel.getAllTopStudents();
+      if (result.success) {
+        return res.status(200).json({ success: true, data: result.data, message: "All top students retrieved successfully" });
+      }
+      return res.status(400).json({ success: false, error: result.error });
+    } catch (error) {
+      console.error("[AttendanceController.getAllTopStudents]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  /** GET /api/attendance/top-students */
+  async getTopStudents(req, res) {
+    try {
+      const result = await AttendanceModel.getTopStudents(parseFilters(req.query));
+      if (result.success) {
+        return res.status(200).json({ success: true, data: result.data, message: "Top students retrieved successfully" });
+      }
+      return res.status(400).json({ success: false, error: result.error });
+    } catch (error) {
+      console.error("[AttendanceController.getTopStudents]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  /** GET /api/attendance/program-usage */
+  async getProgramUsage(req, res) {
+    try {
+      const result = await AttendanceModel.getProgramUsage(parseFilters(req.query));
+      if (result.success) {
+        return res.status(200).json({ success: true, data: result.data, message: "Program usage retrieved successfully" });
+      }
+      return res.status(400).json({ success: false, error: result.error });
+    } catch (error) {
+      console.error("[AttendanceController.getProgramUsage]", error);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  /** GET /api/attendance/dashboard-stats */
+  async getDashboardStats(req, res) {
+    try {
+      const result = await AttendanceModel.getDashboardStats(parseFilters(req.query));
+      if (result.success) {
+        return res.status(200).json({ success: true, data: result.data, message: "Attendance dashboard stats retrieved successfully" });
+      }
+      return res.status(400).json({ success: false, error: result.error });
+    } catch (error) {
+      console.error("[AttendanceController.getDashboardStats] Error:", error.message);
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  },
+
+  /** GET /api/attendance/school-years → distinct school years with attendance data */
+  async getSchoolYears(req, res) {
+    try {
+      const result = await AttendanceModel.getSchoolYears();
+      if (result.success) {
+        return res.status(200).json({ success: true, data: result.data, message: "School years retrieved successfully" });
+      }
+      return res.status(400).json({ success: false, error: result.error });
+    } catch (error) {
+      console.error("[AttendanceController.getSchoolYears] Error:", error.message);
       return res.status(500).json({ success: false, error: "Internal server error" });
     }
   },

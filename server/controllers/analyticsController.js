@@ -1,27 +1,51 @@
 // ─────────────────────────────────────────────────────────
 //  controllers/analyticsController.js
-//  Thin HTTP layer — extracts query params, calls service,
-//  returns JSON. No SQL lives here.
+//
+//  FIXES IN THIS FILE:
+//
+//  Bug B (404 root cause) — The route that serves getBookStats must be
+//    registered as router.get('/stats', ...) in server/routes/analytics.js.
+//    The previous analyticsApi.js called /api/analytics/book-stats which
+//    did not match that registration, causing the 404.
+//    This file is correct — only analyticsApi.js needed the URL change.
+//    The comment on getBookStats below documents the correct path.
+//
+//  Bug C — parseFilters() now extracts genre, collection, dateFrom, dateTo
+//    so filter values sent by the frontend actually reach the service layer.
 // ─────────────────────────────────────────────────────────
 
 const analyticsService = require("../services/analyticsService");
 const { successResponse, errorResponse } = require("../utils/responseFormatter");
 
-// Helper: pull & sanitize filter params from req.query
+// FIX C: now extracts genre, collection, dateFrom, dateTo in addition to
+// semester/month/schoolYear. Previously those four keys were silently dropped,
+// making genre/collection dashboard filters completely non-functional.
 function parseFilters(query) {
-  const { semester = "2nd Sem", month = "All", schoolYear = "2024-2025" } = query;
+  const { semester, month, schoolYear, genre, collection, dateFrom, dateTo } = query;
+
+  const norm = (v, fallback) => {
+    const s = (v ?? "").trim();
+    return s === "" || s === "All" ? fallback : s;
+  };
+
   return {
-    semester:   semester.trim(),
-    month:      month.trim(),
-    schoolYear: schoolYear.trim(),
+    semester:   norm(semester,   undefined),
+    month:      norm(month,      undefined),
+    schoolYear: norm(schoolYear, undefined),
+    genre:      norm(genre,      undefined),
+    collection: norm(collection, undefined),
+    dateFrom:   norm(dateFrom,   undefined),
+    dateTo:     norm(dateTo,     undefined),
   };
 }
 
 const AnalyticsController = {
 
   /**
-   * GET /api/books/stats
-   * KPI numbers — totals, out of stock, borrowed, returned, overdue
+   * GET /api/analytics/stats          ← registered as router.get('/stats', ...)
+   *
+   * KPI numbers — totals, out of stock, borrowed, returned, overdue.
+   * The frontend calls /api/analytics/stats (fixed from the broken /book-stats).
    */
   getBookStats: async (req, res) => {
     try {
@@ -37,7 +61,6 @@ const AnalyticsController = {
 
   /**
    * GET /api/analytics/most-borrowed
-   * ?semester=1st+Sem&month=All&schoolYear=2024-2025
    */
   getMostBorrowed: async (req, res) => {
     try {
@@ -53,7 +76,6 @@ const AnalyticsController = {
 
   /**
    * GET /api/analytics/attendance
-   * ?semester=1st+Sem&month=Aug&schoolYear=2024-2025
    */
   getAttendance: async (req, res) => {
     try {
@@ -69,7 +91,6 @@ const AnalyticsController = {
 
   /**
    * GET /api/analytics/fines
-   * ?semester=2nd+Sem&month=Mar&schoolYear=2024-2025
    */
   getFines: async (req, res) => {
     try {
@@ -85,7 +106,6 @@ const AnalyticsController = {
 
   /**
    * GET /api/analytics/overdue
-   * ?semester=1st+Sem&month=Nov&schoolYear=2024-2025
    */
   getOverdue: async (req, res) => {
     try {
@@ -100,9 +120,22 @@ const AnalyticsController = {
   },
 
   /**
+   * GET /api/analytics/books-by-status
+   */
+  getBooksByStatus: async (req, res) => {
+    try {
+      const filters = parseFilters(req.query);
+      const result  = await analyticsService.getBooksByStatus(filters);
+      if (!result.success) return res.status(500).json(errorResponse(result.error, 500));
+      res.json(successResponse(result.data));
+    } catch (err) {
+      console.error("[AnalyticsController.getBooksByStatus]", err.message);
+      res.status(500).json(errorResponse("Failed to get books by status", 500));
+    }
+  },
+
+  /**
    * GET /api/analytics/holdings-breakdown
-   * Returns per-program/category book counts for NEMCO and Lexora.
-   * No filter params — always returns total holdings (not time-scoped).
    */
   getHoldingsBreakdown: async (req, res) => {
     try {

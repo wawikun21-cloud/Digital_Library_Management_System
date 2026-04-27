@@ -175,6 +175,28 @@ async function initDatabase() {
     `);
     console.log("✅ Lexora books table ready");
 
+    // ── attendance ─────────────────────────────────────
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS attendance (
+        id                 INT          AUTO_INCREMENT PRIMARY KEY,
+        student_name       VARCHAR(255) NOT NULL,
+        student_id_number  VARCHAR(50)  NOT NULL,
+        student_course     VARCHAR(100) NULL,
+        student_yr_level   VARCHAR(20)  NULL,
+        school_year        VARCHAR(20)  NULL,
+        check_in_time      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        check_out_time     TIMESTAMP    NULL,
+        duration           INT          NULL,
+        status             VARCHAR(50)  NOT NULL DEFAULT 'checked_in',
+        created_at         TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+        updated_at         TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_student_id (student_id_number),
+        INDEX idx_check_in   (check_in_time),
+        INDEX idx_status     (status)
+      )
+    `);
+    console.log("✅ Attendance table ready");
+
     await migrateSchema(conn);
     await conn.end();
     console.log("✅ Database initialization complete\n");
@@ -205,6 +227,10 @@ async function migrateSchema(conn) {
     `ALTER TABLE book_copies ADD COLUMN condition_notes TEXT NULL`,
     `ALTER TABLE book_copies ADD UNIQUE INDEX idx_acc_unique (accession_number)`,
 
+    // ── Soft-delete columns for book_copies ─────────────
+    `ALTER TABLE book_copies ADD COLUMN is_deleted TINYINT(1) NOT NULL DEFAULT 0`,
+    `ALTER TABLE book_copies ADD COLUMN deleted_at TIMESTAMP NULL`,
+
     // ── borrowed_books — add all columns the Transaction model writes ──
     `ALTER TABLE borrowed_books ADD COLUMN accession_number   VARCHAR(50)   NULL AFTER book_id`,
     `ALTER TABLE borrowed_books ADD COLUMN borrower_type      VARCHAR(20)   NOT NULL DEFAULT 'student' AFTER accession_number`,
@@ -220,6 +246,40 @@ async function migrateSchema(conn) {
     `ALTER TABLE borrowed_books ADD INDEX idx_accession_number (accession_number)`,
     // Normalize borrow_date to DATE (was TIMESTAMP in old schema)
     `ALTER TABLE borrowed_books MODIFY COLUMN borrow_date DATE NOT NULL DEFAULT (CURDATE())`,
+
+    // ── Soft-delete columns for books ───────────────────
+    `ALTER TABLE books ADD COLUMN is_deleted TINYINT(1) NOT NULL DEFAULT 0`,
+    `ALTER TABLE books ADD COLUMN deleted_at TIMESTAMP NULL`,
+    `ALTER TABLE books ADD COLUMN deleted_by VARCHAR(100) NULL`,
+
+    // ── Soft-delete columns for borrowed_books ──────────
+    `ALTER TABLE borrowed_books ADD COLUMN is_deleted TINYINT(1) NOT NULL DEFAULT 0`,
+    `ALTER TABLE borrowed_books ADD COLUMN deleted_at TIMESTAMP NULL`,
+    `ALTER TABLE borrowed_books ADD COLUMN deleted_by VARCHAR(100) NULL`,
+
+    // ── Soft-delete columns for attendance ───────────────────
+    `ALTER TABLE attendance ADD COLUMN is_deleted TINYINT(1) NOT NULL DEFAULT 0`,
+    `ALTER TABLE attendance ADD COLUMN deleted_at TIMESTAMP NULL`,
+    `ALTER TABLE attendance ADD COLUMN deleted_by VARCHAR(100) NULL`,
+
+    // ── Soft-delete columns for lexora_books ───────────────────
+    `ALTER TABLE lexora_books ADD COLUMN is_deleted TINYINT(1) NOT NULL DEFAULT 0`,
+    `ALTER TABLE lexora_books ADD COLUMN deleted_at TIMESTAMP NULL`,
+    `ALTER TABLE lexora_books ADD COLUMN deleted_by VARCHAR(100) NULL`,
+
+    // ── trash_log table for soft-delete audit trail ─────
+    `CREATE TABLE IF NOT EXISTS trash_log (
+      id              INT AUTO_INCREMENT PRIMARY KEY,
+      entity_type     VARCHAR(50)  NOT NULL,
+      entity_id       INT          NOT NULL,
+      entity_title    VARCHAR(255) NULL,
+      entity_meta     TEXT         NULL,
+      deleted_by      VARCHAR(100) NULL,
+      deleted_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      expires_at      TIMESTAMP    NULL,
+      INDEX idx_entity (entity_type, entity_id),
+      INDEX idx_expires (expires_at)
+    )`,
 
     // ── lexora_books ───────────────────────────────────
     `ALTER TABLE lexora_books ADD COLUMN format         VARCHAR(50)  NULL AFTER resource_type`,

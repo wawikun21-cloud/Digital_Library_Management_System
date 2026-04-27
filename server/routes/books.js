@@ -119,31 +119,11 @@ router.get("/count/all", requireAuth, requireAdmin, async (req, res) => {
 });
 
 // GET /api/books/stats
-router.get("/stats", requireAuth, requireAdmin, async (req, res) => {
-  try {
-    const nemcoResult  = await BookModel.getStats();
-    const { pool }     = require("../config/db");
-    const [[{ lexoraTotal }]] = await pool.query("SELECT COUNT(*) AS lexoraTotal FROM lexora_books");
-
-    if (!nemcoResult.success) {
-      return res.status(400).json({ success: false, error: nemcoResult.error });
-    }
-
-    const { nemco } = nemcoResult.data;
-    res.json({
-      success: true,
-      data: {
-        nemcoTotal:      nemco.total,
-        nemcoOutOfStock: nemco.outOfStock,
-        lexoraTotal:     Number(lexoraTotal),
-        returned:        nemco.returned,
-      },
-    });
-  } catch (err) {
-    console.error("[GET /api/books/stats]", err.message);
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
-});
+// FIX: the old inline handler only returned nemcoTotal/nemcoOutOfStock/lexoraTotal/returned
+//      and never included borrowedBooks or overdueBooks — those KPI cards always showed 0.
+//      Now delegates to booksController.getStats which calls analyticsService.getBookStats()
+//      and returns the full payload: borrowedBooks, overdueBooks, totalCopies, availableCopies, etc.
+router.get("/stats", requireAuth, requireAdmin, booksController.getStats);
 
 // GET  /api/books/lexora
 router.get("/lexora", requireAuth, requireAdmin, lexoraController.getLexoraBooks);
