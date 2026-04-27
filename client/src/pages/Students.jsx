@@ -2,15 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Search, Upload, FileSpreadsheet, Download, Plus, Edit,
   Trash2, User, Mail, Phone, Building2, GraduationCap, AlertCircle,
-  CheckCircle2, XCircle, FileText, ChevronDown
+  CheckCircle2, XCircle, FileText, ChevronDown, RefreshCw
 } from 'lucide-react';
+
 import {
   getAllStudents,
   createStudent,
   updateStudent,
   deleteStudent,
   bulkImportStudents,
-  getStudentStats
+  getStudentStats,
+  checkStudentIdExists
 } from '../services/api/studentsApi';
 import Toast from '../components/Toast';
 import Pagination from '../components/books/Pagination';
@@ -36,16 +38,22 @@ export default function Students() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [idExists, setIdExists] = useState(false);
+  const [idChecking, setIdChecking] = useState(false);
   const [formData, setFormData] = useState({
     student_id_number: '',
     student_name: '',
     student_course: '',
     student_yr_level: '',
+    student_school_year: '',
     student_email: '',
     student_contact: '',
     display_name: '',
     first_name: '',
-    last_name: ''
+    last_name: '',
+    senior_high_school: '',
+    strand: '',
+    school_address: ''
   });
 
   // ── Bulk import state ────────────────────────────────
@@ -172,7 +180,10 @@ export default function Students() {
               student_contact: '',
               display_name: row['Display Name'] || row['display_name'] || '',
               first_name: row['First Name'] || row['first_name'] || '',
-              last_name: row['Last Name'] || row['last_name'] || ''
+              last_name: row['Last Name'] || row['last_name'] || '',
+              senior_high_school: row['Senior High School'] || row['senior_high_school'] || '',
+              strand: row['Strand'] || row['strand'] || '',
+              school_address: row['School Address'] || row['school_address'] || ''
             };
           }).filter(student => student.student_id_number && student.student_name);
 
@@ -257,6 +268,31 @@ export default function Students() {
   const handleCreateStudent = async (e) => {
     e.preventDefault();
     try {
+      const trimmedId = (formData.student_id_number || '').trim();
+
+      if (!trimmedId) {
+        showToast('Student ID number is required', 'error');
+        return;
+      }
+
+      // Client-side duplicate check against currently loaded students (fast feedback)
+      const duplicateLocal = students.some(
+        s => String(s.student_id_number).trim() === trimmedId
+      );
+      if (duplicateLocal) {
+        showToast(`Student ID "${trimmedId}" already exists. Cannot add duplicate.`, 'error');
+        setIdExists(true);
+        return;
+      }
+
+      // Server-side duplicate check (authoritative)
+      const checkResult = await checkStudentIdExists(trimmedId);
+      if (checkResult.exists) {
+        showToast(`Student ID "${trimmedId}" already exists. Cannot add duplicate.`, 'error');
+        setIdExists(true);
+        return;
+      }
+
       const response = await createStudent(formData);
       if (response.success) {
         showToast('Student created successfully');
@@ -319,12 +355,12 @@ export default function Students() {
     return bYear - aYear;
   });
 
-  // ── Auto-select the latest S.Y. when students load ──
+  // ── Default to "All School Years" when students load ──
   useEffect(() => {
     if (schoolYears.length > 0) {
-      setSelectedSY(prev => prev && schoolYears.includes(prev) ? prev : schoolYears[0]);
+      setSelectedSY(prev => prev && (prev === '' || schoolYears.includes(prev)) ? prev : '');
     } else {
-      setSelectedSY(null);
+      setSelectedSY('');
     }
   }, [students]); // eslint-disable-line
 
@@ -336,7 +372,7 @@ export default function Students() {
       (student.student_course && student.student_course.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCourse = filters.course === 'All' || student.student_course === filters.course;
     const matchesYearLevel = filters.yearLevel === 'All' || student.student_yr_level === filters.yearLevel;
-    const matchesSY = schoolYears.length === 0 || !selectedSY || student.student_school_year === selectedSY;
+    const matchesSY = schoolYears.length === 0 || !selectedSY || student.student_school_year === selectedSY || !student.student_school_year;
     return matchesSearch && matchesCourse && matchesYearLevel && matchesSY;
   });
 
@@ -354,15 +390,41 @@ export default function Students() {
 
   // ── Reset form ──────────────────────────────────────
   const resetForm = () => {
+    const now = new Date();
+    const syStart = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
+    const currentSY = `${syStart}-${syStart + 1}`;
+
     setFormData({
       student_id_number: '',
       student_name: '',
       student_course: '',
       student_yr_level: '',
+      student_school_year: currentSY,
       student_email: '',
-      student_contact: ''
+      student_contact: '',
+      display_name: '',
+      first_name: '',
+      last_name: '',
+      senior_high_school: '',
+      strand: '',
+      school_address: ''
     });
     setSelectedStudent(null);
+    setIdExists(false);
+    setIdChecking(false);
+  };
+
+  // ── Check student ID on blur ───────────────────────
+  const checkStudentId = async (idNumber) => {
+    if (!idNumber || idNumber.trim() === '') {
+      setIdExists(false);
+      setIdChecking(false);
+      return;
+    }
+    setIdChecking(true);
+    const result = await checkStudentIdExists(idNumber);
+    setIdExists(result.exists || false);
+    setIdChecking(false);
   };
 
   // ── Download sample Excel template ──────────────────
@@ -375,7 +437,10 @@ export default function Students() {
         'Display Name': 'John Doe',
         'Role': 'student',
         'First Name': 'John',
-        'Last Name': 'Doe'
+        'Last Name': 'Doe',
+        'Senior High School': 'Sample Senior High School',
+        'Strand': 'GAS',
+        'School Address': '123 Sample Street, City'
       }
     ];
 
@@ -391,6 +456,8 @@ export default function Students() {
   useEffect(() => {
     fetchStudentsData();
   }, []);
+
+
 
   return (
     <div className="flex flex-col gap-5">
@@ -408,6 +475,19 @@ export default function Students() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+
+          <button
+            onClick={fetchStudentsData}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-semibold transition-all hover:opacity-90 active:scale-[.98]"
+            style={{
+              background: "rgba(100,116,139,0.1)",
+              border: "1.5px solid rgba(100,116,139,0.2)",
+              color: "var(--text-primary)",
+            }}
+          >
+            <RefreshCw size={14} />
+            Refresh
+          </button>
 
           <button
             onClick={() => {
@@ -428,7 +508,11 @@ export default function Students() {
           </button>
 
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setIsEditMode(false);
+              resetForm();
+              setIsModalOpen(true);
+            }}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors"
             style={{ background: "var(--accent-amber)", boxShadow: "0 2px 8px rgba(238,162,58,.3)" }}
           >
@@ -504,10 +588,10 @@ export default function Students() {
         </div>
       )}
 
-      {/* ── School Year Tabs ─────────────────────────────── */}
+      {/* ── School Year Dropdown ────────────────────────────── */}
       {schoolYears.length > 0 && (
         <div
-          className="rounded-xl p-4"
+          className="rounded-xl px-4 py-3"
           style={{
             background: 'var(--bg-surface)',
             border: '1px solid var(--border)',
@@ -515,65 +599,49 @@ export default function Students() {
         >
           <div className="flex items-center gap-3 flex-wrap">
             {/* Label */}
-            <div className="flex items-center gap-1.5 mr-1">
+            <div className="flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} />
               <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
                 School Year
               </span>
             </div>
 
-            {/* Divider */}
-            <div className="w-px h-5 self-center" style={{ background: 'var(--border)' }} />
+            {/* Dropdown */}
+            <div className="relative">
+              <select
+                value={selectedSY || ''}
+                onChange={(e) => setSelectedSY(e.target.value)}
+                className="pl-3 pr-10 py-2 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-700 appearance-none transition-colors cursor-pointer min-w-[140px]"
+                style={{
+                  background: 'linear-gradient(135deg, #1e3a7b 0%, #2d4fa3 100%)',
+                  color: '#ffffff',
+                  border: '1px solid transparent',
+                  boxShadow: '0 2px 8px rgba(30,58,123,0.35)',
+                }}
+              >
+                <option value="" style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
+                  All School Years
+                </option>
+                {schoolYears.map(sy => (
+                  <option key={sy} value={sy} style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
+                    {sy}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: '#ffffff', opacity: 0.85 }} />
+            </div>
 
-            {/* Tab buttons */}
-            {schoolYears.map(sy => {
-              const count = students.filter(s => s.student_school_year === sy).length;
-              const isActive = selectedSY === sy;
-              return (
-                <button
-                  key={sy}
-                  onClick={() => setSelectedSY(sy)}
-                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all duration-150"
-                  style={isActive ? {
-                    background: 'linear-gradient(135deg, #1e3a7b 0%, #2d4fa3 100%)',
-                    color: '#ffffff',
-                    boxShadow: '0 2px 8px rgba(30,58,123,0.35)',
-                    border: '1px solid transparent',
-                  } : {
-                    background: 'var(--bg-subtle)',
-                    color: 'var(--text-secondary)',
-                    border: '1px solid var(--border)',
-                    boxShadow: 'none',
-                  }}
-                  onMouseEnter={e => {
-                    if (!isActive) {
-                      e.currentTarget.style.borderColor = '#2d4fa3';
-                      e.currentTarget.style.color = '#2d4fa3';
-                    }
-                  }}
-                  onMouseLeave={e => {
-                    if (!isActive) {
-                      e.currentTarget.style.borderColor = 'var(--border)';
-                      e.currentTarget.style.color = 'var(--text-secondary)';
-                    }
-                  }}
-                >
-                  {sy}
-                  <span
-                    className="text-xs px-1.5 py-0.5 rounded-md font-semibold"
-                    style={isActive ? {
-                      background: 'rgba(255,255,255,0.25)',
-                      color: '#ffffff',
-                    } : {
-                      background: 'var(--bg-input)',
-                      color: 'var(--text-muted)',
-                    }}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
+            {/* Count Badge */}
+            <span
+              className="text-xs px-2 py-1 rounded-lg font-semibold"
+              style={{
+                background: 'var(--bg-subtle)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {filteredStudents.length} student{filteredStudents.length !== 1 ? 's' : ''}
+            </span>
           </div>
         </div>
       )}
@@ -682,7 +750,7 @@ export default function Students() {
               <table className="w-full">
                 <thead>
                   <tr style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border-light)' }}>
-                    {['Student', 'ID Number', 'Course', 'Year Level', 'Email', 'Display Name', 'First Name', 'Last Name', 'Actions'].map(h => (
+                    {['Student', 'Status', 'ID Number', 'Course', 'Year Level', 'Email', 'Actions'].map(h => (
                       <th key={h} className="text-left py-3 px-4 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
                         {h}
                       </th>
@@ -709,6 +777,11 @@ export default function Students() {
                           </span>
                         </div>
                       </td>
+                      <td className="py-3 px-4 text-[13px]">
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${student.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          {student.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
                       <td className="py-3 px-4 text-[13px] font-mono" style={{ color: 'var(--text-secondary)' }}>
                         {student.student_id_number}
                       </td>
@@ -733,21 +806,18 @@ export default function Students() {
                       <td className="py-3 px-4 text-[13px]" style={{ color: 'var(--text-secondary)' }}>
                         {student.student_email || <span style={{ color: 'var(--text-muted)' }}>—</span>}
                       </td>
-                      <td className="py-3 px-4 text-[13px]" style={{ color: 'var(--text-secondary)' }}>
-                        {student.display_name || <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                      </td>
-                      <td className="py-3 px-4 text-[13px]" style={{ color: 'var(--text-secondary)' }}>
-                        {student.first_name || <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                      </td>
-                      <td className="py-3 px-4 text-[13px]" style={{ color: 'var(--text-secondary)' }}>
-                        {student.last_name || <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                      </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-1">
-                          <button
+                           <button
                             onClick={() => {
                               setSelectedStudent(student);
-                              setFormData(student);
+                              const now = new Date();
+                              const syStart = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
+                              const currentSY = `${syStart}-${syStart + 1}`;
+                              setFormData({
+                                ...student,
+                                student_school_year: student.student_school_year || currentSY
+                              });
                               setIsEditMode(true);
                               setIsModalOpen(true);
                             }}
@@ -804,7 +874,7 @@ export default function Students() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(10,22,34,0.65)', backdropFilter: 'blur(4px)' }}>
           <div
-            className="rounded-2xl shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto"
+            className="rounded-2xl shadow-xl p-6 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto"
             style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', boxShadow: '0 24px 60px rgba(0,0,0,0.28)' }}
           >
             <div className="flex items-center justify-between mb-6">
@@ -826,50 +896,74 @@ export default function Students() {
               </button>
             </div>
             <form onSubmit={isEditMode ? handleUpdateStudent : handleCreateStudent}>
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
                   { label: 'Student ID Number', key: 'student_id_number', type: 'text', required: true, placeholder: 'Enter student ID number' },
                   { label: 'Student Name',      key: 'student_name',      type: 'text', required: true, placeholder: 'Enter student name' },
                   { label: 'Course',            key: 'student_course',    type: 'text', required: true, placeholder: 'Enter course (e.g., BSIT)' },
+                  { label: 'Year Level',        key: 'student_yr_level', type: 'select', options: ['', '1st Year', '2nd Year', '3rd Year', '4th Year'] },
+                  { label: 'School Year',       key: 'student_school_year', type: 'text', required: true, placeholder: 'Enter school year (e.g., 2023-2024)' },
                   { label: 'Email',             key: 'student_email',     type: 'email', placeholder: 'Enter email address' },
                   { label: 'Contact Number',    key: 'student_contact',   type: 'text', placeholder: 'Enter contact number' },
-                ].map(({ label, key, type, required, placeholder }) => (
+                  { label: 'Senior High School', key: 'senior_high_school', type: 'text', placeholder: 'Enter senior high school name' },
+                  { label: 'Strand',            key: 'strand',          type: 'text', placeholder: 'Enter strand (e.g., GAS, STEM, ABM)' },
+                  { label: 'School Address',     key: 'school_address',  type: 'text', placeholder: 'Enter address of senior high school' },
+                ].map(({ label, key, type, required, placeholder, options }) => (
                   <div key={key}>
                     <label className="block text-[12.5px] font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                       {label}{required && <span style={{ color: '#dc2626' }}> *</span>}
                     </label>
-                    <input
-                      type={type}
-                      required={required}
-                      value={formData[key]}
-                      onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
-                      placeholder={placeholder}
-                      className="w-full px-3 py-2.5 rounded-lg text-[13px] outline-none transition-all focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400"
-                      style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', color: 'var(--text-primary)' }}
-                    />
+                    {type === 'select' ? (
+                      <div className="relative">
+                        <select
+                          value={formData[key]}
+                          onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
+                          className="w-full px-3 py-2.5 rounded-lg text-[13px] outline-none transition-all focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 appearance-none"
+                          style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', color: 'var(--text-primary)' }}
+                        >
+                          <option value="">Select {label.toLowerCase()}</option>
+                          {options?.map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                          style={{ color: 'var(--text-muted)' }} />
+                      </div>
+                    ) : key === 'student_id_number' ? (
+                      <div>
+                        <input
+                          type={type}
+                          value={formData[key]}
+                          onChange={(e) => {
+                            setFormData({ ...formData, [key]: e.target.value });
+                            setIdExists(false);
+                          }}
+                          onBlur={(e) => checkStudentId(e.target.value)}
+                          placeholder={placeholder}
+                          className="w-full px-3 py-2.5 rounded-lg text-[13px] outline-none transition-all focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400"
+                          style={{ background: 'var(--bg-input)', border: idExists ? '1.5px solid #dc2626' : '1.5px solid var(--border)', color: 'var(--text-primary)' }}
+                        />
+                        {idChecking && (
+                          <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>Checking...</p>
+                        )}
+                        {idExists && !idChecking && (
+                          <p className="text-[11px] font-semibold mt-1 flex items-center gap-1" style={{ color: '#dc2626' }}>
+                            <AlertCircle size={12} /> Student ID already exists
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <input
+                        type={type}
+                        value={formData[key]}
+                        onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
+                        placeholder={placeholder}
+                        className="w-full px-3 py-2.5 rounded-lg text-[13px] outline-none transition-all focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400"
+                        style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    )}
                   </div>
                 ))}
-                <div>
-                  <label className="block text-[12.5px] font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
-                    Year Level
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={formData.student_yr_level}
-                      onChange={(e) => setFormData({ ...formData, student_yr_level: e.target.value })}
-                      className="w-full px-3 py-2.5 rounded-lg text-[13px] outline-none transition-all focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 appearance-none"
-                      style={{ background: 'var(--bg-input)', border: '1.5px solid var(--border)', color: 'var(--text-primary)' }}
-                    >
-                      <option value="">Select year level</option>
-                      <option value="1st Year">1st Year</option>
-                      <option value="2nd Year">2nd Year</option>
-                      <option value="3rd Year">3rd Year</option>
-                      <option value="4th Year">4th Year</option>
-                    </select>
-                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                      style={{ color: 'var(--text-muted)' }} />
-                  </div>
-                </div>
               </div>
 
               {/* ── Modal footer ──────────────────────────── */}
