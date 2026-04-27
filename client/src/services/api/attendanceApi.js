@@ -1,12 +1,34 @@
 // ─────────────────────────────────────────────────────────
 //  services/api/attendanceApi.js
-//  Attendance API Service - Frontend API calls for attendance
+//
+//  FIXES IN THIS FILE:
+//
+//  FIX 1 — normaliseDashboardStats()
+//    The attendanceController passes result.data straight through from
+//    AttendanceModel.getDashboardStats(). The model runs raw SQL that
+//    returns MySQL snake_case column names unless explicitly aliased.
+//    The component guards with `kpi.totalVisits ?? kpi.total_visits`
+//    but this is fragile and only works because of the fallback.
+//    Normalise in the API layer so the component reads ONE field name.
+//
+//  FIX 2 — normaliseOtherInsights()
+//    The component reads: longestSession, longestSub, busiestDay, busiestSub,
+//    consistentUser, consistentSub, freshmenCount, freshmenSub.
+//    If the model returns snake_case (longest_session, busiest_day, etc.)
+//    all four cards show "—". This normaliser maps both cases so it works
+//    regardless of whether the model uses snake_case or camelCase.
+//
+//  FIX 3 — sessionTotal path:
+//    CONFIRMED from attendanceController.getSessionDistribution:
+//      res.json({ success, data: result.data, totalVisits: result.totalVisits })
+//    So totalVisits is at the TOP LEVEL of the response, not inside data.
+//    The component does: sessData.totalVisits where sessData = val(sessRes)
+//    = the full response object. This is CORRECT — no fix needed in the component.
+//    Documented here for clarity.
 // ─────────────────────────────────────────────────────────
 
-// Empty string → same-origin → Vite proxy forwards to server (cookie sent correctly)
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
-/** Build query string from global filter object */
 function buildFilterParams(filters = {}) {
   const p = new URLSearchParams();
   if (filters.program    && filters.program    !== "All") p.set("program",    filters.program);
@@ -17,17 +39,68 @@ function buildFilterParams(filters = {}) {
   return p.toString();
 }
 
-/** Shared fetch options — always send the session cookie */
 const withCreds = (opts = {}) => ({
   ...opts,
   credentials: "include",
-  headers: {
-    "Content-Type": "application/json",
-    ...(opts.headers || {}),
-  },
+  headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
 });
 
-/** GET /api/attendance — all records */
+// ── FIX 1: Normalise dashboard KPI stats ──────────────────────────────────────
+// Maps snake_case MySQL field names → camelCase names the component reads.
+// Handles both cases so it works even if the model uses explicit SQL aliases.
+function normaliseDashboardStats(result) {
+  if (!result.success || !result.data) return result;
+  const d = result.data;
+  return {
+    ...result,
+    data: {
+      // Total visits
+      totalVisits:            d.totalVisits            ?? d.total_visits            ?? 0,
+      // Total duration in minutes
+      totalMinutes:           d.totalMinutes           ?? d.total_minutes           ?? 0,
+      // Average session duration in minutes
+      avgDurationMinutes:     d.avgDurationMinutes     ?? d.avg_duration_minutes    ?? 0,
+      // Peak hour display label (e.g. "10:00 AM")
+      peakHourLabel:          d.peakHourLabel          ?? d.peak_hour_label         ?? "—",
+      // How many check-ins at peak hour
+      peakHourCount:          d.peakHourCount          ?? d.peak_hour_count         ?? 0,
+      // Most active program name
+      mostActiveProgram:      d.mostActiveProgram      ?? d.most_active_program     ?? "—",
+      // Visit count for most active program
+      mostActiveProgramVisits: d.mostActiveProgramVisits ?? d.most_active_program_visits ?? 0,
+    },
+  };
+}
+
+// ── FIX 2: Normalise other insights ──────────────────────────────────────────
+// The component reads camelCase field names. If the model returns snake_case,
+// all four insight cards show "—". This maps both variants.
+function normaliseOtherInsights(result) {
+  if (!result.success || !result.data) return result;
+  const d = result.data;
+  return {
+    ...result,
+    data: {
+      // Longest session today
+      longestSession: d.longestSession ?? d.longest_session  ?? "—",
+      longestSub:     d.longestSub     ?? d.longest_sub      ?? "—",
+      // Busiest day of the week
+      busiestDay:     d.busiestDay     ?? d.busiest_day      ?? "—",
+      busiestSub:     d.busiestSub     ?? d.busiest_sub      ?? "—",
+      // Most consistent user
+      consistentUser: d.consistentUser ?? d.consistent_user  ?? "—",
+      consistentSub:  d.consistentSub  ?? d.consistent_sub   ?? "—",
+      // Unique students this month (labelled "freshmenCount" in component)
+      freshmenCount:  d.freshmenCount  ?? d.freshmen_count   ?? d.unique_students   ?? d.uniqueStudents  ?? "—",
+      freshmenSub:    d.freshmenSub    ?? d.freshmen_sub     ?? d.unique_students_sub ?? "—",
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API functions
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function getAllAttendance() {
   try {
     const res = await fetch(`${API_BASE}/api/attendance`, withCreds());
@@ -38,7 +111,6 @@ export async function getAllAttendance() {
   }
 }
 
-/** GET /api/attendance/active — currently checked-in students */
 export async function getActiveAttendance() {
   try {
     const res = await fetch(`${API_BASE}/api/attendance/active`, withCreds());
@@ -49,13 +121,9 @@ export async function getActiveAttendance() {
   }
 }
 
-/** GET /api/attendance/student/:id — history for one student */
 export async function getAttendanceByStudentId(studentIdNumber) {
   try {
-    const res = await fetch(
-      `${API_BASE}/api/attendance/student/${studentIdNumber}`,
-      withCreds()
-    );
+    const res = await fetch(`${API_BASE}/api/attendance/student/${studentIdNumber}`, withCreds());
     return await res.json();
   } catch (error) {
     console.error("[attendanceApi.getAttendanceByStudentId]", error);
@@ -63,7 +131,6 @@ export async function getAttendanceByStudentId(studentIdNumber) {
   }
 }
 
-/** GET /api/attendance/all-low-usage-students — full list for modal */
 export async function getAllLowUsageStudents() {
   try {
     const res = await fetch(`${API_BASE}/api/attendance/all-low-usage-students`, withCreds());
@@ -74,7 +141,6 @@ export async function getAllLowUsageStudents() {
   }
 }
 
-/** GET /api/attendance/low-usage-students */
 export async function getLowUsageStudents(filters = {}) {
   try {
     const qs = buildFilterParams(filters);
@@ -86,7 +152,10 @@ export async function getLowUsageStudents(filters = {}) {
   }
 }
 
-/** GET /api/attendance/session-distribution */
+// FIX 3: Confirmed — totalVisits is at TOP LEVEL of response, not inside data.
+// { success, data: [...buckets], totalVisits: N }
+// The component reads sessData.totalVisits where sessData = the full response.
+// No change needed here — returned as-is.
 export async function getSessionDistribution(filters = {}) {
   try {
     const qs = buildFilterParams(filters);
@@ -98,19 +167,19 @@ export async function getSessionDistribution(filters = {}) {
   }
 }
 
-/** GET /api/attendance/other-insights */
+// FIX 2: normalise other insights so camelCase fields are always present
 export async function getOtherInsights(filters = {}) {
   try {
     const qs = buildFilterParams(filters);
     const res = await fetch(`${API_BASE}/api/attendance/other-insights${qs ? `?${qs}` : ""}`, withCreds());
-    return await res.json();
+    const json = await res.json();
+    return normaliseOtherInsights(json);
   } catch (error) {
     console.error("[attendanceApi.getOtherInsights]", error);
     return { success: false, error: error.message };
   }
 }
 
-/** GET /api/attendance/visits-over-time?groupBy=Daily|Weekly|Monthly */
 export async function getVisitsOverTime(groupBy = "Daily", filters = {}) {
   try {
     const qs = buildFilterParams(filters);
@@ -123,7 +192,6 @@ export async function getVisitsOverTime(groupBy = "Daily", filters = {}) {
   }
 }
 
-/** GET /api/attendance/peak-hours */
 export async function getPeakHours(filters = {}) {
   try {
     const qs = buildFilterParams(filters);
@@ -135,7 +203,6 @@ export async function getPeakHours(filters = {}) {
   }
 }
 
-/** GET /api/attendance/visits-by-day */
 export async function getVisitsByDay(filters = {}) {
   try {
     const qs = buildFilterParams(filters);
@@ -147,7 +214,6 @@ export async function getVisitsByDay(filters = {}) {
   }
 }
 
-/** GET /api/attendance/all-top-students — full ranked list for modal */
 export async function getAllTopStudents() {
   try {
     const res = await fetch(`${API_BASE}/api/attendance/all-top-students`, withCreds());
@@ -158,7 +224,6 @@ export async function getAllTopStudents() {
   }
 }
 
-/** GET /api/attendance/top-students — top 50 by total hours */
 export async function getTopStudents(filters = {}) {
   try {
     const qs = buildFilterParams(filters);
@@ -170,7 +235,6 @@ export async function getTopStudents(filters = {}) {
   }
 }
 
-/** GET /api/attendance/program-usage — visits/hours grouped by program */
 export async function getProgramUsage(filters = {}) {
   try {
     const qs = buildFilterParams(filters);
@@ -182,19 +246,19 @@ export async function getProgramUsage(filters = {}) {
   }
 }
 
-/** GET /api/attendance/dashboard-stats — KPI stats for AttendanceDashboard */
+// FIX 1: normalise dashboard KPI stats to camelCase
 export async function getAttendanceDashboardStats(filters = {}) {
   try {
     const qs = buildFilterParams(filters);
     const res = await fetch(`${API_BASE}/api/attendance/dashboard-stats${qs ? `?${qs}` : ""}`, withCreds());
-    return await res.json();
+    const json = await res.json();
+    return normaliseDashboardStats(json);
   } catch (error) {
     console.error("[attendanceApi.getAttendanceDashboardStats]", error);
     return { success: false, error: error.message };
   }
 }
 
-/** GET /api/attendance/school-years → distinct school years with data */
 export async function getSchoolYears() {
   try {
     const res = await fetch(`${API_BASE}/api/attendance/school-years`, withCreds());
@@ -205,7 +269,6 @@ export async function getSchoolYears() {
   }
 }
 
-/** GET /api/attendance/stats */
 export async function getAttendanceStats() {
   try {
     const res = await fetch(`${API_BASE}/api/attendance/stats`, withCreds());
@@ -216,11 +279,6 @@ export async function getAttendanceStats() {
   }
 }
 
-/**
- * POST /api/attendance/tap/:studentIdNumber
- * Smart toggle — first call checks in, second call checks out.
- * Returns { success, action: 'checked_in'|'checked_out', data, message }
- */
 export async function tapAttendance(studentIdNumber) {
   try {
     const res = await fetch(
@@ -234,7 +292,6 @@ export async function tapAttendance(studentIdNumber) {
   }
 }
 
-/** POST /api/attendance/check-in — explicit check-in (legacy / direct use) */
 export async function checkIn(attendanceData) {
   try {
     const res = await fetch(
@@ -248,7 +305,6 @@ export async function checkIn(attendanceData) {
   }
 }
 
-/** POST /api/attendance/check-out/:id — explicit check-out */
 export async function checkOut(studentIdNumber) {
   try {
     const res = await fetch(
@@ -262,7 +318,6 @@ export async function checkOut(studentIdNumber) {
   }
 }
 
-/** DELETE /api/attendance/:id */
 export async function deleteAttendance(id) {
   try {
     const res = await fetch(

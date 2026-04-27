@@ -1,56 +1,54 @@
 /**
  * client/src/services/api/analyticsApi.js
  *
- * FIXES IN THIS FILE:
+ * CONFIRMED FROM SERVER SOURCE (analyticsService.js):
  *
- *   Bug B (404) — fetchBookStats was calling /api/analytics/book-stats.
- *     That route does not exist in Express. The controller is registered as
- *     router.get('/stats', getBookStats) in server/routes/analytics.js,
- *     so the correct URL is /api/analytics/stats.
- *     Single source of truth: edit ROUTES.bookStats below if your route name
- *     differs — every function reads from it, nothing is hard-coded twice.
+ * getBookStats returns data with these EXACT field names (already camelCase,
+ * explicitly aliased in analyticsService.js):
+ *   nemcoTotal, lexoraTotal, nemcoOutOfStock, returned, borrowed, overdue,
+ *   totalBooks, totalCopies, availableCopies, borrowedBooks, overdueBooks, addedThisMonth
+ * → NO normalisation needed for KPI fields. They are already camelCase.
  *
- *   Bug C — buildParams now forwards genre, collection, dateFrom, dateTo
- *     so the backend parseFilters() actually receives dashboard filter values.
+ * getMostBorrowed returns:
+ *   { success, data: [{id, short, title, author, genre, borrows, total_copies, available_copies}],
+ *     totalBorrows: N }
+ * → data rows use snake_case for total_copies and available_copies.
+ *   totalBorrows is at the TOP LEVEL of the response (not inside data).
+ *   The normalise step maps these to camelCase for BookDashboard consumers.
  *
- *   En-dash note — Dashboard.jsx uses Unicode en-dash "–" (U+2013) in school
- *     year strings. URLSearchParams encodes it as %E2%80%93, which is correct
- *     HTTP behaviour. analyticsService.buildDateFilter already splits on
- *     /[–\-]/ so no server-side change is needed for this.
+ * getBooksByStatus returns data with:
+ *   { available: N, outOfStock: N, borrowed: N, reserved: N }
+ * → already camelCase. BookDashboard's guards for s.Available, s.out_of_stock etc.
+ *   are redundant but harmless. The real field is outOfStock (camelCase).
+ *
+ * getHoldingsBreakdown: controller wraps result as
+ *   { success, data: { data: [...], maxNemco, maxLexora } }
+ *   Each row: { category, nemco, lexora }
  */
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
-// ── ROUTE NAME MAP ─────────────────────────────────────────────────────────────
-// Cross-reference with server/routes/analytics.js.
-// The values here must match the path strings in router.get('<value>', handler).
-// Change only here when a route is renamed — nowhere else needs to change.
+// ── Route name map ────────────────────────────────────────────────────────────
 const ROUTES = {
-  bookStats:         "stats",              // router.get('/stats',               getBookStats)
-  mostBorrowed:      "most-borrowed",      // router.get('/most-borrowed',        getMostBorrowed)
-  attendance:        "attendance",         // router.get('/attendance',           getAttendance)
-  fines:             "fines",              // router.get('/fines',                getFines)
-  overdue:           "overdue",            // router.get('/overdue',              getOverdue)
-  holdingsBreakdown: "holdings-breakdown", // router.get('/holdings-breakdown',   getHoldingsBreakdown)
-  booksByStatus:     "books-by-status",    // router.get('/books-by-status',      getBooksByStatus)
-  bookDashboard:     "book-dashboard",     // router.get('/book-dashboard',       getBookDashboard) — if exists
+  bookStats:         "stats",
+  mostBorrowed:      "most-borrowed",
+  attendance:        "attendance",
+  fines:             "fines",
+  overdue:           "overdue",
+  holdingsBreakdown: "holdings-breakdown",
+  booksByStatus:     "books-by-status",
+  bookDashboard:     "book-dashboard",
 };
 
 function buildParams(filters = {}) {
   const p = new URLSearchParams();
-
-  // Semester / month / schoolYear — always send so the controller
-  // knows whether to skip date-scoping ("All" = no scope).
   p.set("semester",   filters.semester   || "All");
   p.set("month",      filters.month      || "All");
   p.set("schoolYear", filters.schoolYear || "All");
-
-  // Bug C fix: forward genre/collection/date range so they reach parseFilters()
   if (filters.genre      && filters.genre      !== "All") p.set("genre",      filters.genre);
   if (filters.collection && filters.collection !== "All") p.set("collection", filters.collection);
   if (filters.dateFrom) p.set("dateFrom", filters.dateFrom);
   if (filters.dateTo)   p.set("dateTo",   filters.dateTo);
-
   return p.toString();
 }
 
@@ -59,7 +57,6 @@ async function safeFetch(url) {
     const res = await fetch(url, { credentials: "include" });
     if (!res.ok) throw new Error(`HTTP ${res.status} — ${url}`);
     const json = await res.json();
-    // Normalise: backend always returns { success, data } — guard in case it doesn't
     if (typeof json.success === "undefined") {
       return { success: true, data: json };
     }
@@ -70,16 +67,53 @@ async function safeFetch(url) {
   }
 }
 
-// Bug B fix: was "/api/analytics/book-stats" → 404
-// Now:        "/api/analytics/stats"          → 200
+// ── normalise getMostBorrowed rows ────────────────────────────────────────────
+// Server returns snake_case for copy fields in the rows array.
+// Normalise once here so all consumers use camelCase.
+function normaliseMostBorrowed(result) {
+  if (!result.success || !Array.isArray(result.data)) return result;
+  return {
+    ...result,
+    data: result.data.map(r => ({
+      id:               r.id,
+      title:            r.title            ?? "—",
+      short:            r.short            ?? r.title ?? "—",
+      author:           r.author           ?? "—",
+      genre:            r.genre            ?? "—",
+      borrows:          Number(r.borrows   ?? 0),
+      // CONFIRMED: server returns snake_case for these two fields
+      totalCopies:      Number(r.total_copies     ?? r.totalCopies     ?? 0),
+      availableCopies:  Number(r.available_copies ?? r.availableCopies ?? 0),
+    })),
+    // totalBorrows is at the TOP LEVEL of the response — pass through unchanged
+    totalBorrows: Number(result.totalBorrows ?? 0),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public API functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * CONFIRMED fields returned (from analyticsService.getBookStats):
+ *   nemcoTotal, lexoraTotal, nemcoOutOfStock, returned, borrowed, overdue,
+ *   totalBooks, totalCopies, availableCopies, borrowedBooks, overdueBooks, addedThisMonth
+ * All already camelCase — no normalisation needed.
+ */
 export async function fetchBookStats(filters = {}) {
   const qs = buildParams(filters);
   return safeFetch(`${API_BASE}/analytics/${ROUTES.bookStats}${qs ? `?${qs}` : ""}`);
 }
 
+/**
+ * CONFIRMED: rows have snake_case total_copies / available_copies.
+ * totalBorrows is at the top level of the response object.
+ * normalised here to camelCase.
+ */
 export async function fetchMostBorrowed(filters = {}) {
   const qs = buildParams(filters);
-  return safeFetch(`${API_BASE}/analytics/${ROUTES.mostBorrowed}${qs ? `?${qs}` : ""}`);
+  const result = await safeFetch(`${API_BASE}/analytics/${ROUTES.mostBorrowed}${qs ? `?${qs}` : ""}`);
+  return normaliseMostBorrowed(result);
 }
 
 export async function fetchAttendance(filters = {}) {
@@ -102,6 +136,11 @@ export async function fetchHoldingsBreakdown(filters = {}) {
   return safeFetch(`${API_BASE}/analytics/${ROUTES.holdingsBreakdown}${qs ? `?${qs}` : ""}`);
 }
 
+/**
+ * CONFIRMED fields returned (from analyticsService.getBooksByStatus):
+ *   { available, outOfStock, borrowed, reserved }
+ * All already camelCase. The "Out of Stock" display label maps to outOfStock key.
+ */
 export async function fetchBooksByStatus(filters = {}) {
   const qs = buildParams(filters);
   return safeFetch(`${API_BASE}/analytics/${ROUTES.booksByStatus}${qs ? `?${qs}` : ""}`);

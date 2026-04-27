@@ -34,7 +34,21 @@ const SEMESTERS = ["1st Sem", "2nd Sem"];
 // NOTE: these strings use Unicode en-dash "–" (U+2013), NOT a regular hyphen.
 // URLSearchParams encodes it as %E2%80%93 — this is correct and the backend
 // buildDateFilter already handles it via /[–\-]/ split. Do not replace with "-".
-const SCHOOL_YEARS = ["2025–2026", "2024–2025", "2023–2024"];
+// Auto-generated from the current date — no manual updates needed.
+// The Philippine academic year starts in August, so:
+//   month >= 8  →  current S.Y. is thisYear–nextYear
+//   month  < 8  →  current S.Y. is lastYear–thisYear
+// Produces the current S.Y. plus the 4 preceding years (5 total).
+function generateSchoolYears(count = 5) {
+  const now   = new Date();
+  const month = now.getMonth() + 1;
+  const currentStart = month >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+  return Array.from({ length: count }, (_, i) => {
+    const s = currentStart - i;
+    return `${s}–${s + 1}`;
+  });
+}
+const SCHOOL_YEARS = generateSchoolYears();
 
 const SEM_MONTHS = {
   "1st Sem": ["Aug", "Sep", "Oct", "Nov", "Dec", "Jan"],
@@ -762,7 +776,7 @@ export default function Dashboard() {
   const [month,      setMonth]      = useState("All");
 
   const {
-    kpiStats, mostBorrowed, attendance, fines, overdue,
+    kpiStats, mostBorrowed, mostBorrowedTotal, attendance, fines, overdue,
     holdingsBreakdown,
     loading, errors,
     refresh, updateKpiStats,

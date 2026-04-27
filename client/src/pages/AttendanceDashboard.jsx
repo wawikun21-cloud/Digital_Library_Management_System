@@ -35,12 +35,15 @@ const C = {
 // Maximum library seating capacity — adjust as needed
 const LIBRARY_CAPACITY = 120;
 
-// Auto-detect current school year based on date (PH academic calendar: Jun–May)
+// Auto-detect current school year based on PH academic calendar (Aug–Jul).
+// month >= 8 (August onward) → S.Y. starts this year, e.g. 2026–2027
+// month  < 8 (before August) → S.Y. started last year, e.g. 2025–2026
+// Uses en-dash (U+2013) to match Dashboard.jsx and the backend parser.
 function getCurrentSchoolYear() {
   const now  = new Date();
   const year = now.getFullYear();
-  // School year starts in June: Jun-Dec belong to SY that starts this year
-  return now.getMonth() >= 6 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+  const start = now.getMonth() + 1 >= 8 ? year : year - 1;
+  return `${start}–${start + 1}`;
 }
 const CURRENT_SY = getCurrentSchoolYear();
 
@@ -500,61 +503,59 @@ export default function AttendanceDashboard() {
     },
   });
 
-   // ── Initial load
-   useEffect(() => {
-     fetchAllData(globalFilter);
-     getVisitsOverTime(visitsFilter, globalFilter).then(res => {
-       if (res.success && Array.isArray(res.data)) {
-         setVisitsOverTime(res.data.length > 0 ? res.data : []);
-       } else {
-         setVisitsOverTime([]);
-       }
-     }).catch(() => setVisitsOverTime([]));
-     // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, []);
+  // ── Stable serialised key for globalFilter so effects only re-run when
+  // values actually change, not when the object gets a new reference.
+  // JSON.stringify is safe here because globalFilter only contains primitives.
+  const globalFilterKey = JSON.stringify(globalFilter);
 
-   // Re-fetch when global filters change
-   useEffect(() => {
-     setKpi(null);
-     fetchAllData(globalFilter);
-     getVisitsOverTime(visitsFilter, globalFilter).then(res => {
-       if (res.success && Array.isArray(res.data)) {
-         setVisitsOverTime(res.data.length > 0 ? res.data : []);
-       } else {
-         setVisitsOverTime([]);
-       }
-     }).catch(() => setVisitsOverTime([]));
-     // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [globalFilter]);
-
-    // Re-fetch visits over time when groupBy changes
-    useEffect(() => {
-      getVisitsOverTime(visitsFilter, globalFilter).then(res => {
-        if (res.success && Array.isArray(res.data)) {
-          setVisitsOverTime(res.data.length > 0 ? res.data : []);
-        } else {
-          setVisitsOverTime([]);
-        }
-      }).catch(() => setVisitsOverTime([]));
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [visitsFilter]);
-
-    // If selected school year has no data, fall back to "All"
-    // On mount: auto-detect current school year and select it if data exists
-    useEffect(() => {
-      if (availableYears.length === 0) return;
-
-      const needsReset = !availableYears.includes(globalFilter.schoolYear);
-
-      if (globalFilter.schoolYear === "All" && availableYears.includes(CURRENT_SY)) {
-        // Auto-select current school year on first load
-        setGlobalFilter(f => ({ ...f, schoolYear: CURRENT_SY }));
-      } else if (needsReset) {
-        // Previously selected year is no longer available → fallback
-        setGlobalFilter(f => ({ ...f, schoolYear: "All" }));
+  // ── Single effect for initial load + filter changes ───────────────────────
+  // Using globalFilterKey (a string) instead of globalFilter (an object)
+  // prevents the effect from firing on every render when the object reference
+  // changes but the values are identical — which was the source of the flood.
+  // The separate initial-load effect is removed to prevent the double-fetch
+  // on mount that was also causing duplicate API calls.
+  useEffect(() => {
+    const filters = JSON.parse(globalFilterKey);
+    setKpi(null);
+    fetchAllData(filters);
+    getVisitsOverTime(visitsFilter, filters).then(res => {
+      if (res.success && Array.isArray(res.data)) {
+        setVisitsOverTime(res.data.length > 0 ? res.data : []);
+      } else {
+        setVisitsOverTime([]);
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [availableYears]);
+    }).catch(() => setVisitsOverTime([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalFilterKey]);
+
+  // Re-fetch visits over time when groupBy changes (filter unchanged)
+  useEffect(() => {
+    const filters = JSON.parse(globalFilterKey);
+    getVisitsOverTime(visitsFilter, filters).then(res => {
+      if (res.success && Array.isArray(res.data)) {
+        setVisitsOverTime(res.data.length > 0 ? res.data : []);
+      } else {
+        setVisitsOverTime([]);
+      }
+    }).catch(() => setVisitsOverTime([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visitsFilter]);
+
+  // Auto-select current school year once availableYears loads.
+  // Falls back to "All" if the previously selected year is no longer in the list.
+  // Runs only when availableYears changes — NOT on every globalFilter change.
+  const didAutoSelectYear = useRef(false);
+  useEffect(() => {
+    if (availableYears.length === 0) return;
+
+    if (!didAutoSelectYear.current && globalFilter.schoolYear === "All" && availableYears.includes(CURRENT_SY)) {
+      didAutoSelectYear.current = true;
+      setGlobalFilter(f => ({ ...f, schoolYear: CURRENT_SY }));
+    } else if (!availableYears.includes(globalFilter.schoolYear) && globalFilter.schoolYear !== "All") {
+      setGlobalFilter(f => ({ ...f, schoolYear: "All" }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableYears]);
 
   // ── FIX I: guard all kpi field reads against both camelCase and snake_case.
   // MySQL returns snake_case by default; if the service doesn't alias them,
@@ -563,13 +564,15 @@ export default function AttendanceDashboard() {
     ? (kpi.totalVisits ?? kpi.total_visits ?? 0).toLocaleString()
     : "—";
 
-  const totalHours = kpi
-    ? (() => {
-        const mins = kpi.totalMinutes ?? kpi.total_minutes ?? 0;
-        const decimalHours = (mins / 60).toFixed(1);
-        return `${decimalHours} hrs`;
-      })()
-    : "—";
+   const totalHours = kpi
+     ? (() => {
+         const mins = kpi.totalMinutes ?? kpi.total_minutes ?? 0;
+         const totalMins = Math.round(mins);
+         const h = Math.floor(totalMins / 60);
+         const m = totalMins % 60;
+         return h > 0 ? `${h}h ${m}m` : `${m}m`;
+       })()
+     : "—";
 
   const avgDuration = kpi
     ? (() => {

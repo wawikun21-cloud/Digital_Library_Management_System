@@ -780,12 +780,11 @@ const AttendanceModel = {
       const where    = `WHERE ${clauses.join(" AND ")}`;
       const andExtra = `AND ${clauses.join(" AND ")}`;
 
-      // 1. Longest session today (respects program/yrLevel/date filters)
+      // 1. Longest session in filtered period
       const [longestRows] = await pool.query(`
         SELECT student_name, student_course, duration
         FROM attendance
         ${where}
-          AND DATE(check_in_time) = CURDATE()
           AND status = 'checked_out'
           AND duration IS NOT NULL
         ORDER BY duration DESC
@@ -842,14 +841,12 @@ const AttendanceModel = {
         consistentSub  = `Visited ${c.distinct_days} of ${c.total_days} days`;
       }
 
-      // 4. Unique 1st-year students this month
+      // 4. Unique 1st-year students in filtered period
       const [freshmenRows] = await pool.query(`
         SELECT COUNT(DISTINCT a.student_id_number) AS cnt
         FROM attendance a
         INNER JOIN students s ON s.student_id_number = a.student_id_number
         ${where}
-          AND MONTH(a.check_in_time) = MONTH(CURDATE())
-          AND YEAR(a.check_in_time)  = YEAR(CURDATE())
           AND (
             LOWER(TRIM(a.student_yr_level))  LIKE '%1st%'
             OR LOWER(TRIM(s.student_yr_level)) LIKE '%1st%'
@@ -918,7 +915,7 @@ const AttendanceModel = {
 
       const [peakRows] = await pool.query(
         `SELECT HOUR(check_in_time) AS hr, COUNT(*) AS cnt
-         FROM attendance ${where} AND DATE(check_in_time) = CURDATE()
+         FROM attendance ${where}
          GROUP BY hr ORDER BY cnt DESC LIMIT 1`,
         params
       );

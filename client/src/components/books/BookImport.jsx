@@ -31,6 +31,7 @@
  *  10 Price        → (informational only — not stored in DB)
  *  11 Source/Fund  → (informational only)
  *  12 Remarks      → books.otherDetails
+ *  13 Genre        → books.genre
  *
  * The spreadsheet uses a 2-row merged header; data starts at row 2.
  * "Continuation copy" rows have no Title but have an Acc No — they are
@@ -63,6 +64,7 @@ const COL = {
   COLL:      9,   // Collection
   // Col 10 = Price, Col 11 = Source of Fund — not stored in DB
   REMARKS:   12,  // Other details / remarks
+  GENRE:     13,  // Genre → books.genre
 };
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
@@ -198,6 +200,7 @@ async function parseExcel(buffer, sheetName) {
     const pages      = toPages(row[COL.PAGES]);
     const collection = toStr(row[COL.COLL]);
     const remarks    = toStr(row[COL.REMARKS]);
+    const genre      = toStr(row[COL.GENRE]);
 
     // Skip overflow / artefact rows: no acc, no title, no author, no publisher
     if (!acc && !title && !author && !publisher) continue;
@@ -257,7 +260,7 @@ async function parseExcel(buffer, sheetName) {
         subtitle:     null,             // varchar(255)
         authorName:   null,             // varchar(255)
         authorDates:  null,             // varchar(50)
-        genre:        null,             // varchar(100)
+        genre:        genre,            // varchar(100) ← from Genre column (col 13)
         shelf:        null,             // varchar(100)
         place:        null,             // varchar(255)
         sublocation:  null,             // varchar(255)
@@ -721,7 +724,7 @@ const BookImport = forwardRef(function BookImport({ onImportComplete, onStepChan
               <p className="text-[11px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
                 Expected columns:{" "}
                 <span className="font-mono text-[10px]">
-                  Acc. No. | Date | Class | Title | Author | Vol./Ed. | Year | Publisher | Pages | Coll. | Price | Fund | Remarks
+                  Acc. No. | Date | Class | Title | Author | Vol./Ed. | Year | Publisher | Pages | Coll. | Price | Fund | Remarks | Genre
                 </span>
               </p>
               <p className="text-[11px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
@@ -954,7 +957,7 @@ const BookImport = forwardRef(function BookImport({ onImportComplete, onStepChan
                     >
                       {[
                         "Call No.", "Title", "Author", "Year",
-                        "Publisher", "Pages", "Collection", "Copies", "Accession Nos.",
+                        "Publisher", "Pages", "Collection", "Genre", "Copies", "Accession Nos.",
                       ].map((h) => (
                         <th
                           key={h}
@@ -1032,6 +1035,15 @@ const BookImport = forwardRef(function BookImport({ onImportComplete, onStepChan
                           {b.collection ?? <span className="italic opacity-40">NULL</span>}
                         </td>
 
+                        {/* Genre */}
+                        <td
+                          className="px-3 py-2 max-w-[110px] truncate"
+                          style={{ color: "var(--text-secondary)" }}
+                          title={b.genre}
+                        >
+                          {b.genre ?? <span className="italic opacity-40">NULL</span>}
+                        </td>
+
                         {/* Copies count */}
                         <td className="px-3 py-2 text-center" style={{ color: "var(--text-secondary)" }}>
                           {b.accessionNumbers.length > 0 ? (
@@ -1097,7 +1109,7 @@ const BookImport = forwardRef(function BookImport({ onImportComplete, onStepChan
           >
             <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>
-              Columns absent from the Excel (ISBN, Genre, Shelf, etc.) will be stored as{" "}
+              Columns absent from the Excel (ISBN, Shelf, etc.) will be stored as{" "}
               <strong>NULL</strong> in the database — the admin can complete them via the book
               editor. Each title row creates a separate book record; continuation rows (no title,
               new Acc No.) add copies to the preceding book. Books with the same title and author

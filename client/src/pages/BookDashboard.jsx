@@ -32,7 +32,7 @@ import {
   fetchBooksByStatus,
 } from "../services/api/analyticsApi";
 import { fetchBooks } from "../services/api/booksApi";
-import { useWebSocket } from "../hooks/useWebSocket";
+import { useWebSocket } from "../hooks/useWebsocket";
 import { useDebounce } from "../hooks/useDebounce";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
@@ -151,6 +151,24 @@ function ChartTip({ active, payload, label }) {
   );
 }
 
+function PieTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const data = payload[0].payload;
+  return (
+    <div style={{
+      background: "var(--bg-surface)", border: "1px solid var(--border)",
+      borderRadius: 10, padding: "8px 12px", fontSize: 12, boxShadow: "var(--shadow-lg)",
+    }}>
+      <p style={{ margin: "0 0 4px", fontSize: 11, fontWeight: 700, color: "var(--text-primary)", textTransform: "capitalize" }}>
+        {data.status}
+      </p>
+      <p style={{ margin: 0, fontSize: 11, color: "var(--text-secondary)" }}>
+        Count: <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{data.count?.toLocaleString() ?? 0}</span>
+      </p>
+    </div>
+  );
+}
+
 function TabBtn({ label, active, onClick }) {
   return (
     <button onClick={onClick} style={{
@@ -168,38 +186,23 @@ function TabBtn({ label, active, onClick }) {
 // MODALS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function TopBorrowedModal({ onClose }) {
-  const [books, setBooks]               = useState([]);
-  const [loading, setLoading]           = useState(true);
-  const [filterGenre, setFilterGenre]   = useState("All");
+function TopBorrowedModal({ onClose, data = [], loading = false }) {
+  const [books, setBooks] = useState(data);
+  const [filterGenre, setFilterGenre] = useState("All");
   const [filterCollection, setFilterCollection] = useState("All");
-  const [sortBy, setSortBy]             = useState("Borrow Count");
+  const [sortBy, setSortBy] = useState("Borrow Count");
 
+  // Update books when data prop changes
   useEffect(() => {
-    fetchMostBorrowed().then(result => {
-      if (result.success) {
-        const list = Array.isArray(result.data) ? result.data : [];
-        setBooks(list.map((b, i) => ({
-          rank:            i + 1,
-          title:           b.title  ?? "—",
-          author:          b.author ?? "—",
-          genre:           b.genre  || "—",
-          // FIX 2: match the same alias chain as the main dashboard fetch
-          borrowCount:     b.borrows ?? b.borrow_count ?? b.borrowCount ?? 0,
-          totalCopies:     b.total_copies     ?? b.totalCopies     ?? "—",
-          availableCopies: b.available_copies ?? b.availableCopies ?? "—",
-        })));
-      }
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
+    setBooks(data);
+  }, [data]);
 
-  const genres      = useMemo(() => ["All", ...Array.from(new Set(books.map(b => b.genre))).sort()], [books]);
-  const collections = useMemo(() => ["All", ...Array.from(new Set(books.map(b => b.collection?.collection_name || "General"))).sort()], [books]);
+  const genres = useMemo(() => ["All", ...Array.from(new Set(books.map(b => b.genre))).sort()], [books]);
+  const collections = useMemo(() => ["All", ...Array.from(new Set(books.map(b => b.collection || "General"))).sort()], [books]);
 
   const filtered = useMemo(() => books.filter(b => {
-    if (filterGenre      !== "All" && b.genre !== filterGenre) return false;
-    if (filterCollection !== "All" && (b.collection?.collection_name || "General") !== filterCollection) return false;
+    if (filterGenre !== "All" && b.genre !== filterGenre) return false;
+    if (filterCollection !== "All" && (b.collection || "General") !== filterCollection) return false;
     return true;
   }), [books, filterGenre, filterCollection]);
 
@@ -589,6 +592,17 @@ export default function BookDashboard() {
         fetchBooksByStatus(filters),
         fetchBooks(),
       ]);
+      // Build a lookup map for accurate copy counts from the books API
+      const booksMap = new Map();
+      if (booksResult.success) {
+        for (const b of booksResult.data || []) {
+          booksMap.set(b.id, {
+            totalCopies: Number(b.total_copies) || 0,
+            availableCopies: Number(b.available_copies) || 0,
+            collection: b.collection,
+          });
+        }
+      }
 
       // ── KPI ──
       if (statsResult.success) {
@@ -627,50 +641,55 @@ export default function BookDashboard() {
       // ── Top Borrowed ──
       if (borrowedResult.success) {
         const list = Array.isArray(borrowedResult.data) ? borrowedResult.data : [];
-        setTopBorrowed(
-          list.map((b, i) => ({
-            rank:            i + 1,
-            title:           b.title  ?? "—",
-            author:          b.author ?? "—",
-            genre:           b.genre  || "—",
-            // FIX 2: full alias chain — SQL now sends borrows, but guard all variants
-            borrowCount:     b.borrows ?? b.borrow_count ?? b.borrowCount ?? 0,
-            totalCopies:     b.total_copies     ?? b.totalCopies     ?? "—",
-            availableCopies: b.available_copies ?? b.availableCopies ?? "—",
-          }))
-        );
+        const corrected = list.map((b, i) => {
+          const extra = booksMap.get(b.id);
+          const rawBorrows = b.borrows ?? 0;
+          if (extra) {
+            return {
+              rank: i + 1,
+              title: b.title ?? "—",
+              author: b.author ?? "—",
+              genre: b.genre || "—",
+              borrowCount: Number(rawBorrows),        // ← direct, no division
+              totalCopies: extra.totalCopies || 0,
+              availableCopies: extra.availableCopies ?? 0,
+              collection: extra.collection,
+            };
+          } else {
+            // Fallback to raw values if book not found in local catalog
+            return {
+              rank: i + 1,
+              title: b.title ?? "—",
+              author: b.author ?? "—",
+              genre: b.genre || "—",
+              borrowCount: Number(rawBorrows),
+              totalCopies: b.totalCopies || 0,
+              availableCopies: b.availableCopies || 0,
+              collection: undefined,
+            };
+          }
+        });
+        setTopBorrowed(corrected);
       } else {
         setTopBorrowedError(borrowedResult.error || "Failed to load top borrowed books");
       }
 
-      // ── Books by Status ──
+      // ── Copies by Status ──
+      // Server now returns per-copy counts: available, borrowed, reserved, unavailable.
       if (statusResult.success) {
         const s = statusResult.data;
-        const available  = s.available  ?? s.Available   ?? 0;
-        const borrowed   = s.borrowed   ?? s.Borrowed    ?? 0;
-        const outOfStock = s.outOfStock ?? s.out_of_stock ?? s.OutOfStock ?? 0;
-        const reserved   = s.reserved   ?? s.Reserved    ?? 0;
+        const available   = Number(s.available   ?? 0);
+        const borrowed    = Number(s.borrowed    ?? 0);
+        const reserved    = Number(s.reserved    ?? 0);
+        const unavailable = Number(s.unavailable ?? 0);
 
         setStatusData([
-          { status: "Available",   count: available,  color: C.green  },
-          { status: "Borrowed",    count: borrowed,   color: C.amber  },
-          ...(reserved > 0 ? [{ status: "Reserved", count: reserved, color: C.indigo }] : []),
-          // FIX 4: store "Out of Stock" (with spaces) everywhere — colour
-          // comparisons in the table rows use this exact string.
-          { status: "Out of Stock", count: outOfStock, color: C.rose  },
+          { status: "Available",   count: available,   color: C.green  },
+          { status: "Borrowed",    count: borrowed,    color: C.amber  },
+          { status: "Reserved",    count: reserved,    color: C.indigo },
+          { status: "Unavailable", count: unavailable, color: C.rose   },
         ].filter(e => e.count > 0));
       } else {
-        // Fallback: derive from full books list
-        if (booksResult.success) {
-          const allBooks = booksResult.data || [];
-          const countByStatus = key =>
-            allBooks.filter(b => (b.display_status || b.status || "").toLowerCase() === key).length;
-          setStatusData([
-            { status: "Available",    count: countByStatus("available"),  color: C.green },
-            { status: "Borrowed",     count: countByStatus("borrowed"),   color: C.amber },
-            { status: "Out of Stock", count: countByStatus("outofstock") + countByStatus("out_of_stock"), color: C.rose },
-          ].filter(e => e.count > 0));
-        }
         setStatusError(statusResult.error || "Failed to load status data");
       }
 
@@ -772,7 +791,13 @@ export default function BookDashboard() {
             status:          normalizeStatus(b.display_status || b.status || "Available"),
           }));
         setLowStock(lowStockBooks);
-      }
+       } else {
+         setGenreData([]);
+         setCollectionData([]);
+         setNewArrivals([]);
+         setLowStock([]);
+         // Do NOT clear statusData — it comes from statusResult, independent of booksResult
+       }
     } catch (err) {
       // FIX 7: surface network/parse errors instead of leaving spinners frozen
       console.error("[BookDashboard] fetchAllData error:", err);
@@ -837,13 +862,19 @@ export default function BookDashboard() {
   return (
     <main style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {showLowStockModal    && <LowStockModal    onClose={() => setShowLowStockModal(false)} />}
-      {showTopBorrowedModal && <TopBorrowedModal onClose={() => setShowTopBorrowedModal(false)} />}
+      {showTopBorrowedModal && (
+        <TopBorrowedModal
+          onClose={() => setShowTopBorrowedModal(false)}
+          data={topBorrowed}
+          loading={topBorrowedLoading}
+        />
+      )}
 
       {/* ── Page Header + Inline Filters ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 7 }}>
-            <BookOpen size={17} color={C.amber} /> Library Book Dashboard
+            <BookOpen size={17} color={C.amber} /> NEMCO Library Book Dashboard
           </h1>
           <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>
             Monitor library catalog, circulation, and inventory
@@ -929,8 +960,8 @@ export default function BookDashboard() {
           </div>
         </SCard>
 
-        {/* Books by Status — donut */}
-        <SCard title="Books by Status">
+        {/* Copies by Status — donut */}
+        <SCard title="Copies by Status">
           <div style={{ height: 200, position: "relative" }}>
             {statusLoading ? (
               <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 12 }}>
@@ -943,22 +974,22 @@ export default function BookDashboard() {
               </div>
             ) : (
               <>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={statusData} dataKey="count" nameKey="status"
-                      cx="50%" cy="50%" innerRadius={45} outerRadius={75}
-                      paddingAngle={4} stroke="var(--bg-surface)" strokeWidth={2}
-                    >
-                      {statusData.map((entry, i) => <Cell key={`cell-${i}`} fill={entry.color} />)}
-                    </Pie>
-                    <Tooltip content={<ChartTip />} />
-                  </PieChart>
-                </ResponsiveContainer>
+                 <ResponsiveContainer width="100%" height="100%">
+                   <PieChart>
+                     <Pie
+                       data={statusData} dataKey="count" nameKey="status"
+                       cx="50%" cy="50%" innerRadius={45} outerRadius={75}
+                       paddingAngle={4} stroke="var(--bg-surface)" strokeWidth={2}
+                     >
+                       {statusData.map((entry, i) => <Cell key={`cell-${i}`} fill={entry.color} />)}
+                     </Pie>
+                     <Tooltip content={<PieTooltip />} />
+                   </PieChart>
+                 </ResponsiveContainer>
                 <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
-                  <p style={{ margin: 0, fontSize: 10, color: "var(--text-muted)" }}>Total</p>
+                  <p style={{ margin: 0, fontSize: 10, color: "var(--text-muted)" }}>Copies</p>
                   <p style={{ margin: "1px 0 0", fontSize: 16, fontWeight: 800, color: "var(--text-primary)" }}>
-                    {formatNum(kpi?.totalBooks)}
+                    {formatNum(kpi?.totalCopies)}
                   </p>
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center", marginTop: 8 }}>
