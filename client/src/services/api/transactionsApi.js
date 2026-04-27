@@ -14,19 +14,16 @@ const API_BASE = import.meta.env.VITE_API_URL || "/api";
 export async function fetchTransactions(options = {}) {
   try {
     const params = new URLSearchParams();
-    
-    if (options.status) {
-      params.append("status", options.status);
-    }
+    if (options.status) params.append("status", options.status);
 
     const queryString = params.toString();
-    const url = queryString 
-      ? `${API_BASE}/transactions?${queryString}` 
+    const url = queryString
+      ? `${API_BASE}/transactions?${queryString}`
       : `${API_BASE}/transactions`;
 
-    const response = await fetch(url);
+    const response = await fetch(url, { credentials: "include" });
     const data = await response.json();
-    
+
     return data;
   } catch (error) {
     console.error("[TransactionsAPI] Error fetching transactions:", error);
@@ -41,9 +38,8 @@ export async function fetchTransactions(options = {}) {
  */
 export async function fetchTransactionById(id) {
   try {
-    const response = await fetch(`${API_BASE}/transactions/${id}`);
+    const response = await fetch(`${API_BASE}/transactions/${id}`, { credentials: "include" });
     const data = await response.json();
-    
     return data;
   } catch (error) {
     console.error("[TransactionsAPI] Error fetching transaction:", error);
@@ -60,18 +56,16 @@ export async function createTransaction(transactionData) {
   try {
     const response = await fetch(`${API_BASE}/transactions`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(transactionData),
     });
-    
-    const result = await response.json();
-    return result;
+    return await response.json();
   } catch (error) {
     console.error("[TransactionsAPI] Error creating transaction:", error);
     return { success: false, error: error.message };
   }
+}
 }
 
 /**
@@ -84,14 +78,11 @@ export async function returnBook(id, returnData = {}) {
   try {
     const response = await fetch(`${API_BASE}/transactions/${id}/return`, {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(returnData),
     });
-    
-    const result = await response.json();
-    return result;
+    return await response.json();
   } catch (error) {
     console.error("[TransactionsAPI] Error returning book:", error);
     return { success: false, error: error.message };
@@ -107,10 +98,9 @@ export async function deleteTransaction(id) {
   try {
     const response = await fetch(`${API_BASE}/transactions/${id}`, {
       method: "DELETE",
+      credentials: "include",
     });
-    
-    const result = await response.json();
-    return result;
+    return await response.json();
   } catch (error) {
     console.error("[TransactionsAPI] Error deleting transaction:", error);
     return { success: false, error: error.message };
@@ -123,9 +113,8 @@ export async function deleteTransaction(id) {
  */
 export async function getTransactionStats() {
   try {
-    const response = await fetch(`${API_BASE}/transactions/stats`);
+    const response = await fetch(`${API_BASE}/transactions/stats`, { credentials: "include" });
     const data = await response.json();
-    
     return data;
   } catch (error) {
     console.error("[TransactionsAPI] Error fetching stats:", error);

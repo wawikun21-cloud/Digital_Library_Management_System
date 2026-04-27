@@ -186,15 +186,15 @@ async function filter(status, genre) {
       `SELECT b.*,
               COALESCE(cc.total_copies,  b.quantity) AS total_copies,
               COALESCE(cc.avail_copies,  b.quantity) AS available_copies
-       FROM   books b
-       LEFT JOIN (
-         SELECT book_id,
-                COUNT(*)                    AS total_copies,
-                SUM(status = 'Available')   AS avail_copies
-         FROM   book_copies WHERE is_deleted = 0 GROUP BY book_copies
-       ) cc ON cc.book_id = b.id
-       WHERE  ${conditions.join(" AND ")}
-       ORDER  BY b.created_at DESC`,
+        FROM   books b
+        LEFT JOIN (
+          SELECT book_id,
+                 COUNT(*)                    AS total_copies,
+                 SUM(status = 'Available')   AS avail_copies
+          FROM   book_copies WHERE is_deleted = 0 GROUP BY book_id
+        ) cc ON cc.book_id = b.id
+        WHERE  ${conditions.join(" AND ")}
+        ORDER  BY b.created_at DESC`,
       params
     );
     return { success: true, data: rows };
