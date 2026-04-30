@@ -1,37 +1,39 @@
+// ─────────────────────────────────────────────────────────
+//  App.jsx  —  Updated with full RBAC (admin / staff / librarian)
+// ─────────────────────────────────────────────────────────
+
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState, lazy, Suspense } from "react";
 import Layout from "./components/layout/Layout";
 import authApi from "./services/api/authApi";
 import { useLocalStorage } from "./hooks/useLocalStorage";
 import { STORAGE_KEYS } from "./constants/index.js";
+import { ROLES, ROLE_DEFAULT_ROUTES } from "./constants/roles.js";
+import {
+  ProtectedRoute,
+  AdminRoute,
+  AdminOrStaffRoute,
+  CatalogRoute,
+} from "./components/auth/ProtectedRoute.jsx";
 
-// ── Lazy-loaded pages ─────────────────────────────────────────────────────────
-const Dashboard          = lazy(() => import("./pages/Dashboard"));
-const Books              = lazy(() => import("./pages/Books"));
-const Borrowed           = lazy(() => import("./pages/Borrowed"));
-const Attendance         = lazy(() => import("./pages/Attendance"));
-const Students           = lazy(() => import("./pages/Students"));
-const Faculty            = lazy(() => import("./pages/Faculty"));
-const RecentlyDeleted    = lazy(() => import("./pages/RecentlyDeleted"));
-const LexoraBooks        = lazy(() => import("./pages/LexoraBooks"));
-const Login              = lazy(() => import("./pages/Login"));
-const LandingPage        = lazy(() => import("./landing/landingpage"));
-const KioskAttendance    = lazy(() => import("./pages/KioskAttendance"));
-const AuditLog           = lazy(() => import("./pages/AuditLog"));
-const AttendanceDashboard = lazy(() => import("./pages/AttendanceDashboard")); // ← NEW
-const BookDashboard        = lazy(() => import("./pages/BookDashboard"));        // ← NEW
+// ── Lazy-loaded pages ─────────────────────────────────────
+const Dashboard           = lazy(() => import("./pages/Dashboard"));
+const Books               = lazy(() => import("./pages/Books"));
+const Borrowed            = lazy(() => import("./pages/Borrowed"));
+const Attendance          = lazy(() => import("./pages/Attendance"));
+const Students            = lazy(() => import("./pages/Students"));
+const Faculty             = lazy(() => import("./pages/Faculty"));
+const RecentlyDeleted     = lazy(() => import("./pages/RecentlyDeleted"));
+const LexoraBooks         = lazy(() => import("./pages/LexoraBooks"));
+const Login               = lazy(() => import("./pages/Login"));
+const LandingPage         = lazy(() => import("./landing/landingpage"));
+const KioskAttendance     = lazy(() => import("./pages/KioskAttendance"));
+const AuditLog            = lazy(() => import("./pages/AuditLog"));
+const AttendanceDashboard = lazy(() => import("./pages/AttendanceDashboard"));
+const BookDashboard       = lazy(() => import("./pages/BookDashboard"));
+const Unauthorized        = lazy(() => import("./pages/Unauthorized"));
 
-
-// ── Pages each role may access ────────────────────────────────────────────────
-export const STAFF_ALLOWED_PATHS = [
-  "/dashboard/attendance",
-  "/dashboard/students",
-  "/dashboard/faculty",
-  "/dashboard/attendance/kiosk",
-  "/dashboard/attendance/dashboard", // ← NEW
-];
-
-// ── Apply saved theme immediately on first paint ──────────────────────────────
+// ── Apply saved theme on first paint ─────────────────────
 const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
 if (savedTheme) {
   document.documentElement.setAttribute(
@@ -40,15 +42,19 @@ if (savedTheme) {
   );
 }
 
-// ── Loaders ───────────────────────────────────────────────────────────────────
+// ── Loaders ───────────────────────────────────────────────
 function PageLoader() {
   return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
-                  height:"100%", minHeight:"60vh", background:"transparent" }}>
-      <div style={{ width:"32px", height:"32px",
-                    border:"3px solid var(--border-color,#e5e7eb)",
-                    borderTop:"3px solid var(--primary,#6366f1)",
-                    borderRadius:"50%", animation:"spin 0.7s linear infinite" }} />
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "center",
+      height: "100%", minHeight: "60vh", background: "transparent"
+    }}>
+      <div style={{
+        width: "32px", height: "32px",
+        border: "3px solid var(--border-color,#e5e7eb)",
+        borderTop: "3px solid var(--primary,#6366f1)",
+        borderRadius: "50%", animation: "spin 0.7s linear infinite"
+      }} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
@@ -56,12 +62,16 @@ function PageLoader() {
 
 function FullPageLoader() {
   return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
-                  height:"100vh", background:"var(--bg-main,#fff)" }}>
-      <div style={{ width:"32px", height:"32px",
-                    border:"3px solid var(--border-color,#e5e7eb)",
-                    borderTop:"3px solid var(--primary,#6366f1)",
-                    borderRadius:"50%", animation:"spin 0.7s linear infinite" }} />
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "center",
+      height: "100vh", background: "var(--bg-main,#fff)"
+    }}>
+      <div style={{
+        width: "32px", height: "32px",
+        border: "3px solid var(--border-color,#e5e7eb)",
+        borderTop: "3px solid var(--primary,#6366f1)",
+        borderRadius: "50%", animation: "spin 0.7s linear infinite"
+      }} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
@@ -71,42 +81,11 @@ function Page({ children }) {
   return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
 }
 
-// ── ProtectedRoute ────────────────────────────────────────────────────────────
-function ProtectedRoute({ children }) {
-  const [status, setStatus] = useState("checking");
-  const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
-
-  useEffect(() => {
-    authApi.me()
-      .then(() => setStatus("ok"))
-      .catch(() => {
-        sessionStorage.removeItem("lexora_user");
-        localStorage.removeItem(STORAGE_KEYS.LEXORA_USER);
-        setStatus("unauth");
-      });
-  }, []);
-
-  if (status === "checking") return <FullPageLoader />;
-  if (status === "unauth")   return <Navigate to="/login" replace />;
-  return children;
-}
-
-function AdminOnlyRoute({ children }) {
-  const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
-  const role = user?.role ?? "admin";
-  if (role === "staff") return <Navigate to="/dashboard/attendance" replace />;
-  return children;
-}
-
-function StaffBlockedRoute({ children }) {
-  const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
-  const role = user?.role ?? "admin";
-  if (role === "staff") return <Navigate to="/dashboard/attendance" replace />;
-  return children;
-}
-
+// ── LandingRouteGuard ─────────────────────────────────────
+//  Redirects authenticated users to their role-appropriate dashboard.
 function LandingRouteGuard() {
   const [status, setStatus] = useState("checking");
+  const [user]              = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
 
   useEffect(() => {
     authApi.me()
@@ -115,7 +94,13 @@ function LandingRouteGuard() {
   }, []);
 
   if (status === "checking") return null;
-  if (status === "authed")   return <Navigate to="/dashboard" replace />;
+
+  if (status === "authed") {
+    const role     = user?.role ?? ROLES.ADMIN;
+    const fallback = ROLE_DEFAULT_ROUTES[role] ?? "/dashboard";
+    return <Navigate to={fallback} replace />;
+  }
+
   return (
     <Suspense fallback={<FullPageLoader />}>
       <LandingPage />
@@ -123,7 +108,7 @@ function LandingRouteGuard() {
   );
 }
 
-// ── App ───────────────────────────────────────────────────────────────────────
+// ── App ───────────────────────────────────────────────────
 export default function App() {
   const [darkMode, setDarkMode] = useLocalStorage(STORAGE_KEYS.THEME, false);
 
@@ -137,11 +122,12 @@ export default function App() {
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Suspense fallback={<FullPageLoader />}>
         <Routes>
-          {/* Public routes */}
+
+          {/* ── Public ──────────────────────────────────── */}
           <Route path="/"      element={<LandingRouteGuard />} />
           <Route path="/login" element={<Login />} />
 
-          {/* Protected routes */}
+          {/* ── Protected shell ─────────────────────────── */}
           <Route
             path="/dashboard"
             element={
@@ -150,54 +136,77 @@ export default function App() {
               </ProtectedRoute>
             }
           >
+            {/* ── Index: admin → Dashboard, librarian → /books, staff → /attendance */}
             <Route
               index
-              element={
-                <AdminOnlyRoute>
-                  <Page><Dashboard /></Page>
-                </AdminOnlyRoute>
-              }
+              element={<AdminRoute><Page><Dashboard /></Page></AdminRoute>}
             />
 
-            {/* Admin-only pages */}
-            <Route path="books"
-              element={<StaffBlockedRoute><Page><Books /></Page></StaffBlockedRoute>}
-            />
-            <Route path="lexora-books"
-              element={<StaffBlockedRoute><Page><LexoraBooks /></Page></StaffBlockedRoute>}
-            />
-            <Route path="borrowed"
-              element={<StaffBlockedRoute><Page><Borrowed /></Page></StaffBlockedRoute>}
-            />
-            <Route path="deleted"
-              element={<StaffBlockedRoute><Page><RecentlyDeleted /></Page></StaffBlockedRoute>}
-            />
-            <Route path="audit-log"
-              element={<StaffBlockedRoute><Page><AuditLog /></Page></StaffBlockedRoute>}
-            />
-
-            {/* Shared pages (admin + staff) */}
-            <Route path="attendance"              element={<Page><Attendance /></Page>} />
-            <Route path="students"                element={<Page><Students /></Page>} />
-            <Route path="faculty"                 element={<Page><Faculty /></Page>} />
-            <Route path="attendance/kiosk"        element={<Page><KioskAttendance /></Page>} />
-
-            {/* ── NEW: Library Attendance Dashboard ── */}
+            {/* ── Catalog routes: admin + librarian ──────── */}
             <Route
-              path="attendance/dashboard"
-              element={<Page><AttendanceDashboard /></Page>}
+              path="books"
+              element={<CatalogRoute><Page><Books /></Page></CatalogRoute>}
+            />
+            <Route
+              path="lexora-books"
+              element={<CatalogRoute><Page><LexoraBooks /></Page></CatalogRoute>}
             />
 
-            {/* ── Library Book Dashboard ── */}
+            {/* ── Book Dashboard: admin only ──────────────── */}
             <Route
               path="books/dashboard"
-              element={<Page><BookDashboard /></Page>}
+              element={<AdminRoute><Page><BookDashboard /></Page></AdminRoute>}
+            />
+
+            {/* ── Admin-only pages ────────────────────────── */}
+            <Route
+              path="borrowed"
+              element={<AdminRoute><Page><Borrowed /></Page></AdminRoute>}
+            />
+            <Route
+              path="deleted"
+              element={<AdminRoute><Page><RecentlyDeleted /></Page></AdminRoute>}
+            />
+            <Route
+              path="audit-log"
+              element={<AdminRoute><Page><AuditLog /></Page></AdminRoute>}
+            />
+
+            {/* ── Attendance dashboard: admin only ─────────── */}
+            <Route
+              path="attendance/dashboard"
+              element={<AdminRoute><Page><AttendanceDashboard /></Page></AdminRoute>}
+            />
+
+            {/* ── Admin + Staff pages ──────────────────────── */}
+            <Route
+              path="attendance"
+              element={<AdminOrStaffRoute><Page><Attendance /></Page></AdminOrStaffRoute>}
+            />
+            <Route
+              path="attendance/kiosk"
+              element={<AdminOrStaffRoute><Page><KioskAttendance /></Page></AdminOrStaffRoute>}
+            />
+            <Route
+              path="students"
+              element={<AdminOrStaffRoute><Page><Students /></Page></AdminOrStaffRoute>}
+            />
+            <Route
+              path="faculty"
+              element={<AdminOrStaffRoute><Page><Faculty /></Page></AdminOrStaffRoute>}
+            />
+
+            {/* ── Unauthorized fallback inside layout ──────── */}
+            <Route
+              path="unauthorized"
+              element={<Page><Unauthorized /></Page>}
             />
 
           </Route>
 
-          {/* Catch-all */}
+          {/* ── Catch-all ────────────────────────────────── */}
           <Route path="*" element={<Navigate to="/" replace />} />
+
         </Routes>
       </Suspense>
     </BrowserRouter>

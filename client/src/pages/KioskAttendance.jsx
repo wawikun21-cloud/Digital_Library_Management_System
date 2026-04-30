@@ -2,12 +2,10 @@
 //  pages/KioskAttendance.jsx
 //  Library Attendance Kiosk — full-screen display view.
 //
-//  RFID-only mode:
-//  • Admin presses "Activate RFID Detection" to start listening
-//  • Once ON, the hidden input auto-focuses and captures every
-//    RFID scan (hardware scanners emit as keyboard input + Enter)
-//  • Detection stays ON indefinitely until admin clicks "Deactivate"
-//  • No manual typing UI for students — tap only
+//  RFID-always-on mode:
+//  • RFID detection is active immediately on page load
+//  • Hidden input auto-focuses on mount and after every click
+//  • Hardware scanners emit as keyboard input + Enter
 //  • 1st tap = Check In | 2nd tap = Check Out
 //  • Animated result card flies in on every tap
 //  • Active-students grid with live duration timers
@@ -20,7 +18,7 @@ import { io } from "socket.io-client";
 import {
   LogIn, LogOut, Clock, Users, Wifi, WifiOff,
   AlertTriangle, CheckCircle2,
-  Maximize2, Minimize2, Power, PowerOff, ShieldCheck,
+  Maximize2, Minimize2,
 } from "lucide-react";
 
 // ─── Helpers ─────────────────────────────────────────────
@@ -59,36 +57,15 @@ function fmtElapsed(seconds) {
   return `${pad(m)}:${pad(s)}`;
 }
 
-// ─── FIX 1: parseAsUTC → parseTimestamp ──────────────────
-//
-// PROBLEM: The old `parseAsUTC` unconditionally appended "Z" to any
-// string without a timezone suffix, forcing UTC interpretation.
-// MySQL TIMESTAMP/DATETIME columns are typically stored and returned
-// in the *server's local timezone* (e.g. PHT = UTC+8), NOT in UTC.
-// Appending "Z" made every timestamp appear 8 hours in the past,
-// causing two visible bugs:
-//
-//   a) "in at" display was 8 h off  (e.g. 08:30 shown as 00:30)
-//   b) useElapsed() calculated a NEGATIVE initial elapsed value
-//      (Date.now() minus a future UTC-misread time = negative),
-//      which Math.max(0, ...) clamped to 0 — so every card started
-//      its timer at 00:00 on each poll/re-mount instead of showing
-//      the real time already spent.
-//
-// FIX: Treat strings without an explicit timezone offset as LOCAL
+// ─── parseTimestamp ───────────────────────────────────────
+// Treats strings without an explicit timezone offset as LOCAL
 // time by replacing the space separator with "T" but NOT appending
 // "Z". The browser then parses them as local time, matching the
 // server's timezone.
-//
-// If your MySQL server is configured to return UTC timestamps
-// (e.g. via `SET time_zone = '+00:00'`), re-add the "Z" suffix.
-// The key is to match whatever timezone the DB column actually uses.
 function parseTimestamp(dt) {
   if (!dt) return new Date();
   const s = String(dt);
-  // Already has explicit tz info — parse as-is.
   if (s.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(s)) return new Date(s);
-  // No tz info → treat as local time (server local tz).
   return new Date(s.replace(" ", "T"));
 }
 
@@ -133,38 +110,13 @@ function useFullscreen(ref) {
   return { isFullscreen, toggle };
 }
 
-// ─── FIX 2: useElapsed — stable elapsed calculation ──────
-//
-// PROBLEM (original):
-//   const [elapsed, setElapsed] = useState(() =>
-//     Math.max(0, Math.floor((Date.now() - parseAsUTC(checkInTime).getTime()) / 1000))
-//   );
-//
-// There were TWO issues here:
-//
-// a) The useState lazy initializer only runs ONCE (on mount). When
-//    the parent re-renders with a *different* checkInTime prop
-//    (e.g. after the 10-second active-poll refreshes the list),
-//    the initial state is NOT recalculated — the timer appears to
-//    reset to whatever it was on first render and then continues
-//    ticking from that stale baseline.
-//
-//    FIX: Derive the base timestamp into a ref so the interval
-//    always reads the latest parsed value without needing to
-//    restart the effect.
-//
-// b) parseAsUTC (now parseTimestamp) was misreading local timestamps
-//    as UTC, making `Date.now() - checkInMs` negative. Math.max
-//    clamped this to 0, so every card showed 00:00 on render and
-//    only started ticking *forward* from 0 — losing all accrued time.
-//
-//    FIX: parseTimestamp now correctly interprets local timestamps.
+// ─── useElapsed — stable elapsed calculation ──────────────
+// Derives the base timestamp into a ref so the interval always
+// reads the latest parsed value without needing to restart the
+// effect when checkInTime changes after a poll refresh.
 function useElapsed(checkInTime) {
-  // Keep a ref to the parsed check-in ms so the interval closure
-  // always sees the latest value without restarting.
   const checkInMsRef = useRef(parseTimestamp(checkInTime).getTime());
 
-  // Update the ref whenever checkInTime changes (e.g. after a poll).
   useEffect(() => {
     checkInMsRef.current = parseTimestamp(checkInTime).getTime();
   }, [checkInTime]);
@@ -177,11 +129,10 @@ function useElapsed(checkInTime) {
   const [elapsed, setElapsed] = useState(calcElapsed);
 
   useEffect(() => {
-    // Recalculate immediately when checkInTime changes.
     setElapsed(calcElapsed());
     const t = setInterval(() => setElapsed(calcElapsed()), 1000);
     return () => clearInterval(t);
-  }, [checkInTime, calcElapsed]); // re-subscribe when the prop changes
+  }, [checkInTime, calcElapsed]);
 
   return elapsed;
 }
@@ -221,23 +172,13 @@ function LiveTimer({ checkInTime }) {
   );
 }
 
-// ─── FIX 3: StudentCard — stable animation on re-renders ─
-//
-// PROBLEM: `animationDelay: \`${index * 40}ms\`` caused every card
-// to re-animate its fly-in whenever the parent re-rendered (e.g.
-// every 10-second poll), because React reconciles by key and
-// the index prop can shift when students check in/out, triggering
-// a fresh mount with a new delay. This made cards "flash" on
-// every background refresh.
-//
-// FIX: Gate the entry animation with a ref so it only fires once
-// per card mount, not on every prop update. Cards that are already
-// visible don't re-animate when the active list refreshes.
+// StudentCard — stable animation on re-renders.
+// Gates the entry animation with a ref so it only fires once
+// per card mount, not on every prop update from the poll refresh.
 function StudentCard({ record, index }) {
   const fullName = getFullName(record) || record.student_name;
   const [, accent] = avatarColors(fullName);
 
-  // Only animate on the very first render of this card instance.
   const animatedRef = useRef(false);
   const animationStyle = animatedRef.current
     ? {}
@@ -245,7 +186,6 @@ function StudentCard({ record, index }) {
         animation: `cardIn 0.4s cubic-bezier(.34,1.4,.64,1) both`,
         animationDelay: `${index * 40}ms`,
       };
-  // Mark as animated after first paint.
   useEffect(() => { animatedRef.current = true; }, []);
 
   return (
@@ -538,30 +478,20 @@ function NotFoundBanner({ studentId, onDone }) {
 
 // ─── Main Kiosk Page ──────────────────────────────────────
 export default function KioskAttendance() {
-  const now          = useLiveClock();
-  const [active, setActive]           = useState([]);
-  const [tapResult, setTapResult]     = useState(null);
-  const [notFound, setNotFound]       = useState(null);
-  const [unregistered, setUnregistered] = useState(null);
-  const [online, setOnline]           = useState(navigator.onLine);
+  const now = useLiveClock();
+  const [active, setActive]               = useState([]);
+  const [tapResult, setTapResult]         = useState(null);
+  const [notFound, setNotFound]           = useState(null);
+  const [unregistered, setUnregistered]   = useState(null);
+  const [online, setOnline]               = useState(navigator.onLine);
+  const [processing, setProcessing]       = useState(false);
 
-  // ── Persist rfidActive in sessionStorage so it survives navigation ──
-  // sessionStorage clears when the tab is closed (correct kiosk behaviour),
-  // but keeps the value when the user navigates to another page and back.
-  const [rfidActive, setRfidActive]   = useState(
-    () => sessionStorage.getItem("kiosk_rfid_active") === "true"
-  );
-
-  const [processing, setProcessing]   = useState(false);
   const rfidBufferRef = useRef("");
   const rfidInputRef  = useRef(null);
   const containerRef  = useRef(null);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(containerRef);
 
   // ── Fetch active students (HTTP) ─────────────────────
-  // Called on mount and as a safety fallback every 60 s.
-  // In normal operation the WS listener below keeps the list
-  // current without polling at all.
   const fetchActive = useCallback(async () => {
     try {
       const res = await getActiveAttendance();
@@ -572,23 +502,9 @@ export default function KioskAttendance() {
   }, []);
 
   // ── Real-time active-list sync via Socket.io ──────────
-  //
-  // The server broadcasts "attendance:update" on every tap so the
-  // kiosk active-student grid updates the instant a student checks
-  // in or out — no polling delay, no flicker.
-  //
-  // Event payload: { action: "checked_in"|"checked_out", data: <record> }
-  //
-  //   checked_in  → prepend to active list (duplicate-safe)
-  //   checked_out → remove from active list by id
-  //
-  // A 60 s safety-fallback poll runs in parallel so the grid
-  // self-heals if the WS connection drops briefly.
   useEffect(() => {
-    // Initial load
     fetchActive();
 
-    // WS connection — mirrors useWebsocket.js settings
     const WS_URL = import.meta.env.VITE_WS_URL || window.location.origin;
     const socket = io(WS_URL, {
       path:                 "/socket.io",
@@ -598,10 +514,6 @@ export default function KioskAttendance() {
       reconnectionAttempts: 10,
     });
 
-    // Shared handler — called by BOTH event names so that:
-    //   • taps from THIS browser  → "attendance:update" (from attendanceController)
-    //   • taps from RFID hardware → "attendance:update" (now also from rfidController)
-    //   • "rfid:tap"              → kept as alias for backwards compatibility
     const applyAttendanceUpdate = ({ action, data }) => {
       if (!data?.id) return;
       if (action === "checked_in") {
@@ -614,10 +526,8 @@ export default function KioskAttendance() {
     };
 
     socket.on("attendance:update", applyAttendanceUpdate);
-    // rfid:tap carries { action, data, rfid_code } — same shape after destructuring
     socket.on("rfid:tap",         applyAttendanceUpdate);
 
-    // 60 s safety fallback — self-heals if a WS event is missed
     const fallback = setInterval(fetchActive, 60_000);
 
     return () => {
@@ -638,21 +548,19 @@ export default function KioskAttendance() {
     };
   }, []);
 
-  // ── Auto-focus hidden input when RFID is active ───────
+  // ── Auto-focus hidden input on mount ──────────────────
   useEffect(() => {
-    if (rfidActive) {
-      rfidInputRef.current?.focus();
-    }
-  }, [rfidActive]);
+    rfidInputRef.current?.focus();
+  }, []);
 
+  // ── Maintain focus on any click ───────────────────────
   useEffect(() => {
-    if (!rfidActive) return;
     const handler = () => {
       setTimeout(() => rfidInputRef.current?.focus(), 100);
     };
     document.addEventListener("click", handler);
     return () => document.removeEventListener("click", handler);
-  }, [rfidActive]);
+  }, []);
 
   // ── Core RFID tap handler ─────────────────────────────
   const handleRfidTap = useCallback(async (rfidCode) => {
@@ -666,13 +574,8 @@ export default function KioskAttendance() {
       } else if (res.success) {
         setTapResult(res);
 
-        // ── Optimistic update — no waiting for WS round-trip ──────────
-        // Apply the active-list change IMMEDIATELY from the HTTP response
-        // data so the student card appears at the same time as the TapCard
-        // toast, not after an extra network round-trip.
-        //
-        // The WS "attendance:update" event will arrive shortly after and
-        // the duplicate guard (prev.some r.id === data.id) silently no-ops.
+        // Optimistic update — apply immediately from HTTP response,
+        // WS round-trip duplicate guard will silently no-op when it arrives.
         if (res.action === "checked_in" && res.data?.id) {
           setActive(prev =>
             prev.some(r => r.id === res.data.id)
@@ -691,11 +594,10 @@ export default function KioskAttendance() {
       setProcessing(false);
       setTimeout(() => rfidInputRef.current?.focus(), 50);
     }
-  }, [processing, fetchActive]);
+  }, [processing]);
 
+  // ── RFID keydown — always processes input ─────────────
   const handleRfidKeyDown = useCallback((e) => {
-    if (!rfidActive) return;
-
     if (e.key === "Enter") {
       const code = rfidBufferRef.current.trim();
       rfidBufferRef.current = "";
@@ -704,20 +606,7 @@ export default function KioskAttendance() {
       rfidBufferRef.current += e.key;
     }
     e.preventDefault();
-  }, [rfidActive, handleRfidTap]);
-
-  // ── Save rfidActive to sessionStorage on every toggle ──
-  const toggleRfid = useCallback(() => {
-    setRfidActive((prev) => {
-      const next = !prev;
-      sessionStorage.setItem("kiosk_rfid_active", String(next));
-      if (next) {
-        rfidBufferRef.current = "";
-        setTimeout(() => rfidInputRef.current?.focus(), 50);
-      }
-      return next;
-    });
-  }, []);
+  }, [handleRfidTap]);
 
   const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
@@ -732,14 +621,14 @@ export default function KioskAttendance() {
       position: "relative", overflow: "hidden",
     }}>
 
-      {/* ── Hidden RFID capture input ─── */}
+      {/* ── Hidden RFID capture input — always active ─── */}
       <input
         ref={rfidInputRef}
         onKeyDown={handleRfidKeyDown}
         onChange={() => {}}
         value=""
         readOnly
-        tabIndex={rfidActive ? 0 : -1}
+        tabIndex={0}
         aria-hidden="true"
         style={{
           position: "fixed",
@@ -831,6 +720,25 @@ export default function KioskAttendance() {
             }
           </div>
 
+          {/* RFID always-active indicator */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "6px 12px", borderRadius: 20,
+            background: "rgba(52,211,153,0.1)",
+            border: "1px solid rgba(52,211,153,0.25)",
+          }}>
+            <div style={{
+              width: 7, height: 7, borderRadius: "50%",
+              background: "#34d399",
+              boxShadow: "0 0 0 3px rgba(52,211,153,0.2)",
+              animation: "pulse 1.5s ease-in-out infinite",
+            }} />
+            {processing
+              ? <span style={{ fontSize: 11, color: "#34d399", fontWeight: 600 }}>Processing…</span>
+              : <span style={{ fontSize: 11, color: "#34d399", fontWeight: 600 }}>RFID Ready</span>
+            }
+          </div>
+
           <div style={{
             display: "flex", alignItems: "center", gap: 6,
             padding: "6px 14px", borderRadius: 20,
@@ -858,147 +766,12 @@ export default function KioskAttendance() {
         </div>
       </header>
 
-      {/* ── Main body ───────────────────────────────────── */}
+      {/* ── Main body — full-width active students grid ── */}
       <main style={{
         position: "relative", zIndex: 10,
-        flex: 1, display: "flex", gap: 0,
+        flex: 1, display: "flex",
         overflow: "hidden",
       }}>
-
-        {/* ── Left panel: RFID activation ────────────────── */}
-        <div style={{
-          width: 340, flexShrink: 0,
-          borderRight: "1px solid rgba(255,255,255,0.05)",
-          display: "flex", flexDirection: "column",
-          padding: "36px 28px",
-          gap: 28,
-          background: "rgba(255,255,255,0.015)",
-          backdropFilter: "blur(8px)",
-        }}>
-
-          <div style={{ textAlign: "center" }}>
-            <div style={{
-              width: 72, height: 72, borderRadius: 24, margin: "0 auto 18px",
-              background: rfidActive
-                ? "linear-gradient(135deg, rgba(52,211,153,0.2), rgba(52,211,153,0.05))"
-                : "linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
-              border: `1.5px solid ${rfidActive ? "rgba(52,211,153,0.4)" : "rgba(255,255,255,0.1)"}`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              transition: "all 0.4s",
-              boxShadow: rfidActive ? "0 0 32px rgba(52,211,153,0.15)" : "none",
-            }}>
-              {rfidActive
-                ? <ShieldCheck size={32} color="#34d399" />
-                : <PowerOff size={32} color="#475569" />
-              }
-            </div>
-
-            <h2 style={{
-              margin: 0, fontSize: 18, fontWeight: 800,
-              color: rfidActive ? "#34d399" : "#94a3b8",
-              letterSpacing: "-0.5px",
-              transition: "color 0.3s",
-            }}>
-              {rfidActive ? "RFID Active" : "RFID Inactive"}
-            </h2>
-
-            <p style={{ margin: "8px 0 0", fontSize: 12, color: "#64748b", lineHeight: 1.6 }}>
-              {rfidActive
-                ? "Scanner is listening. Tap your RFID card on the reader to check in or out."
-                : "Tap the button below to activate RFID card detection."
-              }
-            </p>
-          </div>
-
-          <button
-            onClick={toggleRfid}
-            style={{
-              width: "100%",
-              padding: "16px",
-              fontSize: 14, fontWeight: 800, letterSpacing: "0.5px",
-              textTransform: "uppercase",
-              background: rfidActive
-                ? "linear-gradient(135deg, #ef4444, #dc2626)"
-                : "linear-gradient(135deg, #34d399, #10b981)",
-              color: "#fff",
-              border: "none", borderRadius: 14, cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-              transition: "all 0.25s",
-              boxShadow: rfidActive
-                ? "0 4px 20px rgba(239,68,68,0.35)"
-                : "0 4px 20px rgba(52,211,153,0.35)",
-            }}
-          >
-            {rfidActive
-              ? <><PowerOff size={18} /> Deactivate RFID</>
-              : <><Power size={18} /> Activate RFID Detection</>
-            }
-          </button>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "12px 14px", borderRadius: 12,
-              background: rfidActive ? "rgba(52,211,153,0.06)" : "rgba(255,255,255,0.03)",
-              border: `1px solid ${rfidActive ? "rgba(52,211,153,0.2)" : "rgba(255,255,255,0.07)"}`,
-              transition: "all 0.3s",
-            }}>
-              <div style={{
-                width: 8, height: 8, borderRadius: "50%",
-                background: rfidActive ? "#34d399" : "#334155",
-                boxShadow: rfidActive ? "0 0 0 3px rgba(52,211,153,0.2)" : "none",
-                animation: rfidActive ? "pulse 1.5s ease-in-out infinite" : "none",
-              }} />
-              <span style={{ fontSize: 12, fontWeight: 600, color: rfidActive ? "#34d399" : "#475569" }}>
-                {rfidActive ? "Listening for RFID taps…" : "Not listening"}
-              </span>
-              {processing && (
-                <div style={{
-                  marginLeft: "auto",
-                  width: 14, height: 14, borderRadius: "50%",
-                  border: "2px solid rgba(255,255,255,0.2)",
-                  borderTopColor: "#34d399",
-                  animation: "spin 0.7s linear infinite",
-                }} />
-              )}
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {[
-                { color: "#34d399", label: "1st Tap", desc: "→ Check In" },
-                { color: "#f59e0b", label: "2nd Tap", desc: "→ Check Out" },
-              ].map(({ color, label, desc }) => (
-                <div key={label} style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  padding: "10px 12px", borderRadius: 10,
-                  background: `${color}0d`, border: `1px solid ${color}22`,
-                }}>
-                  <div style={{
-                    width: 8, height: 8, borderRadius: "50%",
-                    background: color, flexShrink: 0,
-                  }} />
-                  <span style={{ fontSize: 11, fontWeight: 700, color, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    {label}
-                  </span>
-                  <span style={{ fontSize: 11, color: "#64748b" }}>{desc}</span>
-                </div>
-              ))}
-            </div>
-
-            <div style={{
-              padding: "10px 14px", borderRadius: 10,
-              background: "rgba(99,102,241,0.06)",
-              border: "1px solid rgba(99,102,241,0.15)",
-            }}>
-              <p style={{ margin: 0, fontSize: 10, color: "#818cf8", lineHeight: 1.5 }}>
-                <strong>Admin:</strong> Detection stays ON until you click Deactivate.
-                Register new RFID cards from the Attendance page.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Right: Active students grid ─────────────────── */}
         <div style={{
           flex: 1, overflow: "hidden",
           display: "flex", flexDirection: "column",

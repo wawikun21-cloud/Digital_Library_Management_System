@@ -28,6 +28,7 @@ import StatsCard from "../components/StatsCard";
 import Toast from "../components/Toast";
 import useDebounce from "../hooks/useDebounce";
 import { useWebSocket } from "../hooks/useWebsocket";
+import Pagination from "../components/books/Pagination";
 
 const pad = (n) => String(n).padStart(2, "0");
 
@@ -1000,6 +1001,8 @@ export default function Attendance() {
   const [tapResult,   setTapResult]   = useState(null);
   const [studentInfo, setStudentInfo] = useState(null);
   const [lookingUp,   setLookingUp]   = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 25;
   const debouncedId     = useDebounce(idInput,  400);
   const debouncedSearch = useDebounce(fSearch,  300);
   const inputRef = useRef(null);
@@ -1159,16 +1162,26 @@ export default function Attendance() {
     [records]
   );
 
-  const filtered = useMemo(() => {
-    const q = debouncedSearch.toLowerCase().trim();
-    return records.filter((r) => {
-      if (q && !r.student_name.toLowerCase().includes(q) && !r.student_id_number.toLowerCase().includes(q)) return false;
-      if (fCourse  && r.student_course !== fCourse)                                         return false;
-      if (fDate    && new Date(r.check_in_time).toISOString().slice(0, 10) !== fDate)       return false;
-      if (fStatus !== "all" && r.status !== fStatus)                                        return false;
-      return true;
-    });
-  }, [records, debouncedSearch, fCourse, fDate, fStatus]);
+   const filtered = useMemo(() => {
+     const q = debouncedSearch.toLowerCase().trim();
+     return records.filter((r) => {
+       if (q && !r.student_name.toLowerCase().includes(q) && !r.student_id_number.toLowerCase().includes(q)) return false;
+       if (fCourse  && r.student_course !== fCourse)                                         return false;
+       if (fDate    && new Date(r.check_in_time).toISOString().slice(0, 10) !== fDate)       return false;
+       if (fStatus !== "all" && r.status !== fStatus)                                        return false;
+       return true;
+     });
+   }, [records, debouncedSearch, fCourse, fDate, fStatus]);
+
+   // Reset to first page when filters change
+   useEffect(() => {
+     setCurrentPage(1);
+   }, [debouncedSearch, fCourse, fDate, fStatus]);
+
+   const paginatedFiltered = useMemo(() => {
+     const startIndex = (currentPage - 1) * PAGE_SIZE;
+     return filtered.slice(startIndex, startIndex + PAGE_SIZE);
+   }, [filtered, currentPage, PAGE_SIZE]);
 
   const hasFilters   = fSearch || fCourse || fDate || fStatus !== "all";
   const clearFilters = () => { setFSearch(""); setFCourse(""); setFDate(""); setFStatus("all"); };
@@ -1415,19 +1428,20 @@ export default function Attendance() {
 
       {/* ── Attendance History ────────────────────────── */}
       <div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4"
-          style={{ borderBottom: "1px solid var(--border-light)" }}>
-          <div className="flex items-center gap-2">
-            <FileText size={14} style={{ color: "var(--accent-amber)" }} />
-            <span className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>
-              Attendance History
-            </span>
-            {hasFilters && (
-              <span className="text-[12px]" style={{ color: "var(--text-secondary)" }}>
-                — {filtered.length} of {records.length} records
-              </span>
-            )}
-          </div>
+       <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4"
+        style={{ borderBottom: "1px solid var(--border-light)" }}>
+       <div className="flex items-center gap-2">
+         <FileText size={14} style={{ color: "var(--accent-amber)" }} />
+         <span className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>
+           Attendance History
+         </span>
+         {hasFilters && (
+           <span className="text-[12px]" style={{ color: "var(--text-secondary)" }}>
+             — {filtered.length} of {records.length} records
+           </span>
+         )}
+       </div>
+        <div className="flex items-center gap-2">
           {hasFilters && (
             <button
               onClick={clearFilters}
@@ -1438,6 +1452,7 @@ export default function Attendance() {
             </button>
           )}
         </div>
+     </div>
 
         <div className="flex flex-wrap gap-2.5 p-5"
           style={{ borderBottom: "1px solid var(--border-light)", background: "var(--bg-subtle)" }}>
@@ -1484,15 +1499,24 @@ export default function Attendance() {
           </FilterField>
         </div>
 
-        <AttendanceTable
-          data={filtered}
-          loading={isLoading}
-          hasFilters={hasFilters}
-          totalRecords={records.length}
-          onRowClick={setSelectedRecord}
-          onClearFilters={clearFilters}
-          onDelete={handleDelete}
-        />
+          <AttendanceTable
+            data={paginatedFiltered}
+            loading={isLoading}
+            hasFilters={hasFilters}
+            totalRecords={records.length}
+            onRowClick={setSelectedRecord}
+            onClearFilters={clearFilters}
+            onDelete={handleDelete}
+          />
+          {(hasFilters || filtered.length > PAGE_SIZE) && (
+            <div className="flex justify-end mt-4">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}
+                setCurrentPage={setCurrentPage}
+              />
+            </div>
+          )}
       </div>
 
       {/* ── Modals ────────────────────────────────────── */}

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import authApi from "../services/api/authApi";
+import { ROLES, ROLE_DEFAULT_ROUTES } from "../constants/roles.js";
 
 /**
  * Login Page
@@ -55,7 +56,10 @@ export default function Login() {
         // Mark the entry as session-only so logout can clean it up correctly.
         sessionStorage.setItem("lexora_remember", "false");
       }
-      navigate("/dashboard", { replace: true });
+      // Role-based post-login redirect
+      const role    = user?.role ?? ROLES.ADMIN;
+      const landing = ROLE_DEFAULT_ROUTES[role] ?? "/dashboard";
+      navigate(landing, { replace: true });
     } catch (err) {
       setError(err.message || "Login failed. Please try again.");
     } finally {

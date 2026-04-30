@@ -32,8 +32,8 @@ import {
   fetchBooksByStatus,
 } from "../services/api/analyticsApi";
 import { fetchBooks } from "../services/api/booksApi";
-import { useWebSocket } from "../hooks/useWebsocket";
-import { useDebounce } from "../hooks/useDebounce";
+ import { useWebSocket } from "../hooks/useWebsocket";
+ import useDebounce from "../hooks/useDebounce";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer,
