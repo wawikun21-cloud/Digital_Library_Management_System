@@ -484,11 +484,13 @@ export default function KioskAttendance() {
   const [notFound, setNotFound]           = useState(null);
   const [unregistered, setUnregistered]   = useState(null);
   const [online, setOnline]               = useState(navigator.onLine);
-  const [processing, setProcessing]       = useState(false);
+const [processing, setProcessing]               = useState(false);
+  const [nextScanIn, setNextScanIn]              = useState(0);
 
-  const rfidBufferRef = useRef("");
-  const rfidInputRef  = useRef(null);
-  const containerRef  = useRef(null);
+  const rfidBufferRef    = useRef("");
+  const rfidInputRef     = useRef(null);
+  const containerRef     = useRef(null);
+  const lastSuccessTime  = useRef(0);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(containerRef);
 
   // ── Fetch active students (HTTP) ─────────────────────
@@ -553,6 +555,20 @@ export default function KioskAttendance() {
     rfidInputRef.current?.focus();
   }, []);
 
+// ── Countdown timer for next scan ─────────────────────
+  useEffect(() => {
+    if (nextScanIn <= 0) return;
+
+    const interval = setInterval(() => {
+      setNextScanIn(prev => {
+        if (prev <= 16) return 0;
+        return prev - 16;
+      });
+    }, 16);
+
+    return () => clearInterval(interval);
+  }, [nextScanIn]);
+
   // ── Maintain focus on any click ───────────────────────
   useEffect(() => {
     const handler = () => {
@@ -562,9 +578,16 @@ export default function KioskAttendance() {
     return () => document.removeEventListener("click", handler);
   }, []);
 
-  // ── Core RFID tap handler ─────────────────────────────
+// ── Core RFID tap handler ─────────────────────────────
   const handleRfidTap = useCallback(async (rfidCode) => {
-    if (!rfidCode?.trim() || processing) return;
+    const now = Date.now();
+    const debounceMs = 3000; // 3 seconds
+
+    // Block if within debounce window OR processing
+    if (!rfidCode?.trim() || processing || (now - lastSuccessTime.current) < debounceMs) {
+      return;
+    }
+
     setProcessing(true);
     try {
       const res = await tapRfid(rfidCode.trim());
@@ -573,6 +596,10 @@ export default function KioskAttendance() {
         setUnregistered(rfidCode.trim());
       } else if (res.success) {
         setTapResult(res);
+
+        // Set 3s debounce after SUCCESS only
+        lastSuccessTime.current = now;
+        setNextScanIn(debounceMs);
 
         // Optimistic update — apply immediately from HTTP response,
         // WS round-trip duplicate guard will silently no-op when it arrives.
@@ -733,7 +760,11 @@ export default function KioskAttendance() {
               boxShadow: "0 0 0 3px rgba(52,211,153,0.2)",
               animation: "pulse 1.5s ease-in-out infinite",
             }} />
-            {processing
+            {nextScanIn > 0
+              ? <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 600 }}>
+                  Next scan: {Math.ceil(nextScanIn / 1000)}s
+                </span>
+              : processing
               ? <span style={{ fontSize: 11, color: "#34d399", fontWeight: 600 }}>Processing…</span>
               : <span style={{ fontSize: 11, color: "#34d399", fontWeight: 600 }}>RFID Ready</span>
             }
