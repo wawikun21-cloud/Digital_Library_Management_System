@@ -905,7 +905,7 @@ export default function Students() {
                   { label: 'School Year',       key: 'student_school_year', type: 'text', required: true, placeholder: 'Enter school year (e.g., 2023-2024)' },
                   { label: 'Email',             key: 'student_email',     type: 'email', placeholder: 'Enter email address' },
                   { label: 'Contact Number',    key: 'student_contact',   type: 'text', placeholder: 'Enter contact number' },
-                  { label: 'Senior High School', key: 'senior_high_school', type: 'text', placeholder: 'Enter senior high school name' },
+                  { label: 'Senior High School', key: 'senior_high_school', type: 'text', required: false, placeholder: 'Enter senior high school name' },
                   { label: 'Strand',            key: 'strand',          type: 'text', placeholder: 'Enter strand (e.g., GAS, STEM, ABM)' },
                   { label: 'School Address',     key: 'school_address',  type: 'text', placeholder: 'Enter address of senior high school' },
                 ].map(({ label, key, type, required, placeholder, options }) => (
