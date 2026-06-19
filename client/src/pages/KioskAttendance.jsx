@@ -9,6 +9,9 @@
 //  • 1st tap = Check In | 2nd tap = Check Out
 //  • Animated result card flies in on every tap
 //  • Active-students grid with live duration timers
+//
+//  Visual style: light, minimal, matches brand palette
+//  (#132F45 · #32667F · #EEA23A · #F3B940 · #EA8B33)
 // ─────────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -36,13 +39,14 @@ function getFullName(student = {}) {
   return combined || display_name || student_name || "";
 }
 
+// Soft, desaturated palette — variety without neon noise.
 const AVATAR_COLORS = [
-  ["#1a3a5c", "#4a9eda"],
-  ["#3a1a1a", "#e05252"],
-  ["#1a3a1a", "#52c97a"],
-  ["#2a1a3a", "#a067e8"],
-  ["#3a2a10", "#e8a84a"],
-  ["#103a3a", "#4adce8"],
+  "#32667F", // brand teal-blue
+  "#C0792A", // muted amber
+  "#3F7A5C", // muted green
+  "#6B5B95", // muted violet
+  "#B4595A", // muted clay
+  "#1D5C6B", // muted cyan-teal
 ];
 
 function avatarColors(name = "") {
@@ -140,16 +144,15 @@ function useElapsed(checkInTime) {
 // ─── Sub-components ───────────────────────────────────────
 
 function Avatar({ name, size = 56 }) {
-  const [bg, accent] = avatarColors(name);
+  const accent = avatarColors(name);
   return (
     <div style={{
       width: size, height: size, borderRadius: "50%",
-      background: `radial-gradient(circle at 35% 35%, ${accent}55, ${bg})`,
-      border: `2px solid ${accent}66`,
+      background: `${accent}14`,
+      border: `1.5px solid ${accent}40`,
       display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: Math.round(size * 0.35), fontWeight: 800,
-      color: accent, flexShrink: 0, letterSpacing: "-0.5px",
-      boxShadow: `0 0 0 4px ${accent}18, 0 4px 16px ${bg}99`,
+      fontSize: Math.round(size * 0.32), fontWeight: 700,
+      color: accent, flexShrink: 0, letterSpacing: "-0.3px",
     }}>
       {getInitials(name)}
     </div>
@@ -162,11 +165,11 @@ function LiveTimer({ checkInTime }) {
   return (
     <span style={{
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
-      fontSize: 13, fontWeight: 700, letterSpacing: "0.5px",
-      color: isLong ? "#ffd900" : "#34d399",
+      fontSize: 13, fontWeight: 700, letterSpacing: "0.3px",
+      color: isLong ? "#C0792A" : "#3F7A5C",
       display: "inline-flex", alignItems: "center", gap: 4,
     }}>
-      <Clock size={11} style={{ opacity: 0.8 }} />
+      <Clock size={11} style={{ opacity: 0.75 }} />
       {fmtElapsed(elapsed)}
     </span>
   );
@@ -177,61 +180,61 @@ function LiveTimer({ checkInTime }) {
 // per card mount, not on every prop update from the poll refresh.
 function StudentCard({ record, index }) {
   const fullName = getFullName(record) || record.student_name;
-  const [, accent] = avatarColors(fullName);
+  const accent = avatarColors(fullName);
 
   const animatedRef = useRef(false);
   const animationStyle = animatedRef.current
     ? {}
     : {
-        animation: `cardIn 0.4s cubic-bezier(.34,1.4,.64,1) both`,
-        animationDelay: `${index * 40}ms`,
+        animation: `cardIn 0.35s cubic-bezier(.34,1.2,.64,1) both`,
+        animationDelay: `${index * 35}ms`,
       };
   useEffect(() => { animatedRef.current = true; }, []);
 
   return (
     <div style={{
-      background: "rgba(255,255,255,0.04)",
-      border: `1px solid ${accent}30`,
-      borderRadius: 16,
-      padding: "14px 16px",
+      background: "#ffffff",
+      border: "1px solid #e3ebf1",
+      borderRadius: 14,
+      padding: "13px 16px",
       display: "flex", alignItems: "center", gap: 12,
-      backdropFilter: "blur(8px)",
+      boxShadow: "0 1px 3px rgba(19,47,69,0.05)",
       ...animationStyle,
     }}>
       <Avatar name={fullName} size={44} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{
-          margin: 0, fontSize: 13, fontWeight: 700,
-          color: "#f1f5f9", whiteSpace: "nowrap",
+          margin: 0, fontSize: 13.5, fontWeight: 700,
+          color: "#132F45", whiteSpace: "nowrap",
           overflow: "hidden", textOverflow: "ellipsis",
         }}>
           {fullName}
         </p>
         <p style={{
-          margin: "2px 0 0", fontSize: 10, color: "#94a3b8",
+          margin: "2px 0 0", fontSize: 10, color: "#7b93a3",
           fontFamily: "monospace", letterSpacing: "0.3px",
         }}>
           {record.student_id_number}
         </p>
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 5 }}>
           {record.student_course && (
             <span style={{
-              fontSize: 9, fontWeight: 700, padding: "1px 6px",
-              borderRadius: 20, background: `${accent}22`, color: accent,
+              fontSize: 9, fontWeight: 700, padding: "1px 7px",
+              borderRadius: 20, background: `${accent}16`, color: accent,
               letterSpacing: "0.3px", textTransform: "uppercase",
             }}>{record.student_course}</span>
           )}
           {record.student_yr_level && (
             <span style={{
-              fontSize: 9, fontWeight: 600, padding: "1px 6px",
-              borderRadius: 20, background: "rgba(148,163,184,0.15)", color: "#94a3b8",
+              fontSize: 9, fontWeight: 600, padding: "1px 7px",
+              borderRadius: 20, background: "#eef3f7", color: "#5a7686",
             }}>{record.student_yr_level}</span>
           )}
         </div>
       </div>
       <div style={{ textAlign: "right", flexShrink: 0 }}>
         <LiveTimer checkInTime={record.check_in_time} />
-        <p style={{ margin: "3px 0 0", fontSize: 9, color: "#64748b" }}>
+        <p style={{ margin: "3px 0 0", fontSize: 9, color: "#9aacb7" }}>
           in at {fmtCheckIn(record.check_in_time)}
         </p>
       </div>
@@ -243,7 +246,8 @@ function StudentCard({ record, index }) {
 function TapCard({ result, onDone }) {
   const isIn = result.action === "checked_in";
   const fullName = getFullName(result.data || {}) || result.data?.student_name || "";
-  const [, accent] = avatarColors(fullName);
+  const accent = avatarColors(fullName);
+  const tone = isIn ? "#3F7A5C" : "#C0792A";
   const [phase, setPhase] = useState("enter");
 
   useEffect(() => {
@@ -257,8 +261,8 @@ function TapCard({ result, onDone }) {
 
   const animation =
     phase === "enter"
-      ? "tapCardIn 0.5s cubic-bezier(.34,1.4,.64,1) both"
-      : "tapCardOut 0.35s ease forwards";
+      ? "tapCardIn 0.45s cubic-bezier(.34,1.2,.64,1) both"
+      : "tapCardOut 0.3s ease forwards";
 
   return (
     <div
@@ -272,36 +276,34 @@ function TapCard({ result, onDone }) {
       }}
     >
       <div style={{
-        background: isIn
-          ? "linear-gradient(135deg, #0f2a1a 0%, #0d1f2d 100%)"
-          : "linear-gradient(135deg, #2a1a08 0%, #1a1208 100%)",
-        border: `1.5px solid ${isIn ? "#34d39955" : "#f59e0b55"}`,
-        borderRadius: 24,
+        background: "#ffffff",
+        border: "1px solid #e3ebf1",
+        borderLeft: `4px solid ${tone}`,
+        borderRadius: 18,
         padding: "20px 24px",
-        boxShadow: `0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px ${isIn ? "#34d39920" : "#f59e0b20"}`,
-        backdropFilter: "blur(20px)",
+        boxShadow: "0 20px 48px rgba(19,47,69,0.16)",
         display: "flex", gap: 18, alignItems: "center",
       }}>
         <div style={{
-          width: 56, height: 56, borderRadius: 16, flexShrink: 0,
-          background: isIn ? "rgba(52,211,153,0.15)" : "rgba(245,158,11,0.15)",
-          border: `1.5px solid ${isIn ? "#34d39944" : "#f59e0b44"}`,
+          width: 52, height: 52, borderRadius: 14, flexShrink: 0,
+          background: `${tone}14`,
+          border: `1px solid ${tone}33`,
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
-          {isIn ? <LogIn size={24} color="#34d399" /> : <LogOut size={24} color="#f59e0b" />}
+          {isIn ? <LogIn size={22} color={tone} /> : <LogOut size={22} color={tone} />}
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{
-            margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: "1.5px",
+            margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: "1.2px",
             textTransform: "uppercase",
-            color: isIn ? "#34d399" : "#f59e0b",
+            color: tone,
           }}>
-            {isIn ? "✓ Checked In" : "← Checked Out"}
+            {isIn ? "Checked In" : "Checked Out"}
           </p>
           <p style={{
-            margin: "4px 0 0", fontSize: 20, fontWeight: 800,
-            color: "#f1f5f9", lineHeight: 1.1,
+            margin: "4px 0 0", fontSize: 19, fontWeight: 800,
+            color: "#132F45", lineHeight: 1.1,
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
           }}>
             {fullName}
@@ -310,20 +312,20 @@ function TapCard({ result, onDone }) {
             {result.data?.student_id_number && (
               <span style={{
                 fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 20,
-                background: "rgba(255,255,255,0.08)", color: "#94a3b8",
+                background: "#eef3f7", color: "#5a7686",
                 fontFamily: "monospace",
               }}>{result.data.student_id_number}</span>
             )}
             {result.data?.student_course && (
               <span style={{
                 fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
-                background: `${accent}22`, color: accent,
+                background: `${accent}16`, color: accent,
               }}>{result.data.student_course}</span>
             )}
             {result.data?.student_yr_level && (
               <span style={{
                 fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 20,
-                background: "rgba(148,163,184,0.12)", color: "#94a3b8",
+                background: "#eef3f7", color: "#5a7686",
               }}>{result.data.student_yr_level}</span>
             )}
           </div>
@@ -332,27 +334,27 @@ function TapCard({ result, onDone }) {
         {!isIn && result.data?.duration != null && (
           <div style={{
             textAlign: "center", flexShrink: 0,
-            background: "rgba(245,158,11,0.1)",
-            border: "1px solid rgba(245,158,11,0.2)",
+            background: "#fbf2e7",
+            border: "1px solid #f0dcc0",
             borderRadius: 12, padding: "8px 14px",
           }}>
-            <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#f59e0b", fontFamily: "monospace" }}>
+            <p style={{ margin: 0, fontSize: 19, fontWeight: 800, color: "#C0792A", fontFamily: "monospace" }}>
               {result.data.duration >= 60
                 ? `${Math.floor(result.data.duration / 60)}h${result.data.duration % 60}m`
                 : `${result.data.duration}m`}
             </p>
-            <p style={{ margin: "2px 0 0", fontSize: 9, color: "#78716c", letterSpacing: "0.5px" }}>DURATION</p>
+            <p style={{ margin: "2px 0 0", fontSize: 9, color: "#a78a63", letterSpacing: "0.5px" }}>DURATION</p>
           </div>
         )}
 
-        <Avatar name={fullName} size={52} />
+        <Avatar name={fullName} size={48} />
       </div>
 
       {/* Progress bar */}
-      <div style={{ height: 3, borderRadius: 2, marginTop: 6, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+      <div style={{ height: 3, borderRadius: 2, marginTop: 6, background: "#e3ebf1", overflow: "hidden" }}>
         <div style={{
           height: "100%",
-          background: isIn ? "#34d399" : "#f59e0b",
+          background: tone,
           borderRadius: 2,
           animation: "progressBar 2.7s linear forwards",
         }} />
@@ -370,8 +372,8 @@ function UnregisteredBanner({ rfidCode, onDone }) {
   }, []);
   const handleAnimationEnd = () => { if (phase === "exit") onDone(); };
   const animation = phase === "enter"
-    ? "bannerIn 0.35s cubic-bezier(.34,1.4,.64,1) both"
-    : "bannerOut 0.35s ease forwards";
+    ? "bannerIn 0.3s cubic-bezier(.34,1.2,.64,1) both"
+    : "bannerOut 0.3s ease forwards";
 
   return (
     <div
@@ -383,36 +385,36 @@ function UnregisteredBanner({ rfidCode, onDone }) {
       }}
     >
       <div style={{
-        background: "linear-gradient(135deg, #2a1a08, #1a1000)",
-        border: "1.5px solid #f59e0b55",
-        borderRadius: 16, padding: "14px 20px",
+        background: "#ffffff",
+        border: "1px solid #f0dcc0",
+        borderLeft: "4px solid #C0792A",
+        borderRadius: 14, padding: "14px 20px",
         display: "flex", alignItems: "center", gap: 14,
-        boxShadow: "0 16px 48px rgba(245,158,11,0.2)",
-        backdropFilter: "blur(16px)",
+        boxShadow: "0 16px 40px rgba(19,47,69,0.14)",
       }}>
         <div style={{
-          width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-          background: "rgba(245,158,11,0.15)",
-          border: "1px solid rgba(245,158,11,0.3)",
+          width: 38, height: 38, borderRadius: 11, flexShrink: 0,
+          background: "#fbf2e7",
+          border: "1px solid #f0dcc0",
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
-          <AlertTriangle size={20} color="#f59e0b" />
+          <AlertTriangle size={18} color="#C0792A" />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#f59e0b" }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#C0792A" }}>
             RFID Card Not Registered
           </p>
-          <p style={{ margin: "3px 0 0", fontSize: 11, color: "#94a3b8", fontFamily: "monospace" }}>
+          <p style={{ margin: "3px 0 0", fontSize: 11, color: "#5a7686", fontFamily: "monospace" }}>
             {rfidCode}
           </p>
-          <p style={{ margin: "4px 0 0", fontSize: 11, color: "#64748b" }}>
+          <p style={{ margin: "4px 0 0", fontSize: 11, color: "#7b93a3" }}>
             Please register this card via the Admin Attendance page.
           </p>
         </div>
       </div>
-      <div style={{ height: 3, borderRadius: 2, marginTop: 6, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+      <div style={{ height: 3, borderRadius: 2, marginTop: 6, background: "#e3ebf1", overflow: "hidden" }}>
         <div style={{
-          height: "100%", background: "#f59e0b", borderRadius: 2,
+          height: "100%", background: "#C0792A", borderRadius: 2,
           animation: "progressBar 3.5s linear forwards",
         }} />
       </div>
@@ -429,8 +431,8 @@ function NotFoundBanner({ studentId, onDone }) {
   }, []);
   const handleAnimationEnd = () => { if (phase === "exit") onDone(); };
   const animation = phase === "enter"
-    ? "bannerIn 0.35s cubic-bezier(.34,1.4,.64,1) both"
-    : "bannerOut 0.35s ease forwards";
+    ? "bannerIn 0.3s cubic-bezier(.34,1.2,.64,1) both"
+    : "bannerOut 0.3s ease forwards";
 
   return (
     <div
@@ -442,33 +444,33 @@ function NotFoundBanner({ studentId, onDone }) {
       }}
     >
       <div style={{
-        background: "linear-gradient(135deg, #2a0a0a, #1a0808)",
-        border: "1.5px solid #ef444455",
-        borderRadius: 16, padding: "14px 20px",
+        background: "#ffffff",
+        border: "1px solid #f3d4d4",
+        borderLeft: "4px solid #cc1f1f",
+        borderRadius: 14, padding: "14px 20px",
         display: "flex", alignItems: "center", gap: 14,
-        boxShadow: "0 16px 48px rgba(239,68,68,0.25)",
-        backdropFilter: "blur(16px)",
+        boxShadow: "0 16px 40px rgba(19,47,69,0.14)",
       }}>
         <div style={{
-          width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-          background: "rgba(239,68,68,0.15)",
-          border: "1px solid rgba(239,68,68,0.3)",
+          width: 38, height: 38, borderRadius: 11, flexShrink: 0,
+          background: "#fbeaea",
+          border: "1px solid #f3d4d4",
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
-          <AlertTriangle size={20} color="#ef4444" />
+          <AlertTriangle size={18} color="#cc1f1f" />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#ef4444" }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#cc1f1f" }}>
             Student Not Found
           </p>
-          <p style={{ margin: "2px 0 0", fontSize: 11, color: "#94a3b8", fontFamily: "monospace" }}>
+          <p style={{ margin: "2px 0 0", fontSize: 11, color: "#5a7686", fontFamily: "monospace" }}>
             {studentId}
           </p>
         </div>
       </div>
-      <div style={{ height: 3, borderRadius: 2, marginTop: 6, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+      <div style={{ height: 3, borderRadius: 2, marginTop: 6, background: "#e3ebf1", overflow: "hidden" }}>
         <div style={{
-          height: "100%", background: "#ef4444", borderRadius: 2,
+          height: "100%", background: "#cc1f1f", borderRadius: 2,
           animation: "progressBar 2.7s linear forwards",
         }} />
       </div>
@@ -484,8 +486,8 @@ export default function KioskAttendance() {
   const [notFound, setNotFound]           = useState(null);
   const [unregistered, setUnregistered]   = useState(null);
   const [online, setOnline]               = useState(navigator.onLine);
-const [processing, setProcessing]               = useState(false);
-  const [nextScanIn, setNextScanIn]              = useState(0);
+  const [processing, setProcessing]       = useState(false);
+  const [nextScanIn, setNextScanIn]       = useState(0);
 
   const rfidBufferRef    = useRef("");
   const rfidInputRef     = useRef(null);
@@ -555,7 +557,7 @@ const [processing, setProcessing]               = useState(false);
     rfidInputRef.current?.focus();
   }, []);
 
-// ── Countdown timer for next scan ─────────────────────
+  // ── Countdown timer for next scan ─────────────────────
   useEffect(() => {
     if (nextScanIn <= 0) return;
 
@@ -578,7 +580,7 @@ const [processing, setProcessing]               = useState(false);
     return () => document.removeEventListener("click", handler);
   }, []);
 
-// ── Core RFID tap handler ─────────────────────────────
+  // ── Core RFID tap handler ─────────────────────────────
   const handleRfidTap = useCallback(async (rfidCode) => {
     const now = Date.now();
     const debounceMs = 3000; // 3 seconds
@@ -639,14 +641,17 @@ const [processing, setProcessing]               = useState(false);
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
   return (
-    <div ref={containerRef} style={{
-      minHeight: "100vh",
-      background: "linear-gradient(160deg, #060d18 0%, #0a1628 40%, #060d18 100%)",
-      color: "#f1f5f9",
-      fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
-      display: "flex", flexDirection: "column",
-      position: "relative", overflow: "hidden",
-    }}>
+<div ref={containerRef} style={{
+       minHeight: "100vh",
+       backgroundImage: "linear-gradient(180deg, rgba(240,246,250,0.35), rgba(240,246,250,0.55)), url('/gate-background.png')",
+       backgroundSize: "cover",
+       backgroundPosition: "center",
+       backgroundRepeat: "no-repeat",
+       color: "#132F45",
+       fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
+       display: "flex", flexDirection: "column",
+       position: "relative", overflow: "hidden",
+     }}>
 
       {/* ── Hidden RFID capture input — always active ─── */}
       <input
@@ -668,54 +673,29 @@ const [processing, setProcessing]               = useState(false);
         }}
       />
 
-      {/* ── Ambient background orbs ─────────────────────── */}
-      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden" }}>
-        <div style={{
-          position: "absolute", width: 600, height: 600,
-          borderRadius: "50%", top: -200, left: -100,
-          background: "radial-gradient(circle, rgba(50,100,200,0.08) 0%, transparent 70%)",
-          animation: "orbFloat 12s ease-in-out infinite",
-        }} />
-        <div style={{
-          position: "absolute", width: 500, height: 500,
-          borderRadius: "50%", bottom: -150, right: -80,
-          background: "radial-gradient(circle, rgba(234,130,50,0.06) 0%, transparent 70%)",
-          animation: "orbFloat 16s ease-in-out infinite reverse",
-        }} />
-        <div style={{
-          position: "absolute", inset: 0,
-          backgroundImage: `
-            linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px)
-          `,
-          backgroundSize: "60px 60px",
-        }} />
-      </div>
-
       {/* ── Header ──────────────────────────────────────── */}
       <header style={{
         position: "relative", zIndex: 10,
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "20px 36px",
-        borderBottom: "1px solid rgba(255,255,255,0.06)",
-        backdropFilter: "blur(12px)",
-        background: "rgba(6,13,24,0.6)",
+        padding: "18px 36px",
+        borderBottom: "1px solid #0a2030",
+        background: "#132F45",
+        boxShadow: "0 2px 12px rgba(19,47,69,0.25)",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <img
             src="/icon.png"
             alt="Lexora Logo"
             style={{
-              width: 40, height: 40, borderRadius: 10,
+              width: 38, height: 38, borderRadius: 10,
               objectFit: "contain",
-              boxShadow: "0 4px 16px rgba(238,162,58,0.25)",
             }}
           />
           <div>
-            <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#f1f5f9", letterSpacing: "-0.3px" }}>
+            <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.3px" }}>
               Lexora Library
             </p>
-            <p style={{ margin: 0, fontSize: 10, color: "#64748b", letterSpacing: "1.5px", textTransform: "uppercase" }}>
+            <p style={{ margin: 0, fontSize: 10, color: "#8fadc2", letterSpacing: "1.5px", textTransform: "uppercase" }}>
               Attendance Kiosk
             </p>
           </div>
@@ -723,13 +703,13 @@ const [processing, setProcessing]               = useState(false);
 
         <div style={{ textAlign: "center" }}>
           <p style={{
-            margin: 0, fontSize: 32, fontWeight: 800, letterSpacing: "-1px",
+            margin: 0, fontSize: 30, fontWeight: 800, letterSpacing: "-0.5px",
             fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-            color: "#f1f5f9", lineHeight: 1,
+            color: "#ffffff", lineHeight: 1,
           }}>
             {timeStr}
           </p>
-          <p style={{ margin: "4px 0 0", fontSize: 11, color: "#64748b" }}>
+          <p style={{ margin: "4px 0 0", fontSize: 11, color: "#8fadc2" }}>
             {dateStr}
           </p>
         </div>
@@ -738,12 +718,12 @@ const [processing, setProcessing]               = useState(false);
           <div style={{
             display: "flex", alignItems: "center", gap: 6,
             padding: "6px 12px", borderRadius: 20,
-            background: online ? "rgba(52,211,153,0.1)" : "rgba(239,68,68,0.1)",
-            border: `1px solid ${online ? "rgba(52,211,153,0.25)" : "rgba(239,68,68,0.25)"}`,
+            background: online ? "rgba(63,122,92,0.18)" : "rgba(204,31,31,0.18)",
+            border: `1px solid ${online ? "rgba(63,122,92,0.4)" : "rgba(204,31,31,0.4)"}`,
           }}>
             {online
-              ? <><Wifi size={12} color="#34d399" /><span style={{ fontSize: 11, color: "#34d399", fontWeight: 600 }}>Online</span></>
-              : <><WifiOff size={12} color="#ef4444" /><span style={{ fontSize: 11, color: "#ef4444", fontWeight: 600 }}>Offline</span></>
+              ? <><Wifi size={12} color="#6fcf9a" /><span style={{ fontSize: 11, color: "#6fcf9a", fontWeight: 600 }}>Online</span></>
+              : <><WifiOff size={12} color="#f08080" /><span style={{ fontSize: 11, color: "#f08080", fontWeight: 600 }}>Offline</span></>
             }
           </div>
 
@@ -751,34 +731,34 @@ const [processing, setProcessing]               = useState(false);
           <div style={{
             display: "flex", alignItems: "center", gap: 6,
             padding: "6px 12px", borderRadius: 20,
-            background: "rgba(52,211,153,0.1)",
-            border: "1px solid rgba(52,211,153,0.25)",
+            background: "rgba(63,122,92,0.18)",
+            border: "1px solid rgba(63,122,92,0.4)",
           }}>
             <div style={{
               width: 7, height: 7, borderRadius: "50%",
-              background: "#34d399",
-              boxShadow: "0 0 0 3px rgba(52,211,153,0.2)",
+              background: "#6fcf9a",
+              boxShadow: "0 0 0 3px rgba(111,207,154,0.25)",
               animation: "pulse 1.5s ease-in-out infinite",
             }} />
             {nextScanIn > 0
-              ? <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 600 }}>
+              ? <span style={{ fontSize: 11, color: "#EEA23A", fontWeight: 600 }}>
                   Next scan: {Math.ceil(nextScanIn / 1000)}s
                 </span>
               : processing
-              ? <span style={{ fontSize: 11, color: "#34d399", fontWeight: 600 }}>Processing…</span>
-              : <span style={{ fontSize: 11, color: "#34d399", fontWeight: 600 }}>RFID Ready</span>
+              ? <span style={{ fontSize: 11, color: "#6fcf9a", fontWeight: 600 }}>Processing…</span>
+              : <span style={{ fontSize: 11, color: "#6fcf9a", fontWeight: 600 }}>RFID Ready</span>
             }
           </div>
 
           <div style={{
             display: "flex", alignItems: "center", gap: 6,
             padding: "6px 14px", borderRadius: 20,
-            background: "rgba(99,102,241,0.12)",
-            border: "1px solid rgba(99,102,241,0.25)",
+            background: "rgba(255,255,255,0.08)",
+            border: "1px solid rgba(255,255,255,0.16)",
           }}>
-            <Users size={13} color="#818cf8" />
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#818cf8" }}>{active.length}</span>
-            <span style={{ fontSize: 10, color: "#64748b" }}>inside</span>
+            <Users size={13} color="#8fadc2" />
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#ffffff" }}>{active.length}</span>
+            <span style={{ fontSize: 10, color: "#8fadc2" }}>inside</span>
           </div>
 
           <button
@@ -786,13 +766,13 @@ const [processing, setProcessing]               = useState(false);
             title={isFullscreen ? "Exit Fullscreen (F11)" : "Enter Fullscreen (F11)"}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
-              width: 36, height: 36, borderRadius: 10, cursor: "pointer",
-              background: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              transition: "all 0.2s",
+              width: 34, height: 34, borderRadius: 10, cursor: "pointer",
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.16)",
+              transition: "background 0.15s, border-color 0.15s",
             }}
           >
-            {isFullscreen ? <Minimize2 size={15} color="#ffd900" /> : <Maximize2 size={15} color="#94a3b8" />}
+            {isFullscreen ? <Minimize2 size={15} color="#EEA23A" /> : <Maximize2 size={15} color="#8fadc2" />}
           </button>
         </div>
       </header>
@@ -806,20 +786,20 @@ const [processing, setProcessing]               = useState(false);
         <div style={{
           flex: 1, overflow: "hidden",
           display: "flex", flexDirection: "column",
-          padding: "28px 32px",
+          padding: "26px 32px",
           gap: 16,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <CheckCircle2 size={16} color="#34d399" />
+            <CheckCircle2 size={16} color="#3F7A5C" />
             <span style={{
-              fontSize: 13, fontWeight: 700, color: "#94a3b8",
+              fontSize: 13, fontWeight: 700, color: "#5a7686",
               letterSpacing: "0.5px", textTransform: "uppercase",
             }}>
               Currently In Library
             </span>
             <span style={{
               fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 20,
-              background: "rgba(52,211,153,0.12)", color: "#34d399",
+              background: "#eef6f0", color: "#3F7A5C",
             }}>
               {active.length}
             </span>
@@ -841,14 +821,14 @@ const [processing, setProcessing]               = useState(false);
                 gap: 12, padding: "80px 0",
               }}>
                 <div style={{
-                  width: 72, height: 72, borderRadius: "50%",
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
+                  width: 68, height: 68, borderRadius: "50%",
+                  background: "#ffffff",
+                  border: "1px solid #dde8ef",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
-                  <Users size={28} color="#334155" />
+                  <Users size={26} color="#aebfca" />
                 </div>
-                <p style={{ margin: 0, fontSize: 13, color: "#334155" }}>
+                <p style={{ margin: 0, fontSize: 13, color: "#9aacb7" }}>
                   No students currently in library
                 </p>
               </div>
@@ -889,29 +869,25 @@ const [processing, setProcessing]               = useState(false);
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap');
 
-        @keyframes orbFloat {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          50%       { transform: translate(20px, -30px) scale(1.05); }
-        }
         @keyframes cardIn {
-          from { opacity: 0; transform: translateY(12px) scale(0.97); }
+          from { opacity: 0; transform: translateY(10px) scale(0.98); }
           to   { opacity: 1; transform: translateY(0) scale(1); }
         }
         @keyframes tapCardIn {
-          from { opacity: 0; transform: translateX(-50%) translateY(40px) scale(0.92); }
+          from { opacity: 0; transform: translateX(-50%) translateY(36px) scale(0.94); }
           to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
         }
         @keyframes tapCardOut {
           from { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
-          to   { opacity: 0; transform: translateX(-50%) translateY(20px) scale(0.95); }
+          to   { opacity: 0; transform: translateX(-50%) translateY(16px) scale(0.96); }
         }
         @keyframes bannerIn {
-          from { opacity: 0; transform: translateX(-50%) translateY(-20px) scale(0.94); }
+          from { opacity: 0; transform: translateX(-50%) translateY(-16px) scale(0.96); }
           to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
         }
         @keyframes bannerOut {
           from { opacity: 1; transform: translateX(-50%) translateY(0); }
-          to   { opacity: 0; transform: translateX(-50%) translateY(-12px); }
+          to   { opacity: 0; transform: translateX(-50%) translateY(-10px); }
         }
         @keyframes progressBar {
           from { width: 100%; }
@@ -922,11 +898,11 @@ const [processing, setProcessing]               = useState(false);
         }
         @keyframes pulse {
           0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
+          50% { opacity: 0.45; }
         }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb { background: #d8e3ec; border-radius: 2px; }
       `}</style>
     </div>
   );
