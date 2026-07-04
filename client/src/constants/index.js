@@ -82,11 +82,11 @@ export const VALIDATION_RULES = {
 
 // Feature Flags
 export const FEATURES = {
-  ENABLE_BARCODE_SCANNER: true,
-  ENABLE_BOOK_LOOKUP: true,
-  ENABLE_EDITIONS: true,
-  ENABLE_DARK_MODE: true,
-  ENABLE_ANIMATIONS: true,
+  ENABLE_BARCODE_SCANNER: import.meta.env.VITE_ENABLE_BARCODE_SCANNER === "true",
+  ENABLE_BOOK_LOOKUP:     import.meta.env.VITE_ENABLE_BOOK_LOOKUP === "true",
+  ENABLE_EDITIONS:        import.meta.env.VITE_ENABLE_EDITIONS === "true",
+  ENABLE_DARK_MODE:       import.meta.env.VITE_ENABLE_DARK_MODE === "true",
+  ENABLE_ANIMATIONS:      import.meta.env.VITE_ENABLE_ANIMATIONS === "true",
 };
 
 // App Info

@@ -49,12 +49,26 @@ async function initDatabase() {
 
     const [existing] = await conn.query("SELECT id FROM users LIMIT 1");
     if (existing.length === 0) {
-      const hashed = await bcrypt.hash("admin123", 10);
-      await conn.query(
-        "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-        ["admin", hashed, "admin"]
-      );
-      console.log("✅ Default admin created  →  username: admin / password: admin123");
+      const defaultAdminUser = process.env.DEFAULT_ADMIN_USERNAME;
+      const defaultAdminPass = process.env.DEFAULT_ADMIN_PASSWORD;
+
+      if (defaultAdminUser && defaultAdminPass) {
+        const hashed = await bcrypt.hash(defaultAdminPass, 10);
+        await conn.query(
+          "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+          [defaultAdminUser, hashed, "admin"]
+        );
+        console.log(`✅ Default admin created → username: ${defaultAdminUser}`);
+      } else if (process.env.NODE_ENV === "production") {
+        console.warn("⚠️  No DEFAULT_ADMIN_USERNAME/PASSWORD set — skipping default admin creation. Manual user creation required.");
+      } else {
+        const hashed = await bcrypt.hash("admin123", 10);
+        await conn.query(
+          "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+          ["admin", hashed, "admin"]
+        );
+        console.log("✅ Default admin created (dev only) → username: admin / password: admin123");
+      }
     }
 
     // ── books ──────────────────────────────────────────

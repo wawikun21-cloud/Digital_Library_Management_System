@@ -40,7 +40,6 @@ Faculty/staff member records.
 Digital e-book collection (PLR - Private Label Rights).
 - **Purpose**: Digital resource catalog
 - **Key fields**: `title`, `source`, `resource_type`, `format`, `subject_course`
-- **Features**: Generated columns for case-insensitive search (`title_lower`, `author_lower`)
 
 ### `rfid_cards`
 RFID card registration for automated attendance.
@@ -55,7 +54,7 @@ Student records.
 ### `trash_log`
 Soft-deleted items with automatic 30-day expiration.
 - **Purpose**: Trash/recycle bin functionality
-- **Key fields**: `entity_type`, `entity_id`, `deleted_at`, `expires_at` (generated)
+- **Key fields**: `entity_type`, `entity_id`, `deleted_at`, `expires_at`
 
 ### `users`
 User authentication and role management.

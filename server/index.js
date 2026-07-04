@@ -14,11 +14,13 @@ require("dotenv").config();
 const http    = require("http");
 const express = require("express");
 const cors    = require("cors");
+const helmet  = require("helmet");
 const path    = require("path");
 const session = require("express-session");
 
 const { initDatabase, testConnection } = require("./config/db");
 const { initSocket, getIO }            = require("./utils/websocket");
+const { validateEnv }                  = require("./config/env");
 const rateLimit                        = require("express-rate-limit");
 
 // ── Routes ────────────────────────────────────────────────
@@ -45,7 +47,7 @@ const server = http.createServer(app);
 // with Socket.io's engine middleware below.
 const sessionMiddleware = session({
   name:   "lexora.sid",
-  secret: process.env.SESSION_SECRET || "lexora-secret-change-in-production",
+  secret: process.env.SESSION_SECRET || "dev-secret-warning-set-SESSION_SECRET",
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -56,11 +58,15 @@ const sessionMiddleware = session({
   },
 });
 
+// ── CSRF Protection — defined in routes/auth.js
+// (csurf is applied per-route since routes/auth.js needs it)
+
 // ── Middleware ────────────────────────────────────────────
 app.use(cors({
   origin: process.env.CLIENT_ORIGIN || process.env.CLIENT_URL || "http://localhost:5173",
   credentials: true,
 }));
+app.use(helmet());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
@@ -132,6 +138,13 @@ app.use((err, req, res, _next) => {
 const PORT = process.env.PORT || 3001;
 
 async function start() {
+  validateEnv();
+
+  if (!process.env.SESSION_SECRET && process.env.NODE_ENV === "production") {
+    console.error("❌ SESSION_SECRET is required in production. Set it in .env and restart.");
+    process.exit(1);
+  }
+
   await initDatabase();
   await testConnection();
 

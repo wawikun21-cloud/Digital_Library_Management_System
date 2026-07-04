@@ -27,7 +27,7 @@
 //    Documented here for clarity.
 // ─────────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.VITE_API_URL || "";
+const API_BASE = ""; // Vite proxy handles /api routing
 
 function buildFilterParams(filters = {}) {
   const p = new URLSearchParams();

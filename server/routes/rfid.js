@@ -8,6 +8,8 @@
 //      the WebSocket broadcast channel.
 //      Limit: 20 taps/min per IP  (≈ 1 tap every 3 s — generous for
 //      any real kiosk, tight enough to stop runaway hardware or scripts).
+//    • IP whitelist support via RFID_ALLOWED_IPS env var (comma-separated).
+//      If set in production, only whitelisted IPs can access /tap.
 //    • Global API backstop (200 req/min/IP) applied in index.js.
 // ─────────────────────────────────────────────────────────
 
@@ -17,6 +19,31 @@ const rateLimit      = require("express-rate-limit");
 const { ipKeyGenerator } = require("express-rate-limit");
 const RfidController = require("../controllers/rfidController");
 const { requireAuth, requireAdminOrStaff } = require("../middleware/authMiddleware");
+
+// ── Parse allowed IPs from env (comma-separated, e.g. "192.168.1.100,10.0.0.5") ─
+const allowedIPs = (process.env.RFID_ALLOWED_IPS || "")
+  .split(",")
+  .map(ip => ip.trim())
+  .filter(ip => ip.length > 0);
+
+// ── IP whitelist middleware (optional) ───────────────────────────────────────
+// If RFID_ALLOWED_IPS is set in production, only those IPs can access the tap endpoint
+function ipWhitelist(req, res, next) {
+  // In development, allow all IPs
+  if (process.env.NODE_ENV !== "production" && allowedIPs.length === 0) {
+    return next();
+  }
+
+  // If whitelist is configured, check if IP is allowed
+  if (allowedIPs.length > 0 && !allowedIPs.includes(req.ip)) {
+    return res.status(403).json({
+      success: false,
+      error: "RFID endpoint not accessible from this IP address",
+    });
+  }
+
+  next();
+}
 
 // ── Rate limiter: RFID tap endpoint ──────────────────────
 //
@@ -47,9 +74,9 @@ const rfidTapLimiter = rateLimit({
 /**
  * @route   POST /api/rfid/tap
  * @desc    Handle an RFID card tap (check-in / check-out or unregistered)
- * @access  Public (RFID reader hits this) — rate-limited: 20/min/IP
+ * @access  Public (RFID reader hits this) — rate-limited: 20/min/IP, IP-whitelisted in prod
  */
-router.post("/tap", rfidTapLimiter, RfidController.tap);
+router.post("/tap", ipWhitelist, rfidTapLimiter, RfidController.tap);
 
 /**
  * @route   GET /api/rfid/simulate

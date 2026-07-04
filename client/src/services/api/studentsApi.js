@@ -3,7 +3,7 @@
 //  Students API Service - Frontend API calls for student management
 // ─────────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_BASE = "";
 
 /** Always send the session cookie */
 const withCreds = (opts = {}) => ({
@@ -111,6 +111,64 @@ export async function getStudentStats() {
   }
 }
 
+// ── Faculty API Functions ───────────────────────────────────────
+
+export async function getAllFaculty() {
+  try {
+    const response = await fetch(`${API_BASE}/api/students/faculty`, withCreds());
+    return await response.json();
+  } catch (error) {
+    console.error("Error getting all faculty:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function createFaculty(facultyData) {
+  try {
+    const response = await fetch(`${API_BASE}/api/students/faculty`,
+      withCreds({ method: "POST", body: JSON.stringify(facultyData) })
+    );
+    return await response.json();
+  } catch (error) {
+    console.error("Error creating faculty:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function updateFaculty(id, facultyData) {
+  try {
+    const response = await fetch(`${API_BASE}/api/students/faculty/${id}`,
+      withCreds({ method: "PUT", body: JSON.stringify(facultyData) })
+    );
+    return await response.json();
+  } catch (error) {
+    console.error("Error updating faculty:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function deleteFaculty(id) {
+  try {
+    const response = await fetch(`${API_BASE}/api/students/faculty/${id}`, withCreds({ method: "DELETE" }));
+    return await response.json();
+  } catch (error) {
+    console.error("Error deleting faculty:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function bulkImportFaculty(facultyData) {
+  try {
+    const response = await fetch(`${API_BASE}/api/students/faculty/bulk-import`,
+      withCreds({ method: "POST", body: JSON.stringify(facultyData) })
+    );
+    return await response.json();
+  } catch (error) {
+    console.error("Error bulk importing faculty:", error);
+    return { success: false, error: error.message };
+  }
+}
+
 export default {
   getAllStudents,
   getStudentById,
@@ -120,4 +178,9 @@ export default {
   deleteStudent,
   bulkImportStudents,
   getStudentStats,
+  getAllFaculty,
+  createFaculty,
+  updateFaculty,
+  deleteFaculty,
+  bulkImportFaculty,
 };

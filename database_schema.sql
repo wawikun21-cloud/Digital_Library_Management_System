@@ -1,19 +1,34 @@
--- Lexora Digital Library Management System - Database Schema
--- Generated from lexora.sql
+-- Lexora Digital Library Management System - Clean Database Schema
+-- Drops existing tables before creating (for fresh installation)
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 SET time_zone = "+00:00";
 
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
-/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!40101 SET NAMES utf8mb4 */;
+-- --------------------------------------------------------
+-- Drop existing tables (in reverse order for FK constraints)
+-- --------------------------------------------------------
+
+DROP VIEW IF EXISTS `overdue_borrows`;
+DROP VIEW IF EXISTS `book_inventory`;
+DROP VIEW IF EXISTS `active_borrows`;
+
+DROP TABLE IF EXISTS `users`;
+DROP TABLE IF EXISTS `trash_log`;
+DROP TABLE IF EXISTS `attendance`;
+DROP TABLE IF EXISTS `rfid_cards`;
+DROP TABLE IF EXISTS `students`;
+DROP TABLE IF EXISTS `lexora_books`;
+DROP TABLE IF EXISTS `faculty`;
+DROP TABLE IF EXISTS `borrowed_books`;
+DROP TABLE IF EXISTS `book_copies`;
+DROP TABLE IF EXISTS `books`;
+DROP TABLE IF EXISTS `audit_logs`;
 
 -- --------------------------------------------------------
 -- Table structure for table `attendance`
 -- --------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS `attendance` (
+CREATE TABLE `attendance` (
   `id` int NOT NULL AUTO_INCREMENT,
   `student_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `student_id_number` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -37,7 +52,7 @@ CREATE TABLE IF NOT EXISTS `attendance` (
 -- Table structure for table `audit_logs`
 -- --------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS `audit_logs` (
+CREATE TABLE `audit_logs` (
   `id` int NOT NULL AUTO_INCREMENT,
   `user_id` int DEFAULT NULL,
   `user_username` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -45,8 +60,8 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
   `entity_id` int DEFAULT NULL,
   `action` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
   `summary` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `old_data` json DEFAULT NULL,
-  `new_data` json DEFAULT NULL,
+  `old_data` longtext DEFAULT NULL,
+  `new_data` longtext DEFAULT NULL,
   `ip_address` varchar(45) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `user_agent` text COLLATE utf8mb4_unicode_ci,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
@@ -61,7 +76,7 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
 -- Table structure for table `books`
 -- --------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS `books` (
+CREATE TABLE `books` (
   `id` int NOT NULL AUTO_INCREMENT,
   `title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `subtitle` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -104,7 +119,6 @@ CREATE TABLE IF NOT EXISTS `books` (
   KEY `idx_authors` (`authors`(100)),
   KEY `idx_callNumber` (`callNumber`),
   KEY `idx_title` (`title`(250)),
-  KEY `idx_books_title` (`title`(250)),
   KEY `idx_books_author` (`author`(250)),
   KEY `idx_books_genre` (`genre`),
   KEY `idx_books_isbn` (`isbn`),
@@ -116,7 +130,7 @@ CREATE TABLE IF NOT EXISTS `books` (
 -- Table structure for table `book_copies`
 -- --------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS `book_copies` (
+CREATE TABLE `book_copies` (
   `id` int NOT NULL AUTO_INCREMENT,
   `book_id` int NOT NULL,
   `accession_number` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -128,18 +142,15 @@ CREATE TABLE IF NOT EXISTS `book_copies` (
   `deleted_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_accession_number` (`accession_number`),
-  UNIQUE KEY `idx_acc_unique` (`accession_number`),
   KEY `idx_book_id` (`book_id`),
-  KEY `idx_status` (`status`),
-  KEY `idx_book_copies_book_id` (`book_id`),
-  KEY `idx_book_copies_status` (`status`)
+  KEY `idx_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 -- Table structure for table `borrowed_books`
 -- --------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS `borrowed_books` (
+CREATE TABLE `borrowed_books` (
   `id` int NOT NULL AUTO_INCREMENT,
   `book_id` int NOT NULL,
   `accession_number` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -165,9 +176,6 @@ CREATE TABLE IF NOT EXISTS `borrowed_books` (
   KEY `idx_borrowed_books_borrower_name` (`borrower_name`(250)),
   KEY `idx_borrowed_books_status` (`status`),
   KEY `idx_borrowed_books_borrow_date` (`borrow_date`),
-  KEY `idx_borrowed_books_due_date` (`due_date`),
-  KEY `idx_borrower_id` (`borrower_id_number`),
-  KEY `idx_due_date` (`due_date`),
   KEY `idx_accession_number` (`accession_number`),
   KEY `idx_borrowed_deleted` (`is_deleted`,`deleted_at`),
   KEY `idx_is_deleted` (`is_deleted`)
@@ -177,7 +185,7 @@ CREATE TABLE IF NOT EXISTS `borrowed_books` (
 -- Table structure for table `faculty`
 -- --------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS `faculty` (
+CREATE TABLE `faculty` (
   `id` int NOT NULL AUTO_INCREMENT,
   `faculty_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `department` enum('CIT','CCJE','CEAS','CBE','HS') COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -197,7 +205,7 @@ CREATE TABLE IF NOT EXISTS `faculty` (
 -- Table structure for table `lexora_books`
 -- --------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS `lexora_books` (
+CREATE TABLE `lexora_books` (
   `id` int NOT NULL AUTO_INCREMENT,
   `title` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
   `author` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -213,35 +221,17 @@ CREATE TABLE IF NOT EXISTS `lexora_books` (
   `deleted_at` timestamp NULL DEFAULT NULL,
   `deleted_by` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `is_deleted` tinyint(1) NOT NULL DEFAULT '0',
-  `title_lower` varchar(500) COLLATE utf8mb4_unicode_ci GENERATED ALWAYS AS (lower(trim(`title`))) STORED,
-  `author_lower` varchar(500) COLLATE utf8mb4_unicode_ci GENERATED ALWAYS AS (lower(trim(coalesce(`author`,_utf8mb4'')))) STORED,
   PRIMARY KEY (`id`),
   KEY `idx_subject_course` (`subject_course`(191)),
   KEY `idx_program` (`program`),
-  KEY `idx_resource_type` (`resource_type`),
-  KEY `idx_title_author_lower` (`title_lower`(250),`author_lower`(250))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- --------------------------------------------------------
--- Table structure for table `rfid_cards`
--- --------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS `rfid_cards` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `rfid_code` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `student_id_number` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `registered_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `rfid_code` (`rfid_code`),
-  KEY `student_id_number` (`student_id_number`)
+  KEY `idx_resource_type` (`resource_type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 -- Table structure for table `students`
 -- --------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS `students` (
+CREATE TABLE `students` (
   `id` int NOT NULL AUTO_INCREMENT,
   `student_id_number` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
   `student_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -263,34 +253,47 @@ CREATE TABLE IF NOT EXISTS `students` (
   `school_address` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `student_id_number` (`student_id_number`),
-  UNIQUE KEY `idx_student_id_unique` (`student_id_number`),
   KEY `idx_students_deleted` (`is_active`,`deleted_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+-- Table structure for table `rfid_cards`
+-- --------------------------------------------------------
+
+CREATE TABLE `rfid_cards` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `rfid_code` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `student_id_number` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `registered_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `rfid_code` (`rfid_code`),
+  UNIQUE KEY `uq_student_id` (`student_id_number`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 -- Table structure for table `trash_log`
 -- --------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS `trash_log` (
+CREATE TABLE `trash_log` (
   `id` int NOT NULL AUTO_INCREMENT,
   `entity_type` enum('book','lexora_book','student','faculty','transaction','attendance') COLLATE utf8mb4_unicode_ci NOT NULL,
   `entity_id` int NOT NULL,
   `entity_title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `entity_meta` json DEFAULT NULL,
+  `entity_meta` longtext DEFAULT NULL,
   `deleted_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `deleted_by` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `expires_at` timestamp GENERATED ALWAYS AS ((`deleted_at` + interval 30 day)) STORED NULL,
+  `expires_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_trash_entity_type` (`entity_type`),
-  KEY `idx_trash_deleted_at` (`deleted_at`),
-  KEY `idx_trash_expires_at` (`expires_at`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  KEY `idx_trash_deleted_at` (`deleted_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 -- Table structure for table `users`
 -- --------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS `users` (
+CREATE TABLE `users` (
   `id` int NOT NULL AUTO_INCREMENT,
   `username` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
   `password` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -312,7 +315,7 @@ ALTER TABLE `rfid_cards`
 -- Views
 -- --------------------------------------------------------
 
-CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `active_borrows` AS 
+CREATE VIEW `active_borrows` AS 
 SELECT `b`.`id` AS `id`, 
        `b`.`book_id` AS `book_id`, 
        `b`.`borrower_name` AS `borrower_name`, 
@@ -326,7 +329,7 @@ SELECT `b`.`id` AS `id`,
 FROM (`borrowed_books` `b` left join `books` on((`b`.`book_id` = `books`.`id`))) 
 WHERE ((`b`.`is_deleted` = 0) AND (`books`.`is_deleted` = 0) AND (`b`.`status` = 'Borrowed'));
 
-CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `book_inventory` AS 
+CREATE VIEW `book_inventory` AS 
 SELECT `books`.`id` AS `id`, 
        `books`.`title` AS `title`, 
        `books`.`author` AS `author`, 
@@ -340,7 +343,7 @@ SELECT `books`.`id` AS `id`,
 FROM `books` 
 WHERE (`books`.`is_deleted` = 0);
 
-CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `overdue_borrows` AS 
+CREATE VIEW `overdue_borrows` AS 
 SELECT `b`.`id` AS `id`, 
        `b`.`book_id` AS `book_id`, 
        `b`.`borrower_name` AS `borrower_name`, 
@@ -354,22 +357,3 @@ SELECT `b`.`id` AS `id`,
        (to_days(curdate()) - to_days(`b`.`due_date`)) AS `days_overdue` 
 FROM (`borrowed_books` `b` left join `books` on((`b`.`book_id` = `books`.`id`))) 
 WHERE ((`b`.`is_deleted` = 0) AND (`books`.`is_deleted` = 0) AND (`b`.`status` = 'Borrowed') AND (`b`.`due_date` < curdate()));
-
--- --------------------------------------------------------
--- Cleanup Event (Optional - requires event scheduler enabled)
--- --------------------------------------------------------
-
--- DROP EVENT IF EXISTS `cleanup_soft_deleted`;
--- CREATE DEFINER=`root`@`localhost` EVENT `cleanup_soft_deleted` 
--- ON SCHEDULE EVERY 1 DAY STARTS '2026-04-03 22:30:56' 
--- ON COMPLETION NOT PRESERVE ENABLE DO BEGIN
---     DELETE FROM books WHERE is_deleted = 1 AND deleted_at < DATE_SUB(NOW(), INTERVAL 30 DAY);
---     DELETE FROM students WHERE is_deleted = 1 AND deleted_at < DATE_SUB(NOW(), INTERVAL 30 DAY);
---     DELETE FROM faculty WHERE is_deleted = 1 AND deleted_at < DATE_SUB(NOW(), INTERVAL 30 DAY);
---     DELETE FROM borrowed_books WHERE is_deleted = 1 AND deleted_at < DATE_SUB(NOW(), INTERVAL 30 DAY);
---     DELETE FROM attendance WHERE is_deleted = 1 AND deleted_at < DATE_SUB(NOW(), INTERVAL 30 DAY);
--- END$$
-
-/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
-/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
-/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;;

@@ -3,7 +3,7 @@
 //  RFID API Service - Frontend API calls for RFID management
 // ─────────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
 const withCreds = (opts = {}) => ({
   ...opts,
@@ -21,7 +21,7 @@ const withCreds = (opts = {}) => ({
 export async function tapRfid(rfidCode) {
   try {
     const res = await fetch(
-      `${API_BASE}/api/rfid/tap`,
+      `${API_BASE}/rfid/tap`,
       withCreds({ method: "POST", body: JSON.stringify({ rfid_code: rfidCode }) })
     );
     return await res.json();
@@ -39,7 +39,7 @@ export async function tapRfid(rfidCode) {
 export async function registerRfid(rfidCode, studentIdNumber) {
   try {
     const res = await fetch(
-      `${API_BASE}/api/rfid/register`,
+      `${API_BASE}/rfid/register`,
       withCreds({
         method: "POST",
         body: JSON.stringify({ rfid_code: rfidCode, student_id_number: studentIdNumber }),
@@ -60,7 +60,7 @@ export async function registerRfid(rfidCode, studentIdNumber) {
 export async function simulateRfidTap(rfidCode) {
   try {
     const res = await fetch(
-      `${API_BASE}/api/rfid/simulate?rfid_code=${encodeURIComponent(rfidCode)}`,
+      `${API_BASE}/rfid/simulate?rfid_code=${encodeURIComponent(rfidCode)}`,
       withCreds()
     );
     return await res.json();
@@ -76,7 +76,7 @@ export async function simulateRfidTap(rfidCode) {
  */
 export async function getAllRfidCards() {
   try {
-    const res = await fetch(`${API_BASE}/api/rfid`, withCreds());
+    const res = await fetch(`${API_BASE}/rfid`, withCreds());
     return await res.json();
   } catch (error) {
     console.error("[rfidApi.getAllRfidCards]", error);
@@ -85,13 +85,13 @@ export async function getAllRfidCards() {
 }
 
 /**
- * DELETE /api/rfid/:id
+ * DELETE /rfid/:id
  * Remove an RFID card registration.
  */
 export async function deleteRfidCard(id) {
   try {
     const res = await fetch(
-      `${API_BASE}/api/rfid/${id}`,
+      `${API_BASE}/rfid/${id}`,
       withCreds({ method: "DELETE" })
     );
     return await res.json();

@@ -375,8 +375,9 @@ export default function LandingPage() {
           display: flex; align-items: center; gap: 0.6rem;
           text-decoration: none;
         }
-        .topbar-brand-icon {
-          margin-left: 5rem; width: 170px; height: 170px;
+        .topbar-brand-icon { 
+          width: 170px; 
+          height: 170px;
           border-radius: 32px; display: block;
           object-fit: contain; background: transparent;
         }

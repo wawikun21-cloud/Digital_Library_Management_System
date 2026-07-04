@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Search, Upload, Download, Plus, Edit, Trash2,
   UserCheck, AlertCircle, CheckCircle2, XCircle, ChevronDown,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import Toast from '../components/Toast';
 import Pagination from '../components/books/Pagination';
+import { getAllFaculty, createFaculty, updateFaculty, deleteFaculty, bulkImportFaculty } from '../services/api/studentsApi';
 
 // ─────────────────────────────────────────────────────────
 //  Constants
@@ -30,14 +31,6 @@ const DEPT_COLORS = {
   HS:   { bg: 'rgba(45,79,163,0.1)',   text: '#3a5fbf', badge: 'rgba(45,79,163,0.08)'   },
 };
 const DEFAULT_COLOR = { bg: 'rgba(30,58,123,0.08)', text: '#2d4fa3', badge: 'rgba(30,58,123,0.06)' };
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
-const withCreds = (opts = {}) => ({
-  ...opts,
-  credentials: 'include',
-  headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-});
 
 // ─────────────────────────────────────────────────────────
 //  Faculty Page
@@ -77,8 +70,7 @@ export default function Faculty() {
   const fetchFaculty = async () => {
     setIsLoading(true);
     try {
-      const res  = await fetch(`${API_BASE}/api/students/faculty`, withCreds());
-      const data = await res.json();
+      const data = await getAllFaculty();
       if (data.success) setFaculty(data.data);
       else showToast('Failed to load faculty', 'error');
     } catch {
@@ -143,10 +135,7 @@ export default function Faculty() {
     const e2 = validate();
     if (Object.keys(e2).length) { setFormErrors(e2); return; }
     try {
-      const res  = await fetch(`${API_BASE}/api/students/faculty`,
-        withCreds({ method: 'POST', body: JSON.stringify(formData) })
-      );
-      const data = await res.json();
+      const data = await createFaculty(formData);
       if (data.success) { showToast('Faculty added successfully'); closeModal(); fetchFaculty(); }
       else showToast(data.error || 'Failed to add faculty', 'error');
     } catch { showToast('Failed to connect to server', 'error'); }
@@ -158,10 +147,7 @@ export default function Faculty() {
     const e2 = validate();
     if (Object.keys(e2).length) { setFormErrors(e2); return; }
     try {
-      const res  = await fetch(`${API_BASE}/api/students/faculty/${selectedFaculty.id}`,
-        withCreds({ method: 'PUT', body: JSON.stringify(formData) })
-      );
-      const data = await res.json();
+      const data = await updateFaculty(selectedFaculty.id, formData);
       if (data.success) { showToast('Faculty updated successfully'); closeModal(); fetchFaculty(); }
       else showToast(data.error || 'Failed to update faculty', 'error');
     } catch { showToast('Failed to connect to server', 'error'); }
@@ -171,8 +157,7 @@ export default function Faculty() {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this faculty member?')) return;
     try {
-      const res  = await fetch(`${API_BASE}/api/students/faculty/${id}`, withCreds({ method: 'DELETE' }));
-      const data = await res.json();
+      const data = await deleteFaculty(id);
       if (data.success) { showToast('Faculty deleted successfully'); fetchFaculty(); }
       else showToast(data.error || 'Failed to delete faculty', 'error');
     } catch { showToast('Failed to connect to server', 'error'); }
@@ -245,10 +230,7 @@ export default function Faculty() {
     }
 
     try {
-      const res  = await fetch(`${API_BASE}/api/students/faculty/bulk-import`,
-        withCreds({ method: 'POST', body: JSON.stringify(parsedData) })
-      );
-      const data = await res.json();
+      const data = await bulkImportFaculty(parsedData);
       if (data.success) {
         setImportResult(data.data); setParsedData(null);
         showToast(`Imported ${data.data.successful} faculty records`, 'success');
