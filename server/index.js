@@ -39,6 +39,12 @@ const rfidRoutes         = require("./routes/rfid");
 const AnalyticsController = require("./controllers/analyticsController");
 
 const app    = express();
+
+// Trust Hostinger's reverse proxy — required so Express knows the
+// original connection was HTTPS (needed for secure cookies) and so
+// express-rate-limit can correctly read X-Forwarded-For.
+app.set("trust proxy", 1);
+
 const server = http.createServer(app);
 
 // ── Session ───────────────────────────────────────────────
@@ -52,8 +58,10 @@ const sessionMiddleware = session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure:   process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure:   true,      // must be unconditionally true — sameSite:"none" requires it
+    sameSite: "none",    // required for cross-subdomain cookies (frontend and backend
+                         // live on different *.hostingersite.com subdomains, which
+                         // browsers treat as cross-site)
     maxAge:   1000 * 60 * 60 * 8, // 8 hours
   },
 });
@@ -62,8 +70,16 @@ const sessionMiddleware = session({
 // (csurf is applied per-route since routes/auth.js needs it)
 
 // ── Middleware ────────────────────────────────────────────
+//
+// Strip any trailing slash from the configured origin — a mismatched
+// trailing slash (e.g. "https://foo.com/" vs "https://foo.com") makes
+// the browser reject the preflight response outright.
+const CLIENT_ORIGIN = (
+  process.env.CLIENT_ORIGIN || process.env.CLIENT_URL || "http://localhost:5173"
+).replace(/\/$/, "");
+
 app.use(cors({
-  origin: process.env.CLIENT_ORIGIN || process.env.CLIENT_URL || "http://localhost:5173",
+  origin: CLIENT_ORIGIN,
   credentials: true,
 }));
 app.use(helmet());
