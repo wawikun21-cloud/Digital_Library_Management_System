@@ -88,10 +88,10 @@ export default function CourseDetailsPage() {
     return (
       <div className="space-y-4">
         <h1 className="text-xl font-bold text-neutral-900 dark:text-neutral-100">Course Details</h1>
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm">
-          <p className="font-medium text-red-800">Failed to load course</p>
-          <p className="text-red-600 mt-1">{error}</p>
-          <button onClick={refetch} className="mt-2 rounded-lg px-3 py-1.5 text-sm bg-red-600 text-white">Retry</button>
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm dark:border-red-900 dark:bg-red-950/30">
+          <p className="font-medium text-red-800 dark:text-red-200">Failed to load course</p>
+          <p className="mt-1 text-red-600 dark:text-red-300">{error}</p>
+          <button onClick={refetch} className="mt-2 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900">Retry</button>
         </div>
       </div>
     );
@@ -104,7 +104,8 @@ export default function CourseDetailsPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate("/dashboard/courses")}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+              aria-label="Back to courses"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
             >
               <ChevronLeft size={16} />
             </button>
@@ -115,28 +116,28 @@ export default function CourseDetailsPage() {
               </p>
             </div>
           </div>
-          <div className="flex items-center justify-end gap-1">
+          <div className="flex flex-wrap items-center justify-end gap-1">
             <button
               onClick={() => navigate(`/dashboard/courses/${course?.id}/builder`)}
-              className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium border border-[var(--border)] hover:bg-[var(--bg-hover)] transition-colors"
+              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
             >
               Manage Course
             </button>
             <button
               onClick={() => toggleModal("edit")}
-              className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium border border-[var(--border)] hover:bg-[var(--bg-hover)] transition-colors"
+              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
             >
               Edit
             </button>
             <button
               onClick={() => setPendingArchive(true)}
-              className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium border border-[var(--border)] hover:bg-[var(--bg-hover)] transition-colors"
+              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
             >
               {course?.status === "archived" ? "Unarchive" : "Archive"}
             </button>
             <button
               onClick={() => setPendingDelete(true)}
-              className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium border border-red-200 text-red-700 hover:bg-red-50 transition-colors"
+              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40"
             >
               Delete
             </button>
@@ -222,7 +223,7 @@ export default function CourseDetailsPage() {
               <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Modules</h3>
               <button
                 onClick={() => toggleModal("module")}
-                className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium bg-[var(--color-primary)] text-white"
+                className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900"
               >
                 <Plus size={14} /> Add Module
               </button>
@@ -237,7 +238,7 @@ export default function CourseDetailsPage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => toggleModal(`content-${mod.id}`)}
-                      className="text-xs text-[var(--color-primary)] hover:underline"
+                      className="rounded px-2 py-1 text-xs font-medium text-[var(--color-primary)] hover:bg-[var(--bg-hover)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
                     >
                       Manage Content
                     </button>
@@ -247,7 +248,8 @@ export default function CourseDetailsPage() {
                         refetch?.();
                       }}
                       disabled={deletingModule}
-                      className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50"
+                      aria-label={`Delete module ${mod.title}`}
+                      className="rounded p-2 text-red-600 transition-colors hover:bg-red-50 hover:text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -267,7 +269,7 @@ export default function CourseDetailsPage() {
               <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Enrollments</h3>
               <button
                 onClick={() => toggleModal("enroll")}
-                className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium bg-[var(--color-primary)] text-white"
+                className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900"
               >
                 <Plus size={14} /> Enroll Student
               </button>

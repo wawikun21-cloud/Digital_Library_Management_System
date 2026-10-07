@@ -3,17 +3,17 @@ import { BookOpen, Layers, Users } from "lucide-react";
 import { ActionButton } from "../../../../components/ui/actionIcons";
 
 const STATUS_META = {
-  published: "bg-green-100 text-green-700 border-green-200",
-  draft: "bg-gray-100 text-gray-700 border-gray-200",
-  archived: "bg-amber-100 text-amber-700 border-amber-200",
-  under_review: "bg-blue-100 text-blue-700 border-blue-200",
+  published: "bg-green-100 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-300 dark:border-green-900",
+  draft: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700",
+  archived: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-900",
+  under_review: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-900",
 };
 
 const DIFFICULTY_META = {
-  beginner: "bg-green-100 text-green-700 border-green-200",
-  intermediate: "bg-amber-100 text-amber-700 border-amber-200",
-  advanced: "bg-red-100 text-red-700 border-red-200",
-  all_levels: "bg-sky-100 text-sky-700 border-sky-200",
+  beginner: "bg-green-100 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-300 dark:border-green-900",
+  intermediate: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-900",
+  advanced: "bg-red-100 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-900",
+  all_levels: "bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-900",
 };
 
 function StatusBadge({ status }) {

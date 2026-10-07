@@ -2,13 +2,14 @@
 //  App.jsx  —  Updated with full RBAC (admin / staff / librarian)
 // ─────────────────────────────────────────────────────────
 
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { useEffect, useState, lazy, Suspense } from "react";
 import Layout from "./components/layout/Layout";
 import authApi from "./services/api/authApi";
 import { useLocalStorage } from "./hooks/useLocalStorage";
 import { STORAGE_KEYS } from "./constants/index.js";
 import { ROLES, ROLE_DEFAULT_ROUTES } from "./constants/roles.js";
+import { useAuth } from "./hooks/useAuth.js";
 import {
   ProtectedRoute,
   AdminRoute,
@@ -25,6 +26,11 @@ const Students            = lazy(() => import("./pages/Students"));
 const Faculty             = lazy(() => import("./pages/Faculty"));
 const RecentlyDeleted     = lazy(() => import("./pages/RecentlyDeleted"));
 const LexoraBooks         = lazy(() => import("./pages/LexoraBooks"));
+const ManageLexoraBooks   = lazy(() => import("./features/lexora-books/pages/ManageLexoraBooks"));
+const LexoraBooksCatalog  = lazy(() => import("./features/lexora-books/pages/LexoraBooksCatalog"));
+const LexoraBookDetails   = lazy(() => import("./features/lexora-books/pages/LexoraBookDetails"));
+const LexoraBookReader    = lazy(() => import("./features/lexora-books/pages/LexoraBookReader"));
+const LexoraBookmarks     = lazy(() => import("./features/lexora-books/pages/LexoraBookmarks"));
 const Login               = lazy(() => import("./pages/Login"));
 const LandingPage         = lazy(() => import("./landing/landingpage"));
 const KioskAttendance     = lazy(() => import("./pages/KioskAttendance"));
@@ -85,6 +91,11 @@ function Page({ children }) {
   return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
 }
 
+function LexoraBooksShell() {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? <Layout /> : <Outlet />;
+}
+
 // ── LandingRouteGuard ─────────────────────────────────────
 //  Redirects authenticated users to their role-appropriate dashboard.
 function LandingRouteGuard() {
@@ -130,6 +141,12 @@ export default function App() {
           {/* ── Public ──────────────────────────────────── */}
           <Route path="/"      element={<LandingRouteGuard />} />
           <Route path="/login" element={<Login />} />
+          <Route element={<LexoraBooksShell />}>
+            <Route path="lexora-books"           element={<Page><LexoraBooksCatalog /></Page>} />
+            <Route path="lexora-books/bookmarks" element={<Page><LexoraBookmarks /></Page>} />
+            <Route path="lexora-books/:bookId"   element={<Page><LexoraBookDetails /></Page>} />
+          </Route>
+          <Route path="lexora-books/:bookId/read" element={<Page><LexoraBookReader /></Page>} />
 
           {/* ── Protected shell ─────────────────────────── */}
           <Route
@@ -153,7 +170,15 @@ export default function App() {
             />
             <Route
               path="lexora-books"
+              element={<CatalogRoute><Page><ManageLexoraBooks /></Page></CatalogRoute>}
+            />
+            <Route
+              path="lexora-books/import"
               element={<CatalogRoute><Page><LexoraBooks /></Page></CatalogRoute>}
+            />
+            <Route
+              path="lexora-books/manage"
+              element={<CatalogRoute><Page><ManageLexoraBooks /></Page></CatalogRoute>}
             />
 
             {/* ── Book Dashboard: admin only ──────────────── */}

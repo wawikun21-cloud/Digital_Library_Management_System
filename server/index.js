@@ -26,6 +26,8 @@ const rateLimit                        = require("express-rate-limit");
 // ── Routes ────────────────────────────────────────────────
 const authRoutes         = require("./routes/auth");
 const booksRoutes        = require("./routes/books");
+const lexoraBooksRoutes  = require("./routes/lexoraBooksRoutes");
+const lexoraMediaAccess  = require("./middleware/lexoraMediaAccess");
 const transactionRoutes  = require("./routes/transactions");
 const attendanceRoutes   = require("./routes/attendance");
 const studentsRoutes     = require("./routes/students");
@@ -81,6 +83,7 @@ const CLIENT_ORIGIN = (
 app.use(cors({
   origin: CLIENT_ORIGIN,
   credentials: true,
+  exposedHeaders: ["Content-Range", "Accept-Ranges", "Content-Length"],
 }));
 app.use(helmet());
 app.use(express.json({ limit: "10mb" }));
@@ -88,7 +91,14 @@ app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
 
 // ── Static uploads ────────────────────────────────────────
+app.use("/uploads/lexora-books", lexoraMediaAccess);
+app.use("/uploads/tmp", (_req, res) => res.status(404).end());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// Keep older Lexora files readable when they were stored beside the server folder.
+app.use(
+  "/uploads/lexora-books",
+  express.static(path.join(__dirname, "../uploads/lexora-books"))
+);
 
 // ── Global API rate limiter ───────────────────────────────
 //
@@ -122,6 +132,7 @@ app.use("/api/", globalApiLimiter);
 // ── API Routes ────────────────────────────────────────────
 app.use("/api/auth",         authRoutes);
 app.use("/api/books",        booksRoutes);
+app.use("/api/lexora-books", lexoraBooksRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/attendance",   attendanceRoutes);
 app.use("/api/students",     studentsRoutes);

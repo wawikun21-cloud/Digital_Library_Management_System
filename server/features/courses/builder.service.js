@@ -16,7 +16,7 @@ async function getBuilderData(courseId) {
 }
 
 async function updateBuilder(courseId, payload) {
-  const { title, description, category, thumbnail_url, status, modules } = payload;
+  const { title, description, category, thumbnail_url, status, modules = [] } = payload || {};
 
   await coursesService.updateCourse(courseId, {
     title,

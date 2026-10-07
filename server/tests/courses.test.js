@@ -31,14 +31,19 @@ async function request(path, options = {}) {
 
   const res = await fetch(url, { ...options, headers });
 
-  // Store cookies from response
-  const setCookie = res.headers.get("set-cookie");
-  if (setCookie) {
-    for (const cookie of setCookie) {
-      const [pair] = cookie.split(";");
-      const [k, v] = pair.split("=");
-      if (k && v !== undefined) cookieJar.set(k.trim(), v.trim());
-    }
+  // Store cookies from response. `fetch()` exposes Set-Cookie differently in Node
+  // depending on runtime and headers implementation, so normalize it here.
+  const setCookie = res.headers.getSetCookie
+    ? res.headers.getSetCookie()
+    : res.headers.raw?.()["set-cookie"] || [];
+
+  for (const rawCookie of Array.isArray(setCookie) ? setCookie : [setCookie].filter(Boolean)) {
+    const [pair] = rawCookie.split(";");
+    const eqIndex = pair.indexOf("=");
+    if (eqIndex <= 0) continue;
+    const key = pair.slice(0, eqIndex).trim();
+    const value = pair.slice(eqIndex + 1).trim();
+    if (key && value !== undefined) cookieJar.set(key, value);
   }
 
   const text = await res.text();

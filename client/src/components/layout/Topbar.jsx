@@ -16,6 +16,7 @@ const PAGE_TITLES = {
   "/books":    "Books",
   "/borrowed": "Borrowed",
   "/deleted":  "Recently Deleted",
+  "/lexora-books": "Lexora Books",
 };
 
 /** Read the cached user from session/localStorage (set during login) */

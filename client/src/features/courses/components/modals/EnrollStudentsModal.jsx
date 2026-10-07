@@ -53,21 +53,21 @@ export default function EnrollStudentsModal({ open, onClose, courseId, onSuccess
         )}
         <form onSubmit={handleEnroll} className="flex items-end gap-2">
           <div className="flex-1">
-            <label className="block text-xs font-medium text-neutral-700 mb-1">User ID</label>
+            <label className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">User ID</label>
             <input
               type="number"
               value={selectedUserId}
               onChange={(e) => setSelectedUserId(e.target.value)}
-              className="w-full rounded-lg border border-[var(--border)] bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 dark:bg-neutral-800 dark:text-neutral-100"
               placeholder="Enter user ID"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-neutral-700 mb-1">Role</label>
+            <label className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">Role</label>
             <select
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              className="rounded-lg border border-[var(--border)] bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+              className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 dark:bg-neutral-800 dark:text-neutral-100"
             >
               <option value="learner">Learner</option>
               <option value="instructor">Instructor</option>
@@ -75,7 +75,7 @@ export default function EnrollStudentsModal({ open, onClose, courseId, onSuccess
               <option value="guest">Guest</option>
             </select>
           </div>
-          <button type="submit" disabled={enrolling} className="rounded-lg px-4 py-2 text-sm bg-[var(--color-primary)] text-white disabled:opacity-50">
+          <button type="submit" disabled={enrolling} className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900 disabled:cursor-not-allowed disabled:opacity-50">
             {enrolling ? "Saving..." : "Enroll"}
           </button>
         </form>

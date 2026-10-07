@@ -36,6 +36,13 @@ export default defineConfig({
         changeOrigin: true,
         secure:       false,
       },
+      // Uploaded PDFs / images are served by Express, not Vite. Without this the
+      // dev server answers with index.html and pdf.js fails with InvalidPDFException.
+      '/uploads': {
+        target:       'http://localhost:3001',
+        changeOrigin: true,
+        secure:       false,
+      },
       '/socket.io': {
         target:       'http://localhost:3001',
         changeOrigin: true,

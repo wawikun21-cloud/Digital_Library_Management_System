@@ -21,7 +21,22 @@ async function createCourse(userId, courseData) {
   return { id };
 }
 
-async function updateCourse(userId, courseId, updates) {
+async function updateCourse(userIdOrCourseId, courseIdOrUpdates, maybeUpdates) {
+  let courseId;
+  let updates;
+
+  if (courseIdOrUpdates && typeof courseIdOrUpdates === 'object' && !Array.isArray(courseIdOrUpdates)) {
+    courseId = userIdOrCourseId;
+    updates = courseIdOrUpdates;
+  } else {
+    courseId = courseIdOrUpdates;
+    updates = maybeUpdates;
+  }
+
+  if (courseId === undefined || updates === undefined) {
+    return 0;
+  }
+
   const affected = await coursesRepo.update(courseId, updates);
   return affected;
 }

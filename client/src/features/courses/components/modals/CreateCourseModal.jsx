@@ -52,42 +52,42 @@ export default function CreateCourseModal({ open, onClose, onSuccess }) {
           </div>
         )}
         <div>
-          <label className="block text-xs font-medium text-neutral-700 mb-1">Title</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">Title</label>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className={`w-full rounded-lg border px-3 py-2 text-sm ${errors.title ? "border-red-300 bg-red-50" : "border-[var(--border)] bg-white dark:bg-neutral-800"}`}
+            className={`w-full rounded-lg border px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 ${errors.title ? "border-red-300 bg-red-50" : "border-[var(--border)] bg-white dark:bg-neutral-800"}`}
             placeholder="Course title"
           />
           {errors.title && <p className="mt-1 text-xs text-red-600">{errors.title}</p>}
         </div>
         <div>
-          <label className="block text-xs font-medium text-neutral-700 mb-1">Description</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">Description</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={4}
-            className={`w-full rounded-lg border px-3 py-2 text-sm ${errors.description ? "border-red-300 bg-red-50" : "border-[var(--border)] bg-white dark:bg-neutral-800"}`}
+            className={`w-full rounded-lg border px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 ${errors.description ? "border-red-300 bg-red-50" : "border-[var(--border)] bg-white dark:bg-neutral-800"}`}
             placeholder="Brief description of the course"
           />
           {errors.description && <p className="mt-1 text-xs text-red-600">{errors.description}</p>}
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-neutral-700 mb-1">Category</label>
+            <label className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">Category</label>
             <input
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full rounded-lg border border-[var(--border)] bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 dark:bg-neutral-800 dark:text-neutral-100"
               placeholder="e.g. Library Science"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-neutral-700 mb-1">Difficulty</label>
+            <label className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">Difficulty</label>
             <select
               value={difficulty}
               onChange={(e) => setDifficulty(e.target.value)}
-              className="w-full rounded-lg border border-[var(--border)] bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 dark:bg-neutral-800 dark:text-neutral-100"
             >
               <option value="beginner">Beginner</option>
               <option value="intermediate">Intermediate</option>
@@ -97,10 +97,10 @@ export default function CreateCourseModal({ open, onClose, onSuccess }) {
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm border border-[var(--border)]">
+          <button type="button" onClick={onClose} className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]">
             Cancel
           </button>
-          <button type="submit" disabled={loading} className="rounded-lg px-4 py-2 text-sm bg-[var(--color-primary)] text-white disabled:opacity-50">
+          <button type="submit" disabled={loading} className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900 disabled:cursor-not-allowed disabled:opacity-50">
             {loading ? "Creating..." : "Create Course"}
           </button>
         </div>

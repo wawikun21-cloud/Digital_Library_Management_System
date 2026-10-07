@@ -81,7 +81,7 @@ export default function CourseCatalog() {
           <div className="flex items-center justify-end gap-2">
             <button
               onClick={() => setOpen(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white shadow-sm hover:shadow-md transition-all"
+              className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[var(--color-primary-hover)] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900"
             >
               Create Course
             </button>
@@ -95,16 +95,16 @@ export default function CourseCatalog() {
           placeholder="Search courses..."
           value={filters.search}
           onChange={(e) => updateFilter("search", e.target.value)}
-          className="w-full rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 pl-9 sm:pl-10 px-2.5 py-1.5 text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 dark:placeholder:text-neutral-500 focus:border-[var(--color-primary)] dark:focus:border-[var(--color-primary)] focus:ring-[rgba(242,92,5,0.20)] transition-all"
+          className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-surface)] pl-9 sm:pl-10 px-2.5 py-2 text-sm text-[var(--text-primary)] placeholder:text-neutral-400 dark:placeholder:text-neutral-500 focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 transition-all"
         />
       </div>
 
       {loading && <p className="text-sm text-neutral-500">Loading courses...</p>}
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm">
-          <p className="font-medium text-red-800">Failed to load courses</p>
-          <p className="text-red-600 mt-1">{error}</p>
-          <button onClick={refetch} className="mt-2 rounded-lg px-3 py-1.5 text-sm bg-red-600 text-white">Retry</button>
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm dark:border-red-900 dark:bg-red-950/30">
+          <p className="font-medium text-red-800 dark:text-red-200">Failed to load courses</p>
+          <p className="mt-1 text-red-600 dark:text-red-300">{error}</p>
+          <button onClick={refetch} className="mt-2 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900">Retry</button>
         </div>
       )}
       {!loading && !error && (

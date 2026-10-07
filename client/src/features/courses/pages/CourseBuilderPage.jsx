@@ -383,7 +383,7 @@ export default function CourseBuilderPage() {
       <div className="mx-auto max-w-4xl space-y-4 py-10">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">Course Builder</h1>
-          <button onClick={() => navigate("/dashboard/courses")} className="rounded-lg border border-neutral-200 px-3 py-1.5 text-sm hover:border-neutral-300">Back to Courses</button>
+          <button onClick={() => navigate("/dashboard/courses")} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]">Back to Courses</button>
         </div>
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{loadingError}</div>
       </div>
@@ -392,8 +392,8 @@ export default function CourseBuilderPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-y-2">
+        <div className="flex min-w-0 items-center gap-3">
           <button
             onClick={() => {
               if (hasUnsavedChanges) {
@@ -403,12 +403,12 @@ export default function CourseBuilderPage() {
               }
             }}
             title="Back to courses"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
           >
             <ChevronLeft size={16} />
           </button>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <h1 className="text-xl font-bold text-neutral-900 dark:text-neutral-100">{form.title || "Course Builder"}</h1>
               <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${statusConfig.color}`}>{statusConfig.label}</span>
             </div>
@@ -426,13 +426,13 @@ export default function CourseBuilderPage() {
               <Clock size={12} /> Saving...
             </span>
           )}
-          <div className="hidden md:flex items-center gap-1 rounded-lg border border-neutral-200 bg-neutral-50 p-1">
-            <button onClick={() => { setShowLeftSidebar(!showLeftSidebar); if (!showLeftSidebar) setShowRightSidebar(false); }} className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${showLeftSidebar ? "bg-[var(--color-primary)] text-white" : "text-neutral-700 hover:bg-white"}`}>
-              {showLeftSidebar ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />} Outline
+          <div className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-1">
+            <button aria-pressed={showLeftSidebar} onClick={() => { setShowLeftSidebar(!showLeftSidebar); if (!showLeftSidebar) setShowRightSidebar(false); }} className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] sm:gap-2 sm:px-3 ${showLeftSidebar ? "bg-[var(--color-primary)] text-white" : "text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"}`}>
+              {showLeftSidebar ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />} <span className="hidden sm:inline">Outline</span>
             </button>
-            <div className="w-px h-4 bg-neutral-300 mx-0.5" />
-            <button onClick={() => { setShowRightSidebar(!showRightSidebar); if (!showRightSidebar) setShowLeftSidebar(false); }} className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${showRightSidebar ? "bg-[var(--color-primary)] text-white" : "text-neutral-700 hover:bg-white"}`}>
-              {showRightSidebar ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />} Details
+            <div className="mx-0.5 h-4 w-px bg-[var(--border)]" />
+            <button aria-pressed={showRightSidebar} onClick={() => { setShowRightSidebar(!showRightSidebar); if (!showRightSidebar) setShowLeftSidebar(false); }} className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] sm:gap-2 sm:px-3 ${showRightSidebar ? "bg-[var(--color-primary)] text-white" : "text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"}`}>
+              {showRightSidebar ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />} <span className="hidden sm:inline">Details</span>
             </button>
           </div>
         </div>
@@ -529,7 +529,7 @@ export default function CourseBuilderPage() {
                   <p className="mx-auto mt-2 max-w-md text-sm text-neutral-500">
                     {modules.length === 0 ? "Organize your content into modules and lessons. Create your first module to get going." : "Keep refining the content, or open any module from the outline to continue editing."}
                   </p>
-                  <button type="button" onClick={addModule} className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-5 py-2.5 text-sm font-medium text-white">
+                  <button type="button" onClick={addModule} className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900">
                     <Plus size={16} /> {modules.length === 0 ? "Add your first module" : "Add module"}
                   </button>
                 </div>
@@ -561,13 +561,13 @@ export default function CourseBuilderPage() {
               <PublishReadiness course={course} modules={modules} />
             </div>
             <div className="p-4 border-t border-[var(--border)] space-y-2">
-              <button onClick={() => handleSaveDraft(false)} disabled={saving} className="w-full rounded-md border border-neutral-200 px-2.5 py-2 text-sm hover:border-neutral-300 disabled:opacity-50 flex items-center justify-center gap-1.5">
+              <button onClick={() => handleSaveDraft(false)} disabled={saving} className="flex w-full items-center justify-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-50">
                 <Save size={14} /> {saving ? "Saving..." : "Save Draft"}
               </button>
-              <button onClick={handlePublish} disabled={saving} className="w-full rounded-md bg-[var(--color-primary)] px-2.5 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-1.5">
+              <button onClick={handlePublish} disabled={saving} className="flex w-full items-center justify-center gap-1.5 rounded-md bg-[var(--color-primary)] px-2.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900 disabled:cursor-not-allowed disabled:opacity-50">
                 <Rocket size={14} /> {saving ? "Publishing..." : "Publish"}
               </button>
-              <button onClick={handleSubmitForReview} disabled={saving} className="w-full rounded-md border border-neutral-200 px-2.5 py-2 text-sm hover:border-neutral-300 disabled:opacity-50 flex items-center justify-center gap-1.5">
+              <button onClick={handleSubmitForReview} disabled={saving} className="flex w-full items-center justify-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-50">
                 <Send size={14} /> Submit for Review
               </button>
             </div>
@@ -584,7 +584,7 @@ export default function CourseBuilderPage() {
         confirmText="Save"
         cancelText="Discard"
       >
-        <button type="button" onClick={() => { handleSaveDraft(false); pendingNavigation.current?.(); pendingNavigation.current = null; setShowExitModal(false); }} disabled={saving} className="mt-2 w-full rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">
+        <button type="button" onClick={() => { handleSaveDraft(false); pendingNavigation.current?.(); pendingNavigation.current = null; setShowExitModal(false); }} disabled={saving} className="mt-2 w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-50">
           Save as Draft
         </button>
       </ConfirmationModal>

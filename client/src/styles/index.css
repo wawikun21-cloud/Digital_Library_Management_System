@@ -27,6 +27,9 @@
   --text-muted:     #405b6b;
   --text-on-sidebar:#a0c4d8;
 
+  --color-primary:       #32667F;
+  --color-primary-hover: #28566b;
+
   --accent-danger:   #cc1f1f;
   --accent-amber:    #1D3067;
   --accent-orange:   #1D3067;
@@ -62,6 +65,9 @@
   --text-secondary: #7aafc4;
   --text-muted:     #3d6880;
   --text-on-sidebar:#5a8fa8;
+
+  --color-primary:       #32667F;
+  --color-primary-hover: #40819c;
 
   --accent-amber:   #1D3067;
   --accent-orange:  #fffd18;

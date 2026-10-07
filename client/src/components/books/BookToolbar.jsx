@@ -18,6 +18,7 @@ export default function BookToolbar({
   ddOpen, 
   setDdOpen, 
   openModal,
+  onAddManual,
   // Pass an array of mode strings to restrict which items appear.
   // Defaults to all three if omitted.
   importModes,
@@ -133,7 +134,20 @@ export default function BookToolbar({
             style={{ background:"var(--bg-surface)", border:"1px solid var(--border)", boxShadow:"var(--shadow-lg)" }}
             role="menu"
           >
-{visibleModes.map(({ mode, Icon, label }) => (
+            {onAddManual && (
+              <button
+                onClick={() => {
+                  setDdOpen(false);
+                  onAddManual();
+                }}
+                className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors duration-100 hover:bg-amber-50 hover:text-amber-600"
+                style={{ color:"var(--text-primary)" }}
+                role="menuitem"
+              >
+                <PenLine size={15} /> Create Book
+              </button>
+            )}
+            {visibleModes.map(({ mode, Icon, label }) => (
               <button
                 key={mode}
                 onClick={() => openModal(mode)}

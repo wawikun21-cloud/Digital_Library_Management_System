@@ -407,6 +407,130 @@ async function migrateSchema(conn) {
     `ALTER TABLE lexora_books ADD INDEX idx_program        (program)`,
     `ALTER TABLE lexora_books ADD INDEX idx_resource_type  (resource_type)`,
 
+    // ── lexora_books flipbook feature columns ───────────
+    `ALTER TABLE lexora_books ADD COLUMN slug VARCHAR(500) DEFAULT NULL AFTER title`,
+    `ALTER TABLE lexora_books ADD COLUMN short_description TEXT DEFAULT NULL AFTER slug`,
+    `ALTER TABLE lexora_books ADD COLUMN source_type ENUM('pdf','images') DEFAULT NULL AFTER resource_type`,
+    `ALTER TABLE lexora_books ADD COLUMN pdf_url TEXT DEFAULT NULL AFTER source`,
+    `ALTER TABLE lexora_books ADD COLUMN thumbnail_url TEXT DEFAULT NULL AFTER pdf_url`,
+    `ALTER TABLE lexora_books ADD COLUMN cover_url TEXT DEFAULT NULL AFTER thumbnail_url`,
+    `ALTER TABLE lexora_books ADD COLUMN download_url TEXT DEFAULT NULL AFTER cover_url`,
+    `ALTER TABLE lexora_books ADD COLUMN publish_on DATE DEFAULT NULL AFTER download_url`,
+    `ALTER TABLE lexora_books ADD COLUMN isbn10 VARCHAR(20) DEFAULT NULL AFTER publish_on`,
+    `ALTER TABLE lexora_books ADD COLUMN isbn13 VARCHAR(20) DEFAULT NULL AFTER isbn10`,
+    `ALTER TABLE lexora_books ADD COLUMN total_pages INT DEFAULT NULL AFTER isbn13`,
+    `ALTER TABLE lexora_books ADD COLUMN table_of_contents JSON DEFAULT NULL AFTER total_pages`,
+    `ALTER TABLE lexora_books ADD COLUMN length VARCHAR(100) DEFAULT NULL AFTER total_pages`,
+    `ALTER TABLE lexora_books ADD COLUMN dimensions VARCHAR(50) DEFAULT NULL AFTER total_pages`,
+    `ALTER TABLE lexora_books ADD COLUMN file_size BIGINT DEFAULT NULL AFTER dimensions`,
+    `ALTER TABLE lexora_books ADD COLUMN co_publisher VARCHAR(255) DEFAULT NULL AFTER file_size`,
+    `ALTER TABLE lexora_books ADD COLUMN translator VARCHAR(255) DEFAULT NULL AFTER co_publisher`,
+    `ALTER TABLE lexora_books ADD COLUMN asin VARCHAR(20) DEFAULT NULL AFTER translator`,
+    `ALTER TABLE lexora_books ADD COLUMN doi VARCHAR(100) DEFAULT NULL AFTER asin`,
+    `ALTER TABLE lexora_books ADD COLUMN llcn VARCHAR(20) DEFAULT NULL AFTER doi`,
+    `ALTER TABLE lexora_books ADD COLUMN weight_value DECIMAL(6,2) DEFAULT NULL AFTER llcn`,
+    `ALTER TABLE lexora_books ADD COLUMN weight_unit VARCHAR(20) DEFAULT NULL AFTER weight_value`,
+    `ALTER TABLE lexora_books ADD COLUMN edition VARCHAR(50) DEFAULT NULL AFTER weight_unit`,
+    `ALTER TABLE lexora_books ADD COLUMN status ENUM('draft','published','archived') NOT NULL DEFAULT 'draft' AFTER edition`,
+    `ALTER TABLE lexora_books ADD COLUMN visibility ENUM('public','private') NOT NULL DEFAULT 'public' AFTER status`,
+    `ALTER TABLE lexora_books ADD COLUMN created_by INT DEFAULT NULL AFTER visibility`,
+    `ALTER TABLE lexora_books ADD COLUMN published_at DATETIME DEFAULT NULL AFTER created_by`,
+    `ALTER TABLE lexora_books ADD INDEX idx_lexora_status (status)`,
+    `ALTER TABLE lexora_books ADD INDEX idx_lexora_visibility (visibility)`,
+    `ALTER TABLE lexora_books ADD INDEX idx_lexora_source_type (source_type)`,
+
+    // ── lexora_book_categories ───────────────────────────
+    `CREATE TABLE IF NOT EXISTS lexora_book_categories (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(150) NOT NULL,
+      slug VARCHAR(150) NOT NULL,
+      created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_lexora_category_slug (slug),
+      UNIQUE KEY uq_lexora_category_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // ── lexora_book_category_relations ────────────────────
+    `CREATE TABLE IF NOT EXISTS lexora_book_category_relations (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      book_id INT NOT NULL,
+      category_id INT NOT NULL,
+      created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_lexora_book_category (book_id, category_id),
+      KEY idx_lexora_cat_book (book_id),
+      KEY idx_lexora_cat_category (category_id),
+      CONSTRAINT fk_lexora_cat_book FOREIGN KEY (book_id) REFERENCES lexora_books(id) ON DELETE CASCADE,
+      CONSTRAINT fk_lexora_cat_category FOREIGN KEY (category_id) REFERENCES lexora_book_categories(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // ── lexora_book_tags ─────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS lexora_book_tags (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      slug VARCHAR(100) NOT NULL,
+      created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_lexora_tag_slug (slug),
+      UNIQUE KEY uq_lexora_tag_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // ── lexora_book_tag_relations ────────────────────────
+    `CREATE TABLE IF NOT EXISTS lexora_book_tag_relations (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      book_id INT NOT NULL,
+      tag_id INT NOT NULL,
+      created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_lexora_book_tag (book_id, tag_id),
+      KEY idx_lexora_tag_book (book_id),
+      KEY idx_lexora_tag_tag (tag_id),
+      CONSTRAINT fk_lexora_tag_book FOREIGN KEY (book_id) REFERENCES lexora_books(id) ON DELETE CASCADE,
+      CONSTRAINT fk_lexora_tag_tag FOREIGN KEY (tag_id) REFERENCES lexora_book_tags(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // ── lexora_book_pages (image-page books) ─────────────
+    `CREATE TABLE IF NOT EXISTS lexora_book_pages (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      book_id INT NOT NULL,
+      page_number INT NOT NULL,
+      image_url VARCHAR(500) NOT NULL,
+      file_size BIGINT DEFAULT NULL,
+      created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_lexora_book_page (book_id, page_number),
+      KEY idx_lexora_pages_book (book_id),
+      CONSTRAINT fk_lexora_pages_book FOREIGN KEY (book_id) REFERENCES lexora_books(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // ── lexora_bookmarks ─────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS lexora_bookmarks (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      book_id INT NOT NULL,
+      page_number INT NOT NULL,
+      created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_lexora_bookmark (user_id, book_id, page_number),
+      KEY idx_lexora_bookmark_user (user_id),
+      KEY idx_lexora_bookmark_book (book_id),
+      CONSTRAINT fk_lexora_bookmark_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      CONSTRAINT fk_lexora_bookmark_book FOREIGN KEY (book_id) REFERENCES lexora_books(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // ── lexora_book_progress ──────────────────────────────
+    `CREATE TABLE IF NOT EXISTS lexora_book_progress (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      book_id INT NOT NULL,
+      page_number INT NOT NULL,
+      updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_lexora_progress (user_id, book_id),
+      KEY idx_lexora_progress_user (user_id),
+      KEY idx_lexora_progress_book (book_id),
+      CONSTRAINT fk_lexora_progress_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      CONSTRAINT fk_lexora_progress_book FOREIGN KEY (book_id) REFERENCES lexora_books(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
     // ── courses ──────────────────────────────────────────
     `ALTER TABLE courses ADD COLUMN category_id INT DEFAULT NULL AFTER category`,
     `CREATE INDEX IF NOT EXISTS idx_courses_category_id ON courses(category_id)`,

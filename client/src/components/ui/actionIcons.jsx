@@ -1,41 +1,16 @@
-import { useState } from "react";
+import { Archive, ArchiveRestore, Eye, Pencil, Trash2 } from "lucide-react";
 
 const ACTION_STYLES = {
-  View: {
-    icon: "👁️",
-    color: "var(--text-secondary)",
-    hoverBg: "var(--bg-hover)",
-    hoverColor: "var(--text-primary)",
-  },
-  Edit: {
-    icon: "✏️",
-    color: "var(--text-secondary)",
-    hoverBg: "var(--bg-hover)",
-    hoverColor: "#EEA23A",
-  },
-  Archive: {
-    icon: "🗄️",
-    color: "var(--text-secondary)",
-    hoverBg: "var(--bg-hover)",
-    hoverColor: "#EEA23A",
-  },
-  Delete: {
-    icon: "🗑️",
-    color: "var(--text-secondary)",
-    hoverBg: "rgba(220,38,38,0.1)",
-    hoverColor: "#dc2626",
-  },
-  Unarchive: {
-    icon: "📤",
-    color: "var(--text-secondary)",
-    hoverBg: "var(--bg-hover)",
-    hoverColor: "#22c55e",
-  },
+  View: Eye,
+  Edit: Pencil,
+  Archive,
+  Delete: Trash2,
+  Unarchive: ArchiveRestore,
 };
 
 export function ActionButton({ action, label, onClick }) {
-  const [hovered, setHovered] = useState(false);
-  const style = ACTION_STYLES[action] || ACTION_STYLES.View;
+  const Icon = ACTION_STYLES[action] || ACTION_STYLES.View;
+  const isDelete = action === "Delete";
 
   return (
     <button
@@ -45,15 +20,13 @@ export function ActionButton({ action, label, onClick }) {
         e.stopPropagation();
         onClick?.();
       }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      className="w-8 h-8 inline-flex items-center justify-center rounded-lg transition-colors duration-150"
-      style={{
-        background: hovered ? style.hoverBg : "transparent",
-        color: hovered ? style.hoverColor : style.color,
-      }}
+      className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] transition-colors duration-150 hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] ${
+        isDelete
+          ? "text-red-600 hover:border-red-300 hover:bg-red-50 dark:text-red-400 dark:hover:border-red-900 dark:hover:bg-red-950/40"
+          : "text-[var(--text-secondary)] hover:text-[var(--color-primary)]"
+      }`}
     >
-      <span className="text-sm">{style.icon}</span>
+      <Icon size={15} aria-hidden="true" />
     </button>
   );
 }

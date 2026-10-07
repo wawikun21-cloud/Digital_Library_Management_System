@@ -1,0 +1,41 @@
+.flipbook-root {
+  --flipbook-toolbar-bg: rgba(26, 26, 46, 0.9);
+  --flipbook-btn-color: #ffffff;
+  --flipbook-btn-hover-bg: rgba(255,255,255,0.12);
+  --flipbook-accent: #ee9f2a;
+  --flipbook-bg: #1a1a2e;
+  --flipbook-panel-bg: rgba(0,0,0,0.8);
+  --flipbook-panel-border: rgba(255,255,255,0.1);
+  --flipbook-text-primary: #ffffff;
+  --flipbook-text-muted: rgba(255,255,255,0.5);
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.flipbook-root canvas {
+  display: block;
+}
+
+.styled-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+.styled-scroll::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.05);
+  border-radius: 2px;
+}
+.styled-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.2);
+  border-radius: 2px;
+}
+
+.flipbook-enter {
+  animation: flipbookFadeIn 0.3s ease-out;
+}
+
+@keyframes flipbookFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}

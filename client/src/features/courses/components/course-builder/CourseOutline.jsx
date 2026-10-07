@@ -40,23 +40,23 @@ function LessonItem({ lesson, moduleId, isSelected, onSelect, onRemove, onUpdate
             if (e.key === "Enter") { e.preventDefault(); save(); }
             if (e.key === "Escape") { setEditing(false); setTitle(lesson.title || ""); }
           }}
-          className="flex-1 min-w-0 rounded border border-neutral-200 bg-white px-1.5 py-0.5 text-xs"
+          className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg-surface)] px-1.5 py-1 text-xs text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
         <span className="flex-1 min-w-0 truncate text-xs">{lesson.title || "Untitled lesson"}</span>
       )}
       <div className="flex items-center gap-0.5 shrink-0">
-        <button onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }} disabled={isFirst} className="p-0.5 text-neutral-400 hover:text-neutral-700 disabled:opacity-30">
+        <button aria-label={`Move ${lesson.title || "lesson"} up`} onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }} disabled={isFirst} className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-30">
           ↑
         </button>
-        <button onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }} disabled={isLast} className="p-0.5 text-neutral-400 hover:text-neutral-700 disabled:opacity-30">
+        <button aria-label={`Move ${lesson.title || "lesson"} down`} onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }} disabled={isLast} className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-30">
           ↓
         </button>
-        <button onClick={(e) => { e.stopPropagation(); setEditing(true); }} className="p-0.5 text-neutral-400 hover:text-neutral-700">
+        <button aria-label={`Rename ${lesson.title || "lesson"}`} onClick={(e) => { e.stopPropagation(); setEditing(true); }} className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]">
           <Edit3 size={12} />
         </button>
-        <button onClick={(e) => { e.stopPropagation(); onRemove?.(); }} className="p-0.5 text-neutral-400 hover:text-red-600">
+        <button aria-label={`Delete ${lesson.title || "lesson"}`} onClick={(e) => { e.stopPropagation(); onRemove?.(); }} className="inline-flex h-7 w-7 items-center justify-center rounded text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-400 dark:hover:bg-red-950/40">
           <Trash2 size={12} />
         </button>
       </div>
@@ -78,7 +78,7 @@ function ModuleItem({ module, index, selectedModuleId, selectedLessonId, onSelec
   return (
     <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
       <div className="flex items-center gap-1 px-2 py-2 bg-neutral-50 dark:bg-neutral-800/50">
-        <button onClick={() => setExpanded(!expanded)} className="p-0.5 text-neutral-500 hover:text-neutral-700">
+        <button aria-label={`${expanded ? "Collapse" : "Expand"} ${module.title || `module ${index + 1}`}`} onClick={() => setExpanded(!expanded)} className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]">
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
         {editingTitle ? (
@@ -91,7 +91,7 @@ function ModuleItem({ module, index, selectedModuleId, selectedLessonId, onSelec
               if (e.key === "Enter") { e.preventDefault(); saveTitle(); }
               if (e.key === "Escape") { setEditingTitle(false); setTitle(module.title || ""); }
             }}
-            className="flex-1 min-w-0 rounded border border-neutral-200 bg-white px-1.5 py-0.5 text-xs"
+            className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--bg-surface)] px-1.5 py-1 text-xs text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
@@ -100,10 +100,10 @@ function ModuleItem({ module, index, selectedModuleId, selectedLessonId, onSelec
           </button>
         )}
         <div className="flex items-center gap-0.5 shrink-0">
-          <button onClick={() => onMoveModuleUp?.()} disabled={isFirst} className="p-0.5 text-neutral-400 hover:text-neutral-700 disabled:opacity-30">↑</button>
-          <button onClick={() => onMoveModuleDown?.()} disabled={isLast} className="p-0.5 text-neutral-400 hover:text-neutral-700 disabled:opacity-30">↓</button>
-          <button onClick={() => setEditingTitle(true)} className="p-0.5 text-neutral-400 hover:text-neutral-700"><Edit3 size={12} /></button>
-          <button onClick={() => onRemoveModule?.(module.id)} className="p-0.5 text-neutral-400 hover:text-red-600"><Trash2 size={12} /></button>
+          <button aria-label={`Move ${module.title || "module"} up`} onClick={() => onMoveModuleUp?.()} disabled={isFirst} className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-30">↑</button>
+          <button aria-label={`Move ${module.title || "module"} down`} onClick={() => onMoveModuleDown?.()} disabled={isLast} className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-30">↓</button>
+          <button aria-label={`Rename ${module.title || "module"}`} onClick={() => setEditingTitle(true)} className="inline-flex h-7 w-7 items-center justify-center rounded text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"><Edit3 size={12} /></button>
+          <button aria-label={`Delete ${module.title || "module"}`} onClick={() => onRemoveModule?.(module.id)} className="inline-flex h-7 w-7 items-center justify-center rounded text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-400 dark:hover:bg-red-950/40"><Trash2 size={12} /></button>
         </div>
       </div>
       {expanded && (
@@ -125,7 +125,7 @@ function ModuleItem({ module, index, selectedModuleId, selectedLessonId, onSelec
           ))}
           <button
             onClick={() => onAddLesson?.(module.id)}
-            className="flex items-center gap-1 w-full px-2 py-1 text-xs text-neutral-500 hover:text-[var(--color-primary)] transition-colors"
+            className="flex min-h-8 w-full items-center gap-1 rounded px-2 py-1 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--color-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
           >
             <Plus size={12} /> Add lesson
           </button>
@@ -149,7 +149,7 @@ export default function CourseOutline({ modules, selectedModuleId, selectedLesso
       <div className="px-3 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50/50 dark:bg-neutral-800/50 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">Course Structure</span>
-          <button type="button" onClick={onAddModule} className="inline-flex items-center gap-1 rounded-md bg-[var(--color-primary)] px-2.5 py-1.5 text-xs font-medium text-white hover-brand transition-colors">
+          <button type="button" onClick={onAddModule} className="inline-flex min-h-8 items-center gap-1 rounded-md bg-[var(--color-primary)] px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900">
             <Plus size={14} /> Add
           </button>
         </div>
@@ -160,7 +160,7 @@ export default function CourseOutline({ modules, selectedModuleId, selectedLesso
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search..."
-            className="w-full rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 pl-7 pr-2 py-1 text-xs"
+            className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-surface)] py-1 pl-7 pr-2 text-xs text-[var(--text-primary)] placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 dark:placeholder:text-neutral-500"
           />
         </div>
       </div>
@@ -190,7 +190,7 @@ export default function CourseOutline({ modules, selectedModuleId, selectedLesso
         {filtered.length === 0 && (
           <div className="text-center py-6">
             <p className="text-xs text-neutral-500 mb-2">No modules yet</p>
-            <button type="button" onClick={onAddModule} className="inline-flex items-center gap-1 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-white">
+            <button type="button" onClick={onAddModule} className="inline-flex min-h-8 items-center gap-1 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900">
               <Plus size={14} /> Add your first module
             </button>
           </div>
