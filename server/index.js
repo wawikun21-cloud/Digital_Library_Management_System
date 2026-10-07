@@ -1,4 +1,4 @@
-// ─────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────
 //  server/index.js
 //  Entry point — Express app + Socket.io server
 //
@@ -34,6 +34,8 @@ const searchRoutes       = require("./routes/search");
 const trashRoutes        = require("./routes/trash");
 const auditRoutes        = require("./routes/audit");
 const rfidRoutes         = require("./routes/rfid");
+const coursesRoutes      = require("./features/courses/courses.routes");
+const coursesBuilderRoutes = require("./features/courses/builder.routes");
 
 // ── Analytics controller (for the /api/books/stats shortcut) ──
 const AnalyticsController = require("./controllers/analyticsController");
@@ -58,11 +60,9 @@ const sessionMiddleware = session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure:   true,      // must be unconditionally true — sameSite:"none" requires it
-    sameSite: "none",    // required for cross-subdomain cookies (frontend and backend
-                         // live on different *.hostingersite.com subdomains, which
-                         // browsers treat as cross-site)
-    maxAge:   1000 * 60 * 60 * 8, // 8 hours
+    secure:   process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    maxAge:   1000 * 60 * 60 * 8,
   },
 });
 
@@ -99,9 +99,10 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 //
 // 200 req/min is generous for a library management system but firm
 // enough to blunt naive flood attacks.
+const isDevelopment = process.env.NODE_ENV !== "production";
 const globalApiLimiter = rateLimit({
   windowMs:        60 * 1000,  // 1-minute window
-  max:             200,         // 200 requests per IP per minute
+  max:             isDevelopment ? 1000 : 200,
   standardHeaders: true,
   legacyHeaders:   false,
   skip: (req) => {
@@ -130,6 +131,8 @@ app.use("/api/suggestions",  searchRoutes);   // convenience alias
 app.use("/api/trash",        trashRoutes);
 app.use("/api/audit",        auditRoutes);
 app.use("/api/rfid",         rfidRoutes);
+app.use("/api/courses",      coursesBuilderRoutes);
+app.use("/api/courses",      coursesRoutes);
 
 // KPI stats shortcut — keeps existing Dashboard fetch URL working
 app.get("/api/books/stats", AnalyticsController.getBookStats);

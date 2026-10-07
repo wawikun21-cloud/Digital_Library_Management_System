@@ -15,6 +15,7 @@ const TABLE_MAP = {
   faculty:     "faculty",
   transaction: "borrowed_books",
   attendance:  "attendance",
+  course:      "courses",
 };
 
 // Fields to snapshot for display in Recently Deleted UI
@@ -25,6 +26,7 @@ const SNAPSHOT_MAP = {
   faculty:     (r) => ({ title: r.faculty_name, subtitle: r.department }),
   transaction: (r) => ({ title: r.book_title || r.bookTitle || "Transaction", subtitle: r.borrower_name, status: r.status }),
   attendance:  (r) => ({ title: r.student_name, subtitle: r.student_id_number, checkin: r.check_in_time }),
+  course:      (r) => ({ title: r.title, subtitle: r.category, status: r.status }),
 };
 
 const TrashModel = {

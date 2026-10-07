@@ -46,6 +46,9 @@ const NAV_ITEMS = [
   { to: "/dashboard/books",        label: "Books",        Icon: BookOpen, roles: [ROLES.ADMIN, ROLES.LIBRARIAN], end: true },
   { to: "/dashboard/lexora-books", label: "Lexora Books", Icon: Globe,    roles: [ROLES.ADMIN, ROLES.LIBRARIAN] },
 
+  // ── Courses (admin + staff) ───────────────────────────
+  { to: "/dashboard/courses", label: "Courses", Icon: Library, roles: [ROLES.ADMIN, ROLES.STAFF], end: true },
+
   // ── Admin-only pages ──────────────────────────────────
   { to: "/dashboard/borrowed",  label: "Borrowed",         Icon: ClipboardList, roles: [ROLES.ADMIN] },
 

@@ -189,6 +189,104 @@ async function initDatabase() {
     `);
     console.log("✅ Lexora books table ready");
 
+    // ── courses ────────────────────────────────────────
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS courses (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT DEFAULT NULL,
+        category VARCHAR(100) DEFAULT NULL,
+        difficulty ENUM('beginner','intermediate','advanced','all_levels') NOT NULL DEFAULT 'beginner',
+        status ENUM('draft','published','archived','under_review') NOT NULL DEFAULT 'draft',
+        instructor_id INT DEFAULT NULL,
+        thumbnail_url VARCHAR(500) DEFAULT NULL,
+        prerequisites JSON DEFAULT NULL,
+        learning_outcomes JSON DEFAULT NULL,
+        max_enrollments INT DEFAULT NULL,
+        start_date DATE DEFAULT NULL,
+        end_date DATE DEFAULT NULL,
+        grading_scale ENUM('STANDARD','PERCENTAGE','PASS_FAIL') NOT NULL DEFAULT 'STANDARD',
+        allow_self_enrollment BOOLEAN NOT NULL DEFAULT TRUE,
+        send_completion_certificates BOOLEAN NOT NULL DEFAULT FALSE,
+        is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (instructor_id) REFERENCES users(id) ON DELETE SET NULL,
+        INDEX idx_courses_status (status),
+        INDEX idx_courses_category (category),
+        INDEX idx_courses_instructor (instructor_id),
+        INDEX idx_courses_deleted (is_deleted)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log("✅ Courses table ready");
+
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS course_modules (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        course_id INT NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        description TEXT DEFAULT NULL,
+        type ENUM('chapter','unit','lesson','section','topic') NOT NULL DEFAULT 'chapter',
+        order_index INT NOT NULL DEFAULT 0,
+        release_date DATETIME DEFAULT NULL,
+        due_date DATETIME DEFAULT NULL,
+        is_graded BOOLEAN NOT NULL DEFAULT FALSE,
+        max_score INT DEFAULT NULL,
+        is_visible BOOLEAN NOT NULL DEFAULT TRUE,
+        is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+        INDEX idx_course_modules_course (course_id),
+        INDEX idx_course_modules_order (course_id, order_index)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log("✅ Course modules table ready");
+
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS module_content (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        module_id INT NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        type ENUM('video','reading','document','quiz','assignment','link','presentation','downloadable','live_session','interactive','sop','certificate') NOT NULL DEFAULT 'reading',
+        description TEXT DEFAULT NULL,
+        order_index INT NOT NULL DEFAULT 0,
+        url VARCHAR(2048) DEFAULT NULL,
+        duration INT DEFAULT NULL,
+        is_required BOOLEAN NOT NULL DEFAULT TRUE,
+        allow_access_after DATETIME DEFAULT NULL,
+        is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (module_id) REFERENCES course_modules(id) ON DELETE CASCADE,
+        INDEX idx_module_content_module (module_id),
+        INDEX idx_module_content_order (module_id, order_index)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log("✅ Module content table ready");
+
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS course_enrollments (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        course_id INT NOT NULL,
+        user_id INT NOT NULL,
+        role ENUM('instructor','teaching_assistant','learner','guest') NOT NULL DEFAULT 'learner',
+        status ENUM('pending','active','completed','dropped','suspended') NOT NULL DEFAULT 'active',
+        enrolled_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        completed_at DATETIME DEFAULT NULL,
+        progress_percentage INT NOT NULL DEFAULT 0,
+        final_grade DECIMAL(5,2) DEFAULT NULL,
+        is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+        FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        UNIQUE KEY uk_course_enrollment (course_id, user_id),
+        INDEX idx_enrollments_user (user_id),
+        INDEX idx_enrollments_course (course_id),
+        INDEX idx_enrollments_status (status)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log("✅ Course enrollments table ready");
+
     // ── attendance ─────────────────────────────────────
     await conn.query(`
       CREATE TABLE IF NOT EXISTS attendance (
@@ -211,7 +309,11 @@ async function initDatabase() {
     `);
     console.log("✅ Attendance table ready");
 
-    await migrateSchema(conn);
+    if (String(process.env.RUN_MIGRATIONS).toLowerCase() !== "false") {
+      await migrateSchema(conn);
+    } else {
+      console.log("⏭️  Migrations skipped (RUN_MIGRATIONS=false)");
+    }
     await conn.end();
     console.log("✅ Database initialization complete\n");
   } catch (error) {
@@ -304,6 +406,14 @@ async function migrateSchema(conn) {
     `ALTER TABLE lexora_books ADD INDEX idx_subject_course (subject_course(191))`,
     `ALTER TABLE lexora_books ADD INDEX idx_program        (program)`,
     `ALTER TABLE lexora_books ADD INDEX idx_resource_type  (resource_type)`,
+
+    // ── courses ──────────────────────────────────────────
+    `ALTER TABLE courses ADD COLUMN category_id INT DEFAULT NULL AFTER category`,
+    `CREATE INDEX IF NOT EXISTS idx_courses_category_id ON courses(category_id)`,
+    `ALTER TABLE module_content ADD COLUMN file_path VARCHAR(500) DEFAULT NULL`,
+    `ALTER TABLE module_content ADD COLUMN file_name VARCHAR(500) DEFAULT NULL`,
+    `ALTER TABLE courses ADD COLUMN deleted_at TIMESTAMP NULL`,
+    `ALTER TABLE courses ADD COLUMN deleted_by VARCHAR(100) NULL`,
   ];
 
   for (const sql of migrations) {

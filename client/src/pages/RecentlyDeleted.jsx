@@ -3,6 +3,7 @@ import {
   Trash2, RotateCcw, Search, Trash, BookOpen,
   ClipboardList, AlertCircle, Clock, Users, UserCheck,
   CalendarCheck, BookMarked, ChevronDown, ShieldAlert,
+  GraduationCap,
 } from "lucide-react";
 import ConfirmationModal from "../components/ConfirmationModal";
 import Toast from "../components/Toast";
@@ -18,6 +19,7 @@ import { useWebSocket } from "../hooks/useWebsocket";
 const TYPE_CONFIG = {
   book:        { label: "NEMCO Book",   Icon: BookOpen,      color: "#32667F",  bg: "rgba(50,102,127,0.1)"  },
   lexora_book: { label: "Lexora Book",  Icon: BookMarked,    color: "#7c3aed",  bg: "rgba(124,58,237,0.1)"  },
+  course:      { label: "Course",       Icon: GraduationCap, color: "#0e7490",  bg: "rgba(14,116,144,0.1)"  },
   student:     { label: "Student",      Icon: Users,         color: "#0e7490",  bg: "rgba(14,116,144,0.1)"  },
   faculty:     { label: "Faculty",      Icon: UserCheck,     color: "#b45309",  bg: "rgba(180,83,9,0.1)"    },
   transaction: { label: "Transaction",  Icon: ClipboardList, color: "#b87a1a",  bg: "rgba(238,162,58,0.1)"  },
@@ -28,6 +30,7 @@ const FILTER_TABS = [
   { key: "all",        label: "All"          },
   { key: "book",       label: "NEMCO Books"  },
   { key: "lexora_book",label: "Lexora Books" },
+  { key: "course",     label: "Courses"      },
   { key: "student",    label: "Students"     },
   { key: "faculty",    label: "Faculty"      },
   { key: "transaction",label: "Transactions" },

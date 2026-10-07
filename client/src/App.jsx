@@ -32,6 +32,10 @@ const AuditLog            = lazy(() => import("./pages/AuditLog"));
 const AttendanceDashboard = lazy(() => import("./pages/AttendanceDashboard"));
 const BookDashboard       = lazy(() => import("./pages/BookDashboard"));
 const Unauthorized        = lazy(() => import("./pages/Unauthorized"));
+const Courses             = lazy(() => import("./features/courses/pages/CourseCatalog"));
+const CourseCreate        = lazy(() => import("./features/courses/pages/CourseCreatePage"));
+const CourseDetails       = lazy(() => import("./features/courses/pages/CourseDetailsPage"));
+const CourseBuilder       = lazy(() => import("./features/courses/pages/CourseBuilderPage"));
 
 // ── Apply saved theme on first paint ─────────────────────
 const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
@@ -194,6 +198,22 @@ export default function App() {
             <Route
               path="faculty"
               element={<AdminOrStaffRoute><Page><Faculty /></Page></AdminOrStaffRoute>}
+            />
+            <Route
+              path="courses"
+              element={<AdminOrStaffRoute><Page><Courses /></Page></AdminOrStaffRoute>}
+            />
+            <Route
+              path="courses/create"
+              element={<AdminOrStaffRoute><Page><CourseCreate /></Page></AdminOrStaffRoute>}
+            />
+            <Route
+              path="courses/:id"
+              element={<AdminOrStaffRoute><Page><CourseDetails /></Page></AdminOrStaffRoute>}
+            />
+            <Route
+              path="courses/:id/builder"
+              element={<AdminOrStaffRoute><Page><CourseBuilder /></Page></AdminOrStaffRoute>}
             />
 
             {/* ── Unauthorized fallback inside layout ──────── */}
