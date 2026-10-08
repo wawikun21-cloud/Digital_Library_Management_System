@@ -4,9 +4,10 @@ const { successResponse, errorResponse } = require("../utils/responseFormatter")
 const path            = require("path");
 const fs              = require("fs");
 const crypto          = require("crypto");
+const { lexoraUploadsDir } = require("../config/uploads");
 
 // ── Uploads directory ───────────────────────────────────────
-const UPLOAD_DIR = path.join(__dirname, "../uploads/lexora-books");
+const UPLOAD_DIR = lexoraUploadsDir;
 
 function ensureBookDir(bookId) {
   const dir = path.join(UPLOAD_DIR, String(bookId));

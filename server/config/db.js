@@ -21,18 +21,28 @@ const dbConfig = {
   dateStrings: true,
 };
 
+const createDatabase = process.env.DB_CREATE_DATABASE === "true" ||
+  (process.env.DB_CREATE_DATABASE !== "false" && process.env.NODE_ENV !== "production");
 const pool = mysql.createPool(dbConfig);
 
 async function initDatabase() {
   try {
-    const conn = await mysql.createConnection({
+    const connectionConfig = {
       host: dbConfig.host, port: dbConfig.port,
       user: dbConfig.user, password: dbConfig.password,
-    });
+    };
 
-    await conn.query(`CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\``);
-    console.log(`✅ Database '${dbConfig.database}' ready`);
-    await conn.query(`USE \`${dbConfig.database}\``);
+    if (createDatabase) {
+      const conn = await mysql.createConnection(connectionConfig);
+      await conn.query(`CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\``);
+      await conn.end();
+      console.log(`✅ Database '${dbConfig.database}' ready`);
+    }
+
+    const conn = await mysql.createConnection({
+      ...connectionConfig,
+      database: dbConfig.database,
+    });
 
     // ── users ──────────────────────────────────────────
     await conn.query(`

@@ -1,0 +1,13 @@
+{
+  "name": "lexora-hostinger",
+  "private": true,
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm ci --prefix client && npm ci --prefix server --omit=dev && npm run build --prefix client",
+    "start": "npm --prefix server start",
+    "test:deployment": "npm --prefix server run test:deployment"
+  }
+}

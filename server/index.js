@@ -16,11 +16,14 @@ const express = require("express");
 const cors    = require("cors");
 const helmet  = require("helmet");
 const path    = require("path");
+const fs      = require("fs");
 const session = require("express-session");
 
 const { initDatabase, testConnection } = require("./config/db");
+const { uploadsDir }                   = require("./config/uploads");
 const { initSocket, getIO }            = require("./utils/websocket");
 const { validateEnv }                  = require("./config/env");
+const { registerFrontendRoutes }       = require("./middleware/frontend");
 const rateLimit                        = require("express-rate-limit");
 
 // ── Routes ────────────────────────────────────────────────
@@ -63,7 +66,7 @@ const sessionMiddleware = session({
   cookie: {
     httpOnly: true,
     secure:   process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    sameSite: "lax",
     maxAge:   1000 * 60 * 60 * 8,
   },
 });
@@ -77,7 +80,7 @@ const sessionMiddleware = session({
 // trailing slash (e.g. "https://foo.com/" vs "https://foo.com") makes
 // the browser reject the preflight response outright.
 const CLIENT_ORIGIN = (
-  process.env.CLIENT_ORIGIN || process.env.CLIENT_URL || "http://localhost:5173"
+  process.env.CLIENT_ORIGIN || process.env.CLIENT_URL || process.env.APP_URL || "http://localhost:5173"
 ).replace(/\/$/, "");
 
 app.use(cors({
@@ -93,6 +96,9 @@ app.use(sessionMiddleware);
 // ── Static uploads ────────────────────────────────────────
 app.use("/uploads/lexora-books", lexoraMediaAccess);
 app.use("/uploads/tmp", (_req, res) => res.status(404).end());
+fs.mkdirSync(uploadsDir, { recursive: true });
+app.use("/uploads", express.static(uploadsDir));
+// Preserve files uploaded before UPLOADS_DIR was configurable.
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // Keep older Lexora files readable when they were stored beside the server folder.
 app.use(
@@ -153,10 +159,8 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// ── 404 handler ───────────────────────────────────────────
-app.use((req, res) => {
-  res.status(404).json({ success: false, message: "Route not found" });
-});
+// ── Client build, SPA fallback, and JSON 404s ─────────────
+registerFrontendRoutes(app, path.join(__dirname, "../client/dist"));
 
 // ── Global error handler ──────────────────────────────────
 app.use((err, req, res, _next) => {

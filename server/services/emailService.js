@@ -32,7 +32,7 @@ const transporter = createTransporter();
 
 // ── Shared constants ──────────────────────────────────────
 const FINE_PER_DAY  = 5;
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || process.env.CLIENT_URL || process.env.APP_URL || "http://localhost:5173";
 const FROM_NAME     = emailConfig.fromName;
 const FROM_ADDRESS  = emailConfig.auth.user;
 

@@ -14,8 +14,7 @@ function validateEnv() {
     "DB_PASSWORD",
     "DB_NAME",
     "SESSION_SECRET",
-    "GMAIL_USER",
-    "GMAIL_APP_PASSWORD",
+    "CLIENT_ORIGIN",
   ];
 
   if (process.env.NODE_ENV === "production") {

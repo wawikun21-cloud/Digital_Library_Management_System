@@ -2,8 +2,9 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
+const { tempUploadsDir } = require("../config/uploads");
 
-const TEMP_DIR = path.join(__dirname, "../uploads/tmp/lexora");
+const TEMP_DIR = path.join(tempUploadsDir, "lexora");
 const PDF_MAX_SIZE = 50 * 1024 * 1024;
 const IMAGE_MAX_SIZE = 5 * 1024 * 1024;
 const MAX_PAGE_FILES = 50;
