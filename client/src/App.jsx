@@ -15,6 +15,7 @@ import {
   AdminRoute,
   AdminOrStaffRoute,
   CatalogRoute,
+  AnyRoleRoute,
 } from "./components/auth/ProtectedRoute.jsx";
 
 // ── Lazy-loaded pages ─────────────────────────────────────
@@ -25,7 +26,6 @@ const Attendance          = lazy(() => import("./pages/Attendance"));
 const Students            = lazy(() => import("./pages/Students"));
 const Faculty             = lazy(() => import("./pages/Faculty"));
 const RecentlyDeleted     = lazy(() => import("./pages/RecentlyDeleted"));
-const LexoraBooks         = lazy(() => import("./pages/LexoraBooks"));
 const ManageLexoraBooks   = lazy(() => import("./features/lexora-books/pages/ManageLexoraBooks"));
 const LexoraBooksCatalog  = lazy(() => import("./features/lexora-books/pages/LexoraBooksCatalog"));
 const LexoraBookDetails   = lazy(() => import("./features/lexora-books/pages/LexoraBookDetails"));
@@ -39,6 +39,7 @@ const AttendanceDashboard = lazy(() => import("./pages/AttendanceDashboard"));
 const BookDashboard       = lazy(() => import("./pages/BookDashboard"));
 const Unauthorized        = lazy(() => import("./pages/Unauthorized"));
 const Courses             = lazy(() => import("./features/courses/pages/CourseCatalog"));
+const CourseLibrary       = lazy(() => import("./features/courses/pages/CourseLibrary"));
 const CourseCreate        = lazy(() => import("./features/courses/pages/CourseCreatePage"));
 const CourseDetails       = lazy(() => import("./features/courses/pages/CourseDetailsPage"));
 const CourseBuilder       = lazy(() => import("./features/courses/pages/CourseBuilderPage"));
@@ -174,7 +175,7 @@ export default function App() {
             />
             <Route
               path="lexora-books/import"
-              element={<CatalogRoute><Page><LexoraBooks /></Page></CatalogRoute>}
+              element={<CatalogRoute><Navigate to="/dashboard/lexora-books" replace /></CatalogRoute>}
             />
             <Route
               path="lexora-books/manage"
@@ -227,6 +228,10 @@ export default function App() {
             <Route
               path="courses"
               element={<AdminOrStaffRoute><Page><Courses /></Page></AdminOrStaffRoute>}
+            />
+            <Route
+              path="course-library"
+              element={<AnyRoleRoute><Page><CourseLibrary /></Page></AnyRoleRoute>}
             />
             <Route
               path="courses/create"

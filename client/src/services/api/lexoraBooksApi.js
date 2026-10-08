@@ -229,6 +229,10 @@ export async function createCategory(name) {
   return request(`${LEXORA_API}/categories`, { method: "POST", body: JSON.stringify({ name }) })
 }
 
+export async function deleteCategory(id) {
+  return request(`${LEXORA_API}/categories/${id}`, { method: "DELETE" })
+}
+
 export async function setBookCategories(id, categoryIds) {
   return request(`${LEXORA_API}/${id}/categories`, {
     method: "PUT",
@@ -248,6 +252,10 @@ export async function fetchTags() {
 
 export async function createTag(name) {
   return request(`${LEXORA_API}/tags`, { method: "POST", body: JSON.stringify({ name }) })
+}
+
+export async function deleteTag(id) {
+  return request(`${LEXORA_API}/tags/${id}`, { method: "DELETE" })
 }
 
 export async function setBookTags(id, tagIds) {

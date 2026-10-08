@@ -304,6 +304,24 @@ const createCategory = async (req, res) => {
   }
 };
 
+const deleteCategory = async (req, res) => {
+  try {
+    const categoryId = Number(req.params.id);
+    if (!Number.isSafeInteger(categoryId) || categoryId <= 0) {
+      return res.status(400).json(errorResponse("Invalid category ID", 400));
+    }
+    const result = await LexoraBookModel.deleteCategory(categoryId);
+    if (!result.success) {
+      const status = result.error === "Category not found" ? 404 : 400;
+      return res.status(status).json(errorResponse(result.error, status));
+    }
+    res.json(successResponse(null, "Category deleted"));
+  } catch (error) {
+    console.error("[LexoraController.deleteCategory]", error.message);
+    res.status(500).json(errorResponse("Failed to delete category", 500));
+  }
+};
+
 const getTags = async (req, res) => {
   try {
     const result = await LexoraBookModel.getTags();
@@ -325,6 +343,24 @@ const createTag = async (req, res) => {
   } catch (error) {
     console.error("[LexoraController.createTag]", error.message);
     res.status(500).json(errorResponse("Failed to create tag", 500));
+  }
+};
+
+const deleteTag = async (req, res) => {
+  try {
+    const tagId = Number(req.params.id);
+    if (!Number.isSafeInteger(tagId) || tagId <= 0) {
+      return res.status(400).json(errorResponse("Invalid tag ID", 400));
+    }
+    const result = await LexoraBookModel.deleteTag(tagId);
+    if (!result.success) {
+      const status = result.error === "Tag not found" ? 404 : 400;
+      return res.status(status).json(errorResponse(result.error, status));
+    }
+    res.json(successResponse(null, "Tag deleted"));
+  } catch (error) {
+    console.error("[LexoraController.deleteTag]", error.message);
+    res.status(500).json(errorResponse("Failed to delete tag", 500));
   }
 };
 
@@ -867,8 +903,10 @@ module.exports = {
   restoreLexoraBook,
   getCategories,
   createCategory,
+  deleteCategory,
   getTags,
   createTag,
+  deleteTag,
   setBookCategories,
   setBookTags,
   getBookPages,

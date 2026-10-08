@@ -13,6 +13,7 @@ import Toast from "../../../components/Toast";
 import EditCourseModal from "../components/modals/EditCourseModal";
 import EnrollStudentsModal from "../components/modals/EnrollStudentsModal";
 import { formatDate } from "../utils/courseHelpers";
+import RichTextContent from "../components/RichTextContent";
 
 const TABS = [
   { key: "overview", label: "Overview" },
@@ -192,7 +193,7 @@ export default function CourseDetailsPage() {
             </div>
             <div>
               <p className="text-xs font-medium text-neutral-500 mb-1">Description</p>
-              <p className="text-sm text-neutral-900 dark:text-neutral-100 whitespace-pre-wrap">{course?.description || "—"}</p>
+              <RichTextContent value={course?.description} className="text-sm text-neutral-900 dark:text-neutral-100" />
             </div>
             {course?.prerequisites && (
               <div>

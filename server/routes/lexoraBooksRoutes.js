@@ -228,6 +228,11 @@ router.post("/categories",
   lexoraCtrl.createCategory
 );
 
+router.delete("/categories/:id",
+  requireAuth, requireAdminOrLibrarian,
+  lexoraCtrl.deleteCategory
+);
+
 router.put("/:id/categories",
   requireAuth, requireAdminOrLibrarian,
   lexoraCtrl.setBookCategories
@@ -240,6 +245,11 @@ router.get("/tags/all", requireAuth, requireAdminOrLibrarian, lexoraCtrl.getTags
 router.post("/tags",
   requireAuth, requireAdminOrLibrarian,
   lexoraCtrl.createTag
+);
+
+router.delete("/tags/:id",
+  requireAuth, requireAdminOrLibrarian,
+  lexoraCtrl.deleteTag
 );
 
 router.put("/:id/tags",

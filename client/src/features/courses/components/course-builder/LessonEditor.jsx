@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Save, Trash2, ChevronUp, ChevronDown, FileText, PlayCircle, HelpCircle, Link2 } from "lucide-react";
+import RichTextEditor from "../RichTextEditor";
 
 const TYPE_OPTIONS = [
   { value: "reading", label: "Reading", icon: FileText },
@@ -86,7 +87,7 @@ export default function LessonEditor({ lesson, moduleId, courseTitle, onSave, on
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">Description / Content</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={5} className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 dark:bg-neutral-800 dark:text-neutral-100 dark:placeholder:text-neutral-500" placeholder="Lesson content or instructions" />
+            <RichTextEditor value={description} onChange={setDescription} minHeight="10rem" placeholder="Lesson content or instructions" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

@@ -49,6 +49,7 @@ const NAV_ITEMS = [
 
   // ── Courses (admin + staff) ───────────────────────────
   { to: "/dashboard/courses", label: "Courses", Icon: Library, roles: [ROLES.ADMIN, ROLES.STAFF], end: true },
+  { to: "/dashboard/course-library", label: "Course Library", Icon: BookOpen },
 
   // ── Admin-only pages ──────────────────────────────────
   { to: "/dashboard/borrowed",  label: "Borrowed",         Icon: ClipboardList, roles: [ROLES.ADMIN] },

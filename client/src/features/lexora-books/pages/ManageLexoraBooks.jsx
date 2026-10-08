@@ -1,6 +1,5 @@
 import { useState, useCallback } from "react"
-import { useNavigate } from "react-router-dom"
-import { Plus, BookOpen, Upload } from "lucide-react"
+import { Plus, BookOpen } from "lucide-react"
 import { useLexoraBooks } from "../hooks/useLexoraBooks"
 import LexoraBookAdminTable from "../components/LexoraBookAdminTable"
 import LexoraBookFormModal from "../components/LexoraBookFormModal"
@@ -16,7 +15,6 @@ import {
 import { useAuth } from "../../../hooks/useAuth"
 
 export default function ManageLexoraBooks() {
-  const navigate = useNavigate()
   const { user } = useAuth()
   const {
     books, loading, error,
@@ -97,13 +95,6 @@ export default function ManageLexoraBooks() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate("/dashboard/lexora-books/import")}
-            className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-opacity border"
-            style={{ borderColor: "var(--border)", color: "var(--text-primary)" }}
-          >
-            <Upload size={16} /> Import
-          </button>
           <button
             onClick={handleAdd}
             className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-opacity"

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Save, Trash2, ChevronUp, ChevronDown } from "lucide-react";
+import RichTextEditor from "../RichTextEditor";
 
 export default function ModuleEditor({ module, onSave, onDelete, saving, courseId, onMoveUp, onMoveDown, canMoveUp, canMoveDown }) {
   const [title, setTitle] = useState("");
@@ -56,7 +57,7 @@ export default function ModuleEditor({ module, onSave, onDelete, saving, courseI
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">Description</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 dark:bg-neutral-800 dark:text-neutral-100 dark:placeholder:text-neutral-500" placeholder="Module description" />
+            <RichTextEditor value={description} onChange={setDescription} placeholder="Module description" />
           </div>
           <div className="flex items-center justify-between pt-2">
             <button onClick={() => onDelete?.(module.id)} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40">

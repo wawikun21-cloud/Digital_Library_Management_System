@@ -15,6 +15,15 @@ export async function getCourseList(params = {}) {
   return res.json();
 }
 
+export async function getCourseLibrary(params = {}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== "") qs.append(key, val);
+  });
+  const res = await fetch(`${API_BASE}/api/courses/library?${qs.toString()}`, withCreds());
+  return res.json();
+}
+
 export async function getCourseById(id) {
   const res = await fetch(`${API_BASE}/api/courses/${id}`, withCreds());
   return res.json();
@@ -32,6 +41,21 @@ export async function updateCourse(id, payload) {
     ...withCreds({ method: "PUT", body: JSON.stringify(payload) }),
   });
   return res.json();
+}
+
+export async function uploadCourseThumbnail(file) {
+  const formData = new FormData();
+  formData.append("thumbnail", file);
+  const response = await fetch(`${API_BASE}/api/courses/thumbnail`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  const result = await response.json();
+  if (!response.ok || !result?.success || !result?.data?.thumbnail_url) {
+    throw new Error(result?.error || result?.message || "Unable to upload course thumbnail");
+  }
+  return result;
 }
 
 export async function deleteCourse(id) {
@@ -140,9 +164,11 @@ export async function approveCourse(courseId) {
 
 export default {
   getCourseList,
+  getCourseLibrary,
   getCourseById,
   createCourse,
   updateCourse,
+  uploadCourseThumbnail,
   deleteCourse,
   archiveCourse,
   publishCourse,

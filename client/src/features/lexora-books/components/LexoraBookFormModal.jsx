@@ -8,6 +8,7 @@ import {
   fetchTags, createTag, setBookTags,
   uploadBookPdf, removeBookPdf, uploadBookCover, removeBookCover, uploadBookThumbnail, uploadBookPages,
   createLexoraBook, updateLexoraBook,
+  deleteCategory, deleteTag,
   fetchBookPages, deleteBookPage, reorderBookPages, replaceBookPage,
 } from "../../../services/api/lexoraBooksApi"
 
@@ -47,6 +48,7 @@ export default function LexoraBookFormModal({ isOpen, onClose, book, onSaved }) 
   const [errors, setErrors] = useState({})
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
+  const [deletingTaxonomy, setDeletingTaxonomy] = useState("")
   const [pdfFile, setPdfFile] = useState(null)
   const [coverFile, setCoverFile] = useState(null)
   const [thumbnailFile, setThumbnailFile] = useState(null)
@@ -179,6 +181,27 @@ export default function LexoraBookFormModal({ isOpen, onClose, book, onSaved }) 
   }
   const handleCreateCategory = makeCreator(createCategory, setCategories, "category_ids")
   const handleCreateTag = makeCreator(createTag, setTags, "tag_ids")
+
+  const makeDeleter = (remove, setList, key, noun) => async (item) => {
+    if (!window.confirm(`Delete ${noun} "${item.name}"? It will also be removed from every book that uses it.`)) return
+    const actionId = `${noun}-${item.id}`
+    setDeletingTaxonomy(actionId)
+    setErrors((prev) => ({ ...prev, organize: undefined }))
+    try {
+      await remove(item.id)
+      setList((prev) => prev.filter((entry) => entry.id !== item.id))
+      setForm((prev) => ({
+        ...prev,
+        [key]: prev[key].filter((id) => String(id) !== String(item.id)),
+      }))
+    } catch (error) {
+      setErrors((prev) => ({ ...prev, organize: error.message || `Could not delete ${noun}.` }))
+    } finally {
+      setDeletingTaxonomy("")
+    }
+  }
+  const handleDeleteCategory = makeDeleter(deleteCategory, setCategories, "category_ids", "category")
+  const handleDeleteTag = makeDeleter(deleteTag, setTags, "tag_ids", "tag")
 
   const movePage = async (index, direction) => {
     const targetIndex = index + direction
@@ -624,10 +647,13 @@ export default function LexoraBookFormModal({ isOpen, onClose, book, onSaved }) 
             </Section>
 
             <Section id="organize" title="Categories & tags" desc="Help readers find this book. Pick existing ones or type to create new.">
+              {errors.organize && <p role="alert" className="mb-3 text-xs text-red-400">{errors.organize}</p>}
               <ChipPicker id="bf-categories" label="Categories" noun="category" items={categories}
-                selected={form.category_ids} onChange={(ids) => updateField("category_ids", ids)} onCreate={handleCreateCategory} />
+                selected={form.category_ids} onChange={(ids) => updateField("category_ids", ids)}
+                onCreate={handleCreateCategory} onDelete={handleDeleteCategory} deletingId={deletingTaxonomy} />
               <ChipPicker id="bf-tags" label="Tags" noun="tag" amber items={tags}
-                selected={form.tag_ids} onChange={(ids) => updateField("tag_ids", ids)} onCreate={handleCreateTag} />
+                selected={form.tag_ids} onChange={(ids) => updateField("tag_ids", ids)}
+                onCreate={handleCreateTag} onDelete={handleDeleteTag} deletingId={deletingTaxonomy} />
             </Section>
 
             <Section id="publish" title="Visibility" desc="Who can see this book once it's published.">
@@ -751,7 +777,7 @@ function IconBtn({ label, danger, children, ...props }) {
   )
 }
 
-function ChipPicker({ id, label, noun, items, selected, onChange, onCreate, amber }) {
+function ChipPicker({ id, label, noun, items, selected, onChange, onCreate, onDelete, deletingId, amber }) {
   const [text, setText] = useState("")
   const [creating, setCreating] = useState(false)
   const q = text.trim().toLowerCase()
@@ -780,6 +806,14 @@ function ChipPicker({ id, label, noun, items, selected, onChange, onCreate, ambe
             {c.name}
             <button type="button" aria-label={`Remove ${c.name}`} onClick={() => onChange(selected.filter((x) => x !== c.id))}
               className="rounded-full p-0.5 hover:bg-[rgba(255,255,255,0.12)]"><X size={12} /></button>
+            <IconBtn
+              label={`Delete ${noun} ${c.name} from all books`}
+              danger
+              disabled={deletingId !== "" || creating}
+              onClick={() => onDelete(c)}
+            >
+              {deletingId === `${noun}-${c.id}` ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+            </IconBtn>
           </span>
         ))}
       </div>
@@ -796,10 +830,20 @@ function ChipPicker({ id, label, noun, items, selected, onChange, onCreate, ambe
       {matches.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {matches.slice(0, 12).map((i) => (
-            <button key={i.id} type="button" onClick={() => add(i.id)}
-              className="flex items-center gap-1 rounded-full border border-dashed border-[color:var(--border)] px-2.5 py-1 text-xs text-[color:var(--text-secondary)] transition hover:border-[color:var(--accent-amber)] hover:text-[color:var(--accent-amber)]">
-              <Plus size={11} /> {i.name}
-            </button>
+            <span key={i.id} className="inline-flex items-center rounded-full border border-dashed border-[color:var(--border)]">
+              <button type="button" onClick={() => add(i.id)}
+                className="flex items-center gap-1 rounded-l-full py-1 pl-2.5 pr-1.5 text-xs text-[color:var(--text-secondary)] transition hover:text-[color:var(--accent-amber)]">
+                <Plus size={11} /> {i.name}
+              </button>
+              <IconBtn
+                label={`Delete ${noun} ${i.name} from all books`}
+                danger
+                disabled={deletingId !== "" || creating}
+                onClick={() => onDelete(i)}
+              >
+                {deletingId === `${noun}-${i.id}` ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+              </IconBtn>
+            </span>
           ))}
           {matches.length > 12 && <span className="py-1 text-[11px] text-[color:var(--text-muted)]">+{matches.length - 12} more. Type to search.</span>}
         </div>

@@ -2,11 +2,14 @@ const express = require('express');
 const router = express.Router();
 const CoursesController = require('./courses.controller');
 const { requireAuth, requireAdminOrStaff } = require('../../middleware/authMiddleware');
+const { courseThumbnailUpload } = require('../../middleware/courseThumbnailUpload');
 
 router.get('/', requireAuth, requireAdminOrStaff, CoursesController.listCourses);
+router.get('/library', requireAuth, CoursesController.listLibraryCourses);
 router.get('/categories', requireAuth, requireAdminOrStaff, (req, res) => {
   res.status(200).json({ success: true, data: [] });
 });
+router.post('/thumbnail', requireAuth, requireAdminOrStaff, courseThumbnailUpload, CoursesController.uploadThumbnail);
 router.get('/:id', requireAuth, requireAdminOrStaff, CoursesController.getCourse);
 router.post('/', requireAuth, requireAdminOrStaff, CoursesController.createCourse);
 router.put('/:id', requireAuth, requireAdminOrStaff, CoursesController.updateCourse);

@@ -494,6 +494,17 @@ const LexoraBookModel = {
     }
   },
 
+  async deleteCategory(id) {
+    try {
+      const [result] = await pool.query("DELETE FROM lexora_book_categories WHERE id = ?", [id]);
+      if (result.affectedRows === 0) return { success: false, error: "Category not found" };
+      return { success: true };
+    } catch (error) {
+      console.error("[LexoraBookModel.deleteCategory]", error.message);
+      return { success: false, error: error.message };
+    }
+  },
+
   async setBookCategories(bookId, categoryIds) {
     const conn = await pool.getConnection();
     try {
@@ -553,6 +564,17 @@ const LexoraBookModel = {
         return { success: true, data: rows[0] };
       }
       console.error("[LexoraBookModel.createTag]", error.message);
+      return { success: false, error: error.message };
+    }
+  },
+
+  async deleteTag(id) {
+    try {
+      const [result] = await pool.query("DELETE FROM lexora_book_tags WHERE id = ?", [id]);
+      if (result.affectedRows === 0) return { success: false, error: "Tag not found" };
+      return { success: true };
+    } catch (error) {
+      console.error("[LexoraBookModel.deleteTag]", error.message);
       return { success: false, error: error.message };
     }
   },

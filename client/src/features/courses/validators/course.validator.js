@@ -1,9 +1,13 @@
 export function validateCourse(data) {
   const errors = {};
+  const descriptionText = String(data.description || "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .trim();
   if (!data.title || String(data.title).trim().length < 3) {
     errors.title = "Title must be at least 3 characters";
   }
-  if (!data.description || String(data.description).trim().length < 10) {
+  if (descriptionText.length < 10) {
     errors.description = "Description must be at least 10 characters";
   }
   if (!data.difficulty || !["beginner", "intermediate", "advanced", "all_levels"].includes(data.difficulty)) {

@@ -1,33 +1,80 @@
 const coursesService = require('./courses.service');
 const auditService = require('../../services/auditService');
+const fs = require('fs/promises');
+const path = require('path');
+const crypto = require('crypto');
+const { uploadsDir } = require('../../config/uploads');
+const { detectImageExtension } = require('./courseThumbnail');
+
+function getCourseListFilters(req, status = req.query.status) {
+  return {
+    search: req.query.search,
+    status,
+    category: req.query.category,
+    difficulty: req.query.difficulty,
+    instructor_id: req.query.instructor_id,
+    page: parseInt(req.query.page || '1', 10),
+    limit: parseInt(req.query.limit || '20', 10),
+    sort: req.query.sort,
+    order: req.query.order,
+  };
+}
+
+async function sendCourseList(req, res, filters) {
+  const { data, total } = await coursesService.listCourses(filters);
+  res.status(200).json({
+    success: true,
+    data,
+    pagination: {
+      page: filters.page,
+      limit: filters.limit,
+      total,
+      totalPages: Math.ceil(total / filters.limit) || 1,
+    },
+  });
+}
 
 const CoursesController = {
-  async listCourses(req, res) {
+  async uploadThumbnail(req, res) {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'Choose a thumbnail image to upload' });
+    }
+
+    const extension = detectImageExtension(req.file.buffer);
+    if (!extension) {
+      return res.status(400).json({ success: false, error: 'The uploaded file is not a valid JPEG, PNG, or WebP image' });
+    }
+
     try {
-      const filters = {
-        search: req.query.search,
-        status: req.query.status,
-        category: req.query.category,
-        difficulty: req.query.difficulty,
-        instructor_id: req.query.instructor_id,
-        page: parseInt(req.query.page || '1', 10),
-        limit: parseInt(req.query.limit || '20', 10),
-        sort: req.query.sort,
-        order: req.query.order,
-      };
-      const { data, total } = await coursesService.listCourses(filters);
-      res.status(200).json({
+      const thumbnailDir = path.join(uploadsDir, 'course-thumbnails');
+      const filename = `${crypto.randomUUID()}${extension}`;
+      await fs.mkdir(thumbnailDir, { recursive: true });
+      await fs.writeFile(path.join(thumbnailDir, filename), req.file.buffer, { flag: 'wx' });
+
+      res.status(201).json({
         success: true,
-        data,
-        pagination: {
-          page: filters.page,
-          limit: filters.limit,
-          total,
-          totalPages: Math.ceil(total / filters.limit) || 1,
-        },
+        data: { thumbnail_url: `/uploads/course-thumbnails/${filename}` },
       });
     } catch (error) {
+      console.error('[CoursesController.uploadThumbnail] Error:', error);
+      res.status(500).json({ success: false, error: 'Unable to save the course thumbnail' });
+    }
+  },
+
+  async listCourses(req, res) {
+    try {
+      await sendCourseList(req, res, getCourseListFilters(req));
+    } catch (error) {
       console.error('[CoursesController.listCourses] Error:', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  },
+
+  async listLibraryCourses(req, res) {
+    try {
+      await sendCourseList(req, res, getCourseListFilters(req, 'published'));
+    } catch (error) {
+      console.error('[CoursesController.listLibraryCourses] Error:', error);
       res.status(500).json({ success: false, error: 'Internal server error' });
     }
   },
