@@ -1,4 +1,5 @@
 const coursesService = require('./courses.service');
+const progressRepo = require('./progress.repository');
 const auditService = require('../../services/auditService');
 const fs = require('fs/promises');
 const path = require('path');
@@ -365,7 +366,12 @@ const CoursesController = {
 
   async enrollStudent(req, res) {
     try {
+      const userId = req.session?.user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'Not authenticated' });
+      }
       const result = await coursesService.enrollStudent(req.params.courseId, req.body.user_id, req.body.role || 'learner');
+      await progressRepo.unlockForEnrollment(req.body.user_id, req.params.courseId);
       await auditService.logAction(req, {
         entity_type: 'course_enrollment',
         entity_id: result,
@@ -376,6 +382,118 @@ const CoursesController = {
       res.status(201).json({ success: true, data: result, message: 'Student enrolled successfully' });
     } catch (error) {
       console.error('[CoursesController.enrollStudent] Error:', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  },
+
+  async getCourseProgress(req, res) {
+    try {
+      const userId = req.session?.user?.id;
+      const courseId = parseInt(req.params.courseId, 10);
+      if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+
+      const course = await coursesService.getCourse(courseId);
+      if (!course) return res.status(404).json({ success: false, error: 'Course not found' });
+
+      const [modules, progress, enrollment] = await Promise.all([
+        coursesService.listCourseModules(courseId),
+        progressRepo.listByCourse(userId, courseId),
+        progressRepo.getEnrollment(courseId, userId),
+      ]);
+
+      const progressMap = new Map();
+      progress.forEach((p) => progressMap.set(p.lesson_id, p));
+
+      const enrichedLessons = [];
+      for (const mod of modules) {
+        const contentItems = await coursesService.listModuleContent(mod.id);
+        for (const item of contentItems) {
+          const existing = progressMap.get(item.id);
+          enrichedLessons.push({
+            id: item.id,
+            title: item.title,
+            type: item.type,
+            moduleId: mod.id,
+            moduleTitle: mod.title,
+            order: item.order_index,
+            status: existing ? existing.status : (enrichedLessons.length === 0 ? 'unlocked' : 'locked'),
+            completedAt: existing ? existing.completed_at : null,
+            duration: item.duration,
+            url: item.url,
+            description: item.description,
+          });
+        }
+      }
+
+      const total = enrichedLessons.length;
+      const completed = enrichedLessons.filter((l) => l.status === 'completed').length;
+      const completionPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+      res.status(200).json({
+        success: true,
+        data: {
+          courseId,
+          title: course.title,
+          lessons: enrichedLessons,
+          summary: { total, completed, completionPct },
+          isEnrolled: !!enrollment,
+          enrollmentStatus: enrollment?.status || null,
+        },
+      });
+    } catch (error) {
+      console.error('[CoursesController.getCourseProgress] Error:', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  },
+
+  async markLessonComplete(req, res) {
+    try {
+      const userId = req.session?.user?.id;
+      const courseId = parseInt(req.params.courseId, 10);
+      const lessonId = parseInt(req.params.lessonId, 10);
+      if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+
+      const lesson = await progressRepo.findLesson(courseId, lessonId);
+      if (!lesson) return res.status(404).json({ success: false, error: 'Lesson not found' });
+
+      await progressRepo.upsert({ userId, lessonId, courseId, status: 'completed' });
+
+      const nextLessonId = await progressRepo.getNextLessonId(userId, courseId, lessonId);
+      if (nextLessonId) {
+        await progressRepo.upsert({ userId, lessonId: nextLessonId, courseId, status: 'unlocked' });
+      }
+
+      const moduleId = lesson.module_id;
+      if (moduleId && (await progressRepo.isModuleCompleted(userId, moduleId))) {
+        const nextModuleId = await progressRepo.getNextModuleId(courseId, moduleId);
+        if (nextModuleId) {
+          const firstLesson = await progressRepo.getFirstLessonIdOfModule(nextModuleId);
+          if (firstLesson) {
+            await progressRepo.upsert({ userId, lessonId: firstLesson, courseId, status: 'unlocked' });
+          }
+        }
+      }
+
+      const total = await progressRepo.countTotal(courseId);
+      const completed = await progressRepo.countCompleted(userId, courseId);
+      const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+      if (completed >= total && total > 0) {
+        await progressRepo.updateEnrollmentProgress(courseId, userId, 100, 'completed', new Date());
+        await auditService.logAction(req, {
+          entity_type: 'course_enrollment',
+          entity_id: courseId,
+          action: 'COMPLETE',
+          old_data: null,
+          new_data: { status: 'completed', completed_at: new Date() },
+        });
+      } else {
+        await progressRepo.updateEnrollmentProgress(courseId, userId, pct, 'active');
+      }
+
+      res.status(200).json({ success: true, message: 'Lesson marked complete' });
+    } catch (error) {
+      console.error('[CoursesController.markLessonComplete] Error:', error);
       res.status(500).json({ success: false, error: 'Internal server error' });
     }
   },

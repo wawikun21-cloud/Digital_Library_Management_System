@@ -1,37 +1,50 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft, Plus, Trash2 } from "lucide-react";
+import {
+  ChevronLeft, BookOpen, Clock, Users, PlayCircle,
+  GraduationCap, Globe, Layers,
+} from "lucide-react";
 import { useCourseDetails } from "../hooks/useCourseDetails";
-import { useModules } from "../hooks/useModules";
 import { useEnrollmentList } from "../hooks/useEnrollmentList";
 import { useCourseActions } from "../hooks/useCourseActions";
 import { useDeleteCourse } from "../hooks/useDeleteCourse";
 import { useUpdateCourse } from "../hooks/useUpdateCourse";
-import { useDeleteModule } from "../hooks/useDeleteModule";
+import { useAuth } from "../../../hooks/useAuth";
 import ConfirmationModal from "../../../components/ConfirmationModal";
 import Toast from "../../../components/Toast";
 import EditCourseModal from "../components/modals/EditCourseModal";
 import EnrollStudentsModal from "../components/modals/EnrollStudentsModal";
-import { formatDate } from "../utils/courseHelpers";
 import RichTextContent from "../components/RichTextContent";
+import CourseContentSection from "../components/CourseContentSection";
+import OverviewSection from "../components/OverviewSection";
+import CourseAdminTabs from "../components/CourseAdminTabs";
 
-const TABS = [
-  { key: "overview", label: "Overview" },
-  { key: "modules", label: "Modules" },
-  { key: "students", label: "Students" },
-];
+const DIFFICULTY_META = {
+  beginner: { label: "Beginner" },
+  intermediate: { label: "Intermediate" },
+  advanced: { label: "Advanced" },
+  all_levels: { label: "All Levels" },
+};
+
+function MetaStat({ icon: Icon, value, label }) {
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+      <Icon size={13} className="text-neutral-400 dark:text-neutral-500" />
+      <span>{value}</span>
+    </div>
+  );
+}
 
 export default function CourseDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { data: course, loading, error, refetch } = useCourseDetails(id);
-  const { data: modules } = useModules(id);
+  const { isStudent } = useAuth();
   const { data: enrollments } = useEnrollmentList({ courseId: id });
   const { archive, publish, loading: acting } = useCourseActions();
   const { remove: removeCourse, loading: deleting } = useDeleteCourse();
   const { update: updateCourseSettings, loading: updatingSettings } = useUpdateCourse();
-  const { remove: deleteModule, loading: deletingModule } = useDeleteModule();
   const [tab, setTab] = useState("overview");
   const [modals, setModals] = useState({});
   const [pendingArchive, setPendingArchive] = useState(false);
@@ -49,6 +62,14 @@ export default function CourseDetailsPage() {
       setModals((p) => ({ ...p, edit: true }));
     }
   }, [isEditMode]);
+
+  const handleLessonClick = (lesson) => {
+    navigate(`/dashboard/courses/${id}/learn/${lesson.id}`);
+  };
+
+  const handleStartLearning = () => {
+    navigate(`/dashboard/courses/${id}/learn`);
+  };
 
   const confirmArchive = async () => {
     if (!id) return;
@@ -84,15 +105,50 @@ export default function CourseDetailsPage() {
     await refetch?.();
   };
 
-  if (loading) return <p className="text-sm text-neutral-500">Loading course...</p>;
-  if (error) {
+  const handleAction = (key) => {
+    if (key === "module") toggleModal("module");
+    else if (key === "enroll") toggleModal("enroll");
+    else if (key === "edit") toggleModal("edit");
+    else if (key === "builder") navigate(`/dashboard/courses/${course?.id}/builder`);
+  };
+
+  const parseJSONField = (field) => {
+    if (!field) return [];
+    try {
+      const parsed = typeof field === "string" ? JSON.parse(field) : field;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const learningOutcomes = parseJSONField(course?.learning_outcomes);
+  const prerequisites = parseJSONField(course?.prerequisites);
+  const difficulty = DIFFICULTY_META[course?.difficulty] || DIFFICULTY_META.all_levels;
+
+  if (loading) {
     return (
-      <div className="space-y-4">
+      <div className="w-full max-w-none space-y-5 sm:space-y-6">
+        <div className="h-56 rounded-2xl border border-neutral-200/80 dark:border-neutral-700/80 bg-white dark:bg-neutral-900 animate-pulse" />
+        <div className="space-y-4">
+          <div className="h-4 w-24 rounded bg-neutral-200 dark:bg-neutral-700" />
+          <div className="h-6 w-2/3 rounded bg-neutral-200 dark:bg-neutral-700" />
+          <div className="h-4 w-1/2 rounded bg-neutral-200 dark:bg-neutral-700" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !course) {
+    return (
+      <div className="w-full max-w-3xl mx-auto space-y-4">
         <h1 className="text-xl font-bold text-neutral-900 dark:text-neutral-100">Course Details</h1>
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm dark:border-red-900 dark:bg-red-950/30">
           <p className="font-medium text-red-800 dark:text-red-200">Failed to load course</p>
           <p className="mt-1 text-red-600 dark:text-red-300">{error}</p>
-          <button onClick={refetch} className="mt-2 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900">Retry</button>
+          <button onClick={refetch} className="mt-2 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-red-700">
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -100,214 +156,123 @@ export default function CourseDetailsPage() {
 
   return (
     <div className="w-full max-w-none space-y-5 sm:space-y-6">
-      <div className="relative overflow-hidden rounded-2xl border border-neutral-200/80 dark:border-neutral-700/80 bg-gradient-to-br from-white via-neutral-50/80 to-neutral-100/80 dark:from-neutral-900 dark:via-neutral-800 dark:to-neutral-700 p-5 sm:p-6 shadow-sm dark:shadow-none">
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate("/dashboard/courses")}
-              aria-label="Back to courses"
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-neutral-900 dark:text-neutral-100 tracking-tight">{course?.title ?? "Course Details"}</h1>
-              <p className="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">
-                {course?.status || "—"}
-              </p>
-            </div>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => navigate(-1)}
+          aria-label="Back"
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <h1 className="text-xl sm:text-2xl font-bold text-neutral-900 dark:text-neutral-100 tracking-tight">
+          {course?.title ?? "Course Details"}
+        </h1>
+      </div>
+
+      <div className="rounded-2xl border border-neutral-200/80 dark:border-neutral-700/80 bg-gradient-to-br from-white via-neutral-50/80 to-neutral-100/80 dark:from-neutral-900 dark:via-neutral-800 dark:to-neutral-700 p-5 sm:p-6 shadow-sm dark:shadow-none">
+        <div className="flex flex-col sm:flex-row sm:items-end gap-5 sm:gap-6">
+          <div className="relative h-40 w-full sm:h-44 sm:w-40 md:h-48 md:w-64 shrink-0 rounded-xl overflow-hidden border border-neutral-200/80 dark:border-neutral-700/80 bg-white dark:bg-neutral-800 shadow-sm">
+            {course?.thumbnail_url ? (
+              <img
+                src={course.thumbnail_url}
+                alt={course.title}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
+                <BookOpen size={36} className="text-blue-400 dark:text-blue-500" />
+              </div>
+            )}
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-1">
-            <button
-              onClick={() => navigate(`/dashboard/courses/${course?.id}/builder`)}
-              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
-            >
-              Manage Course
-            </button>
-            <button
-              onClick={() => toggleModal("edit")}
-              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
-            >
-              Edit
-            </button>
-            <button
-              onClick={() => setPendingArchive(true)}
-              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
-            >
-              {course?.status === "archived" ? "Unarchive" : "Archive"}
-            </button>
-            <button
-              onClick={() => setPendingDelete(true)}
-              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40"
-            >
-              Delete
-            </button>
+
+          <div className="flex-1 min-w-0 space-y-3.5">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700">
+                  {difficulty.label}
+                </span>
+                {course?.category && (
+                  <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700">
+                    {course.category}
+                  </span>
+                )}
+              </div>
+              <h2 className="mt-1.5 text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100 tracking-tight leading-tight">
+                {course?.title || "Course Details"}
+              </h2>
+              {course?.instructor_name && (
+                <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">
+                  by {course.instructor_name}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+              <MetaStat icon={Clock} value={`${course?.duration_hours || 0}h`} label="Duration" />
+              <span className="hidden sm:block h-3 w-px bg-neutral-200 dark:bg-neutral-700" />
+              <MetaStat icon={BookOpen} value={`${course?.lesson_count || 0} lessons`} label="Lessons" />
+              <span className="hidden sm:block h-3 w-px bg-neutral-200 dark:bg-neutral-700" />
+              <MetaStat icon={Users} value={`${course?.enrollment_count || enrollments?.length || 0} students`} label="Students" />
+              <span className="hidden sm:block h-3 w-px bg-neutral-200 dark:bg-neutral-700" />
+              <MetaStat icon={Globe} value="English" label="Language" />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              {isStudent ? (
+                <button
+                  onClick={handleStartLearning}
+                  className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900"
+                >
+                  <PlayCircle size={14} />
+                  Start Learning
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate(`/dashboard/courses/${course?.id}/builder`)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-1.5 text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+                >
+                  Manage Course
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-700 overflow-x-auto">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-              tab === t.key
-                ? "border-[var(--color-primary)] text-[var(--color-primary)] dark:border-[var(--color-primary)] dark:text-[var(--color-primary)]"
-                : "border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {isStudent ? (
+        <StudentCourseView
+          course={course}
+          id={id}
+          learningOutcomes={learningOutcomes}
+          prerequisites={prerequisites}
+          handleLessonClick={handleLessonClick}
+        />
+      ) : (
+        <CourseAdminTabs
+          course={course}
+          id={id}
+          activeTab={tab}
+          onTabChange={setTab}
+          onLessonView={handleLessonClick}
+          enrollments={enrollments}
+          onAction={handleAction}
+          onArchive={() => setPendingArchive(true)}
+          onDelete={() => setPendingDelete(true)}
+        />
+      )}
 
-      <div>
-        {tab === "overview" && (
-          <div className="rounded-xl border border-[var(--border)] bg-white dark:bg-neutral-900 p-5 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs font-medium text-neutral-500">Category</p>
-                <p className="text-sm text-neutral-900 dark:text-neutral-100">{course?.category || "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-neutral-500">Difficulty</p>
-                <p className="text-sm text-neutral-900 dark:text-neutral-100 capitalize">{course?.difficulty?.replace(/_/g, " ") || "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-neutral-500">Start Date</p>
-                <p className="text-sm text-neutral-900 dark:text-neutral-100">{formatDate(course?.start_date)}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-neutral-500">End Date</p>
-                <p className="text-sm text-neutral-900 dark:text-neutral-100">{formatDate(course?.end_date)}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-neutral-500">Max Enrollments</p>
-                <p className="text-sm text-neutral-900 dark:text-neutral-100">{course?.max_enrollments ?? "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-neutral-500">Instructor</p>
-                <p className="text-sm text-neutral-900 dark:text-neutral-100">{course?.instructor_name || "—"}</p>
-              </div>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-neutral-500 mb-1">Description</p>
-              <RichTextContent value={course?.description} className="text-sm text-neutral-900 dark:text-neutral-100" />
-            </div>
-            {course?.prerequisites && (
-              <div>
-                <p className="text-xs font-medium text-neutral-500 mb-1">Prerequisites</p>
-                <ul className="list-disc list-inside text-sm text-neutral-900 dark:text-neutral-100">
-                  {JSON.parse(course.prerequisites).map((item, idx) => (
-                    <li key={idx}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {course?.learning_outcomes && (
-              <div>
-                <p className="text-xs font-medium text-neutral-500 mb-1">Learning Outcomes</p>
-                <ul className="list-disc list-inside text-sm text-neutral-900 dark:text-neutral-100">
-                  {JSON.parse(course.learning_outcomes).map((item, idx) => (
-                    <li key={idx}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-
-        {tab === "modules" && (
-          <div className="rounded-xl border border-[var(--border)] bg-white dark:bg-neutral-900 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Modules</h3>
-              <button
-                onClick={() => toggleModal("module")}
-                className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900"
-              >
-                <Plus size={14} /> Add Module
-              </button>
-            </div>
-            <div className="space-y-2">
-              {(modules || []).map((mod) => (
-                <div key={mod.id} className="flex items-center justify-between rounded-lg border border-[var(--border)] p-3">
-                  <div>
-                    <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{mod.title}</p>
-                    <p className="text-xs text-neutral-500 capitalize">{mod.type}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => toggleModal(`content-${mod.id}`)}
-                      className="rounded px-2 py-1 text-xs font-medium text-[var(--color-primary)] hover:bg-[var(--bg-hover)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
-                    >
-                      Manage Content
-                    </button>
-                    <button
-                      onClick={async () => {
-                        await deleteModule(id, mod.id);
-                        refetch?.();
-                      }}
-                      disabled={deletingModule}
-                      aria-label={`Delete module ${mod.title}`}
-                      className="rounded p-2 text-red-600 transition-colors hover:bg-red-50 hover:text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {(!modules || modules.length === 0) && (
-                <p className="text-xs text-neutral-500 text-center py-4">No modules yet.</p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {tab === "students" && (
-          <div className="rounded-xl border border-[var(--border)] bg-white dark:bg-neutral-900 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Enrollments</h3>
-              <button
-                onClick={() => toggleModal("enroll")}
-                className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900"
-              >
-                <Plus size={14} /> Enroll Student
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--border)] bg-neutral-50/60 dark:bg-neutral-800/40">
-                    <th className="text-left px-3 py-2 font-medium text-neutral-500">User</th>
-                    <th className="text-left px-3 py-2 font-medium text-neutral-500">Role</th>
-                    <th className="text-left px-3 py-2 font-medium text-neutral-500">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(enrollments || []).map((enrollment) => (
-                    <tr key={enrollment.id} className="border-b border-[var(--border)] last:border-0">
-                      <td className="px-3 py-2 text-neutral-900 dark:text-neutral-100">{enrollment.username || enrollment.user_id}</td>
-                      <td className="px-3 py-2 text-neutral-600 dark:text-neutral-300 capitalize">{enrollment.role}</td>
-                      <td className="px-3 py-2 text-neutral-600 dark:text-neutral-300 capitalize">{enrollment.status}</td>
-                    </tr>
-                  ))}
-                  {(!enrollments || enrollments.length === 0) && (
-                    <tr>
-                      <td colSpan={3} className="px-3 py-6 text-center text-xs text-neutral-500">
-                        No enrollments yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <EditCourseModal open={modals.edit} onClose={() => toggleModal("edit")} course={course} onSuccess={refetch} />
-      <EnrollStudentsModal open={modals.enroll} onClose={() => toggleModal("enroll")} courseId={id} onSuccess={refetch} />
+      <EditCourseModal
+        open={modals.edit}
+        onClose={() => toggleModal("edit")}
+        course={course}
+        onSuccess={refetch}
+      />
+      <EnrollStudentsModal
+        open={modals.enroll}
+        onClose={() => toggleModal("enroll")}
+        courseId={id}
+        onSuccess={refetch}
+      />
       <ConfirmationModal
         isOpen={pendingArchive}
         title={course?.status === "archived" ? "Unarchive Course" : "Archive Course"}
@@ -332,6 +297,55 @@ export default function CourseDetailsPage() {
         type={toast.type}
         onClose={() => setToast((t) => ({ ...t, visible: false }))}
       />
+    </div>
+  );
+}
+
+function StudentCourseView({ course, id, learningOutcomes, prerequisites, handleLessonClick }) {
+  return (
+    <div className="space-y-6">
+      <OverviewSection title="About this course" icon={BookOpen}>
+        {learningOutcomes.length > 0 && (
+          <div className="mb-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400 mb-2 flex items-center gap-2">
+              <GraduationCap size={14} /> What you'll learn
+            </h3>
+            <ul className="space-y-1.5">
+              {learningOutcomes.map((outcome, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+                  <span className="text-[var(--color-primary)] mt-0.5">✓</span>
+                  <span>{outcome}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {course?.description && (
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400 mb-2">Description</h3>
+            <RichTextContent value={course.description} className="text-sm text-neutral-700 dark:text-neutral-300" />
+          </div>
+        )}
+
+        {prerequisites.length > 0 && (
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400 mb-2">Prerequisites</h3>
+            <ul className="list-disc list-inside space-y-1 text-sm text-neutral-600 dark:text-neutral-300">
+              {prerequisites.map((pre, i) => (
+                <li key={i}>{pre}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </OverviewSection>
+
+      <OverviewSection title="Course Content" icon={Layers}>
+        <CourseContentSection
+          courseId={id}
+          onLessonView={handleLessonClick}
+        />
+      </OverviewSection>
     </div>
   );
 }

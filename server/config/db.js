@@ -47,12 +47,42 @@ async function initDatabase() {
     // ── users ──────────────────────────────────────────
     await conn.query(`
       CREATE TABLE IF NOT EXISTS users (
+        id                 INT          AUTO_INCREMENT PRIMARY KEY,
+        username           VARCHAR(100) NOT NULL UNIQUE,
+        password           VARCHAR(255) NOT NULL,
+        role               VARCHAR(50)  NOT NULL DEFAULT 'admin',
+        avatar_url         MEDIUMTEXT   NULL,
+        created_at         TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+        updated_at         TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        is_active          TINYINT(1)   NOT NULL DEFAULT 1,
+        full_name          VARCHAR(255) NULL,
+        email              VARCHAR(255) NULL,
+        position_title     VARCHAR(255) NULL,
+        employee_id        VARCHAR(100) NULL,
+        contact_number     VARCHAR(50)  NULL,
+        date_hired         DATE         NULL,
+        birthdate          DATE         NULL,
+        address            TEXT         NULL,
+        employment_status  VARCHAR(100) NULL,
+        student_id_number  VARCHAR(100) NULL,
+        INDEX idx_users_role (role),
+        INDEX idx_users_active (is_active),
+        UNIQUE KEY uk_users_email (email)
+      )
+    `);
+
+    // ── user_role_history (audit trail for role changes) ───
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS user_role_history (
         id         INT          AUTO_INCREMENT PRIMARY KEY,
-        username   VARCHAR(100) NOT NULL UNIQUE,
-        password   VARCHAR(255) NOT NULL,
-        role       VARCHAR(50)  NOT NULL DEFAULT 'admin',
-        avatar_url MEDIUMTEXT   NULL,
-        created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+        user_id    INT          NOT NULL,
+        old_role   VARCHAR(50)  NULL,
+        new_role   VARCHAR(50)  NOT NULL,
+        changed_by INT          NULL,
+        reason     TEXT         NULL,
+        created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_user_id (user_id),
+        INDEX idx_created_at (created_at)
       )
     `);
     console.log("✅ Users table ready");
@@ -61,23 +91,43 @@ async function initDatabase() {
     if (existing.length === 0) {
       const defaultAdminUser = process.env.DEFAULT_ADMIN_USERNAME;
       const defaultAdminPass = process.env.DEFAULT_ADMIN_PASSWORD;
+      const defaultHashed = await bcrypt.hash("password123", 10);
 
       if (defaultAdminUser && defaultAdminPass) {
         const hashed = await bcrypt.hash(defaultAdminPass, 10);
         await conn.query(
-          "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-          [defaultAdminUser, hashed, "admin"]
+          "INSERT INTO users (username, password, role, full_name, email, is_active) VALUES (?, ?, ?, ?, ?, 1)",
+          [defaultAdminUser, hashed, "super_admin", "System Administrator", "admin@lexora.local"]
         );
-        console.log(`✅ Default admin created → username: ${defaultAdminUser}`);
+        console.log(`✅ Default Super Admin created → username: ${defaultAdminUser}`);
       } else if (process.env.NODE_ENV === "production") {
         console.warn("⚠️  No DEFAULT_ADMIN_USERNAME/PASSWORD set — skipping default admin creation. Manual user creation required.");
       } else {
-        const hashed = await bcrypt.hash("admin123", 10);
-        await conn.query(
-          "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-          ["admin", hashed, "admin"]
-        );
-        console.log("✅ Default admin created (dev only) → username: admin / password: admin123");
+        // Dev seed: create one user of each managed role
+        const seedUsers = [
+          { username: "superadmin", role: "super_admin", full_name: "Super Admin",        email: "superadmin@lexora.local", password: defaultHashed },
+          { username: "admin",       role: "admin",        full_name: "Administrator",       email: "admin@lexora.local",       password: defaultHashed },
+          { username: "librarian",   role: "librarian",    full_name: "Librarian User",     email: "librarian@lexora.local",  password: defaultHashed },
+          { username: "staff",       role: "staff",        full_name: "Staff User",         email: "staff@lexora.local",      password: defaultHashed },
+          { username: "student",     role: "student",      full_name: "Student User",        email: "student@lexora.local",    password: defaultHashed },
+        ];
+
+        for (const su of seedUsers) {
+          await conn.query(
+            "INSERT INTO users (username, password, role, full_name, email, is_active) VALUES (?, ?, ?, ?, ?, 1)",
+            [su.username, su.password, su.role, su.full_name, su.email]
+          );
+        }
+        console.log("✅ Default seeded users created (dev only) → username: superadmin/admin/librarian/staff/student / password: password123");
+      }
+    } else {
+      // Upgrade existing users: empty role or 'admin' role → super_admin
+      const [toUpgrade] = await conn.query(
+        "SELECT id FROM users WHERE role = '' OR role = 'admin'"
+      );
+      if (toUpgrade.length > 0) {
+        await conn.query("UPDATE users SET role = 'super_admin' WHERE role = '' OR role = 'admin'");
+        console.log(`✅ Upgraded ${toUpgrade.length} existing user(s) to super_admin`);
       }
     }
 
@@ -276,6 +326,26 @@ async function initDatabase() {
     console.log("✅ Module content table ready");
 
     await conn.query(`
+      CREATE TABLE IF NOT EXISTS lesson_progress (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        lesson_id INT NOT NULL,
+        course_id INT NOT NULL,
+        status ENUM('locked','unlocked','in_progress','completed') NOT NULL DEFAULT 'locked',
+        completed_at DATETIME DEFAULT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (lesson_id) REFERENCES module_content(id) ON DELETE CASCADE,
+        FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+        UNIQUE KEY uk_lesson_progress (user_id, lesson_id),
+        INDEX idx_lp_course_user (course_id, user_id),
+        INDEX idx_lp_status (status)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log("✅ Lesson progress table ready");
+
+    await conn.query(`
       CREATE TABLE IF NOT EXISTS course_enrollments (
         id INT AUTO_INCREMENT PRIMARY KEY,
         course_id INT NOT NULL,
@@ -334,8 +404,35 @@ async function initDatabase() {
 
 async function migrateSchema(conn) {
   const migrations = [
-    // ── users ──────────────────────────────────────────
-    `ALTER TABLE users ADD COLUMN avatar_url MEDIUMTEXT NULL`,
+    // ── users: expand for RBAC + profile fields ─────────────────
+    `ALTER TABLE users MODIFY COLUMN role VARCHAR(50) NOT NULL DEFAULT 'admin'`,
+    `ALTER TABLE users ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1`,
+    `ALTER TABLE users ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`,
+    `ALTER TABLE users ADD COLUMN full_name VARCHAR(255) NULL`,
+    `ALTER TABLE users ADD COLUMN email VARCHAR(255) NULL`,
+    `ALTER TABLE users ADD COLUMN position_title VARCHAR(255) NULL`,
+    `ALTER TABLE users ADD COLUMN employee_id VARCHAR(100) NULL`,
+    `ALTER TABLE users ADD COLUMN contact_number VARCHAR(50) NULL`,
+    `ALTER TABLE users ADD COLUMN date_hired DATE NULL`,
+    `ALTER TABLE users ADD COLUMN birthdate DATE NULL`,
+    `ALTER TABLE users ADD COLUMN address TEXT NULL`,
+    `ALTER TABLE users ADD COLUMN employment_status VARCHAR(100) NULL`,
+    `ALTER TABLE users ADD COLUMN student_id_number VARCHAR(100) NULL`,
+    `ALTER TABLE users ADD INDEX idx_users_role (role)`,
+    `ALTER TABLE users ADD INDEX idx_users_active (is_active)`,
+    `ALTER TABLE users ADD UNIQUE KEY uk_users_email (email)`,
+    // ── user_role_history ───────────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS user_role_history (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      old_role VARCHAR(50) NULL,
+      new_role VARCHAR(50) NOT NULL,
+      changed_by INT NULL,
+      reason TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_user_id (user_id),
+      INDEX idx_created_at (created_at)
+    )`,
 
     // ── books ──────────────────────────────────────────
     `ALTER TABLE books MODIFY COLUMN author    VARCHAR(255) NULL`,

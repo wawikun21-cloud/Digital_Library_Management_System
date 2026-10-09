@@ -126,6 +126,18 @@ export async function getEnrollments(courseId) {
   return res.json();
 }
 
+export async function getCourseProgress(courseId) {
+  const res = await fetch(`${API_BASE}/api/courses/${courseId}/progress`, withCreds());
+  return res.json();
+}
+
+export async function markLessonComplete(courseId, lessonId) {
+  const res = await fetch(`${API_BASE}/api/courses/${courseId}/lessons/${lessonId}/complete`, {
+    ...withCreds({ method: "POST" }),
+  });
+  return res.json();
+}
+
 export async function enrollStudent(courseId, userId, role = "learner") {
   const res = await fetch(`${API_BASE}/api/courses/${courseId}/enrollments`, {
     ...withCreds({ method: "POST", body: JSON.stringify({ user_id: userId, role }) }),
@@ -183,6 +195,8 @@ export default {
   getEnrollments,
   enrollStudent,
   unenrollStudent,
+  getCourseProgress,
+  markLessonComplete,
   getBuilderData,
   updateBuilder,
   submitForReview,

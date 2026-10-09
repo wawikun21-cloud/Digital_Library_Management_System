@@ -16,6 +16,9 @@ import {
   AdminOrStaffRoute,
   CatalogRoute,
   AnyRoleRoute,
+  SuperAdminOrAdminRoute,
+  StudentRoute,
+  AllRolesRoute,
 } from "./components/auth/ProtectedRoute.jsx";
 
 // ── Lazy-loaded pages ─────────────────────────────────────
@@ -38,11 +41,14 @@ const AuditLog            = lazy(() => import("./pages/AuditLog"));
 const AttendanceDashboard = lazy(() => import("./pages/AttendanceDashboard"));
 const BookDashboard       = lazy(() => import("./pages/BookDashboard"));
 const Unauthorized        = lazy(() => import("./pages/Unauthorized"));
+const StudentPortal       = lazy(() => import("./features/students/pages/StudentPortalPage"));
 const Courses             = lazy(() => import("./features/courses/pages/CourseCatalog"));
 const CourseLibrary       = lazy(() => import("./features/courses/pages/CourseLibrary"));
 const CourseCreate        = lazy(() => import("./features/courses/pages/CourseCreatePage"));
 const CourseDetails       = lazy(() => import("./features/courses/pages/CourseDetailsPage"));
+const CourseLearnerView   = lazy(() => import("./features/courses/pages/CourseLearnerView"));
 const CourseBuilder       = lazy(() => import("./features/courses/pages/CourseBuilderPage"));
+const Users               = lazy(() => import("./features/users/pages/UsersPage"));
 
 // ── Apply saved theme on first paint ─────────────────────
 const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
@@ -231,7 +237,7 @@ export default function App() {
             />
             <Route
               path="course-library"
-              element={<AnyRoleRoute><Page><CourseLibrary /></Page></AnyRoleRoute>}
+              element={<AllRolesRoute><Page><CourseLibrary /></Page></AllRolesRoute>}
             />
             <Route
               path="courses/create"
@@ -239,14 +245,30 @@ export default function App() {
             />
             <Route
               path="courses/:id"
-              element={<AdminOrStaffRoute><Page><CourseDetails /></Page></AdminOrStaffRoute>}
+              element={<AllRolesRoute><Page><CourseDetails /></Page></AllRolesRoute>}
+            />
+            <Route
+              path="courses/:id/learn"
+              element={<AllRolesRoute><Page><CourseLearnerView /></Page></AllRolesRoute>}
+            />
+            <Route
+              path="courses/:id/learn/:lessonId"
+              element={<AllRolesRoute><Page><CourseLearnerView /></Page></AllRolesRoute>}
             />
             <Route
               path="courses/:id/builder"
               element={<AdminOrStaffRoute><Page><CourseBuilder /></Page></AdminOrStaffRoute>}
             />
 
-            {/* ── Unauthorized fallback inside layout ──────── */}
+            {/* ── User Management: Super Admin + Admin ────── */}
+            <Route
+              path="users"
+              element={<SuperAdminOrAdminRoute><Page><Users /></Page></SuperAdminOrAdminRoute>}
+            />
+            <Route
+              path="student"
+              element={<StudentRoute><Page><StudentPortal /></Page></StudentRoute>}
+            />
             <Route
               path="unauthorized"
               element={<Page><Unauthorized /></Page>}

@@ -91,7 +91,7 @@ export default function EnrollStudentsModal({ open, onClose, courseId, onSuccess
               </tr>
             </thead>
             <tbody>
-              {enrollments.map((enrollment) => (
+              {Array.isArray(enrollments) && enrollments.map((enrollment) => (
                 <tr key={enrollment.id} className="border-b border-[var(--border)] last:border-0">
                   <td className="px-3 py-2 text-neutral-900 dark:text-neutral-100">{enrollment.username || enrollment.user_id}</td>
                   <td className="px-3 py-2 text-neutral-600 dark:text-neutral-300 capitalize">{enrollment.role}</td>
@@ -107,7 +107,7 @@ export default function EnrollStudentsModal({ open, onClose, courseId, onSuccess
                   </td>
                 </tr>
               ))}
-              {enrollments.length === 0 && (
+              {Array.isArray(enrollments) && enrollments.length === 0 && (
                 <tr>
                   <td colSpan={4} className="px-3 py-6 text-center text-xs text-neutral-500">
                     No enrollments yet.

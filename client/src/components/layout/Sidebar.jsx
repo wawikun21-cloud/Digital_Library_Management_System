@@ -13,7 +13,7 @@ import { useState, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   BarChart3, BookOpen, ClipboardList, Trash2, Sun, Moon, X,
-  ChevronDown, Library, Users, User, Globe, UserCheck, LayoutDashboard,
+  ChevronDown, Library, Users, User, Globe, UserCheck, LayoutDashboard, GraduationCap,
 } from "lucide-react";
 import Logo from "./Logo.jsx";
 import { STORAGE_KEYS } from "../../constants/index.js";
@@ -29,30 +29,36 @@ const BRAND_HEIGHT   = 66;
 //  roles: [...]      → visible only to listed roles
 // ─────────────────────────────────────────────────────────
 const NAV_ITEMS = [
-  // ── Dashboard Analytics (admin only) ──────────────────
-  {
-    label:   "Dashboard Analytics",
-    to:      "/dashboard",
-    Icon:    BarChart3,
-    isGroup: true,
-    roles:   [ROLES.ADMIN],
-    children: [
+   // ── Student Portal (first item for students) ───────────
+   { to: "/dashboard/student", label: "Student Portal", Icon: GraduationCap, roles: [ROLES.STUDENT] },
+
+   // ── Dashboard Analytics (super admin + admin) ──────────
+   {
+     label:   "Dashboard Analytics",
+     to:      "/dashboard",
+     Icon:    BarChart3,
+     isGroup: true,
+     roles:   [ROLES.SUPER_ADMIN, ROLES.ADMIN],
+     children: [
       { to: "/dashboard/attendance/dashboard", label: "Attendance", Icon: LayoutDashboard },
       { to: "/dashboard/books/dashboard",      label: "Book",       Icon: BookOpen },
-    ],
-  },
+     ],
+   },
 
   // ── Books catalog (admin + librarian) ─────────────────
-  { to: "/dashboard/books",        label: "Books",        Icon: BookOpen, roles: [ROLES.ADMIN, ROLES.LIBRARIAN], end: true },
+  { to: "/dashboard/books",        label: "Books",        Icon: BookOpen, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.LIBRARIAN], end: true },
   { to: "/lexora-books",           label: "Lexora E-Books", Icon: Globe },
-  { to: "/dashboard/lexora-books", label: "Manage Lexora Books", Icon: Globe, roles: [ROLES.ADMIN, ROLES.LIBRARIAN] },
+  { to: "/dashboard/lexora-books", label: "Manage Lexora Books", Icon: Globe, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.LIBRARIAN] },
 
   // ── Courses (admin + staff) ───────────────────────────
-  { to: "/dashboard/courses", label: "Courses", Icon: Library, roles: [ROLES.ADMIN, ROLES.STAFF], end: true },
+  { to: "/dashboard/courses", label: "Courses", Icon: Library, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF], end: true },
   { to: "/dashboard/course-library", label: "Course Library", Icon: BookOpen },
 
-  // ── Admin-only pages ──────────────────────────────────
-  { to: "/dashboard/borrowed",  label: "Borrowed",         Icon: ClipboardList, roles: [ROLES.ADMIN] },
+  // ── Admin-only destructive / audit pages ──────────────
+  { to: "/dashboard/borrowed",  label: "Borrowed",         Icon: ClipboardList, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN] },
+
+  // ── User Management (Super Admin + Admin) ────────────
+  { to: "/dashboard/users", label: "Users", Icon: Users, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN] },
 
   // ── Attendance group (admin + staff) ──────────────────
   {
@@ -60,7 +66,7 @@ const NAV_ITEMS = [
     to:      "/dashboard/attendance",
     Icon:    Users,
     isGroup: true,
-    roles:   [ROLES.ADMIN, ROLES.STAFF],
+    roles:   [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF],
     children: [
       { to: "/dashboard/students",         label: "Students",         Icon: User      },
       { to: "/dashboard/faculty",          label: "Faculty",          Icon: UserCheck },
@@ -68,9 +74,9 @@ const NAV_ITEMS = [
     ],
   },
 
-  // ── Admin-only destructive / audit pages ──────────────
-  { to: "/dashboard/deleted",   label: "Recently Deleted", Icon: Trash2,      roles: [ROLES.ADMIN] },
-  { to: "/dashboard/audit-log", label: "Audit Trail",      Icon: ShieldCheck, roles: [ROLES.ADMIN] },
+  // ── Super Admin + Admin destructive / audit pages ───────
+  { to: "/dashboard/deleted",   label: "Recently Deleted", Icon: Trash2,      roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN] },
+  { to: "/dashboard/audit-log", label: "Audit Trail",      Icon: ShieldCheck, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN] },
 ];
 
 // ─────────────────────────────────────────────────────────
@@ -228,7 +234,7 @@ function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme, userRole }) {
             color: "var(--text-on-sidebar)",
           }}
         >
-          {role === ROLES.LIBRARIAN ? "📚 Librarian" : role === ROLES.STAFF ? "🧑‍💼 Staff" : "⚙️ Admin"}
+          {role === ROLES.LIBRARIAN ? "📚 Librarian" : role === ROLES.STAFF ? "🧑‍💼 Staff" : role === ROLES.SUPER_ADMIN ? "⚡ Super Admin" : role === ROLES.STUDENT ? "🎓 Student" : "⚙️ Admin"}
         </div>
       )}
 

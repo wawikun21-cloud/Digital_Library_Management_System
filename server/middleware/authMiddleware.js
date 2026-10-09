@@ -10,9 +10,11 @@
 
 // ── Role constants (mirror client/src/constants/roles.js) ─
 const ROLES = {
-  ADMIN:     "admin",
-  STAFF:     "staff",
-  LIBRARIAN: "librarian",
+  SUPER_ADMIN: "super_admin",
+  ADMIN:       "admin",
+  LIBRARIAN:   "librarian",
+  STAFF:       "staff",
+  STUDENT:     "student",
 };
 
 // ─────────────────────────────────────────────────────────
@@ -56,7 +58,10 @@ function requireRole(...roles) {
 // ─────────────────────────────────────────────────────────
 
 /** Only administrators. */
-const requireAdmin = requireRole(ROLES.ADMIN);
+const requireAdmin = requireRole(ROLES.ADMIN, ROLES.SUPER_ADMIN);
+
+/** Only super administrators. */
+const requireSuperAdmin = requireRole(ROLES.SUPER_ADMIN);
 
 /** Only staff members. */
 const requireStaff = requireRole(ROLES.STAFF);
@@ -64,17 +69,26 @@ const requireStaff = requireRole(ROLES.STAFF);
 /** Only librarians. */
 const requireLibrarian = requireRole(ROLES.LIBRARIAN);
 
+/** Super Admin + Admin (user management, analytics). */
+const requireSuperAdminOrAdmin = requireRole(ROLES.SUPER_ADMIN, ROLES.ADMIN);
+
 /** Administrators + Staff (attendance, students, faculty). */
-const requireAdminOrStaff = requireRole(ROLES.ADMIN, ROLES.STAFF);
+const requireAdminOrStaff = requireRole(ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF);
 
 /**
  * Administrators + Librarians.
  * Use on ALL books & lexora routes so librarians can manage the catalog.
  */
-const requireAdminOrLibrarian = requireRole(ROLES.ADMIN, ROLES.LIBRARIAN);
+const requireAdminOrLibrarian = requireRole(ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.LIBRARIAN);
 
-/** All authenticated roles (admin + staff + librarian). */
-const requireAnyRole = requireRole(ROLES.ADMIN, ROLES.STAFF, ROLES.LIBRARIAN);
+/** All authenticated roles (super_admin + admin + staff + librarian). */
+const requireAnyRole = requireRole(ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF, ROLES.LIBRARIAN);
+
+/** Students (login-only portal). */
+const requireStudent = requireRole(ROLES.STUDENT);
+
+/** All roles including students. */
+const requireAllRoles = requireRole(ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.LIBRARIAN, ROLES.STAFF, ROLES.STUDENT);
 
 // ─────────────────────────────────────────────────────────
 module.exports = {
@@ -82,9 +96,13 @@ module.exports = {
   requireAuth,
   requireRole,
   requireAdmin,
+  requireSuperAdmin,
   requireStaff,
   requireLibrarian,
   requireAdminOrStaff,
   requireAdminOrLibrarian,
+  requireSuperAdminOrAdmin,
   requireAnyRole,
+  requireStudent,
+  requireAllRoles,
 };

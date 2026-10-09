@@ -84,25 +84,49 @@ export function RoleRoute({ allow, children }) {
 //     Use these instead of repeating allow arrays everywhere.
 // ─────────────────────────────────────────────────────────
 
+/** Only Super Admin can access this route. */
+export function SuperAdminRoute({ children }) {
+  return <RoleRoute allow={[ROLES.SUPER_ADMIN]}>{children}</RoleRoute>;
+}
+
+/** Super Admin + Admin can access this route. */
+export function SuperAdminOrAdminRoute({ children }) {
+  return <RoleRoute allow={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>{children}</RoleRoute>;
+}
+
 /** Only admin can access this route. */
 export function AdminRoute({ children }) {
-  return <RoleRoute allow={[ROLES.ADMIN]}>{children}</RoleRoute>;
+  return <RoleRoute allow={[ROLES.ADMIN, ROLES.SUPER_ADMIN]}>{children}</RoleRoute>;
 }
 
 /** Admin + Staff can access this route. */
 export function AdminOrStaffRoute({ children }) {
-  return <RoleRoute allow={[ROLES.ADMIN, ROLES.STAFF]}>{children}</RoleRoute>;
+  return <RoleRoute allow={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF]}>{children}</RoleRoute>;
 }
 
 /** Admin + Librarian can access this route (books catalog). */
 export function CatalogRoute({ children }) {
-  return <RoleRoute allow={[ROLES.ADMIN, ROLES.LIBRARIAN]}>{children}</RoleRoute>;
+  return <RoleRoute allow={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.LIBRARIAN]}>{children}</RoleRoute>;
 }
 
-/** Admin + Staff + Librarian — all authenticated roles. */
+/** Only students can access this route. */
+export function StudentRoute({ children }) {
+  return <RoleRoute allow={[ROLES.STUDENT]}>{children}</RoleRoute>;
+}
+
+/** Super Admin + Admin + Staff + Librarian — all authenticated non-student roles. */
 export function AnyRoleRoute({ children }) {
   return (
-    <RoleRoute allow={[ROLES.ADMIN, ROLES.STAFF, ROLES.LIBRARIAN]}>
+    <RoleRoute allow={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF, ROLES.LIBRARIAN]}>
+      {children}
+    </RoleRoute>
+  );
+}
+
+/** All roles including students. */
+export function AllRolesRoute({ children }) {
+  return (
+    <RoleRoute allow={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.LIBRARIAN, ROLES.STAFF, ROLES.STUDENT]}>
       {children}
     </RoleRoute>
   );

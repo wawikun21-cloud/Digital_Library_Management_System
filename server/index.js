@@ -41,6 +41,7 @@ const auditRoutes        = require("./routes/audit");
 const rfidRoutes         = require("./routes/rfid");
 const coursesRoutes      = require("./features/courses/courses.routes");
 const coursesBuilderRoutes = require("./features/courses/builder.routes");
+const usersRoutes        = require("./features/users/users.routes");
 
 // ── Analytics controller (for the /api/books/stats shortcut) ──
 const AnalyticsController = require("./controllers/analyticsController");
@@ -150,6 +151,7 @@ app.use("/api/audit",        auditRoutes);
 app.use("/api/rfid",         rfidRoutes);
 app.use("/api/courses",      coursesBuilderRoutes);
 app.use("/api/courses",      coursesRoutes);
+app.use("/api/users",        usersRoutes);
 
 // KPI stats shortcut — keeps existing Dashboard fetch URL working
 app.get("/api/books/stats", AnalyticsController.getBookStats);

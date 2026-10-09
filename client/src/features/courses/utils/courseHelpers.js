@@ -26,3 +26,25 @@ export function getDifficultyColor(difficulty) {
 export function classNames(...classes) {
   return classes.filter(Boolean).join(" ");
 }
+
+export function normalizeVideoUrl(url) {
+  if (!url) return "";
+
+  const trimmed = url.trim();
+
+  // YouTube watch → embed
+  const ytWatchMatch = trimmed.match(
+    /^(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+  );
+  if (ytWatchMatch) {
+    return `https://www.youtube.com/embed/${ytWatchMatch[1]}`;
+  }
+
+  // Vimeo watch → embed
+  const vimeoMatch = trimmed.match(/^https?:\/\/(?:www\.)?vimeo\.com\/(\d+)/);
+  if (vimeoMatch) {
+    return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+  }
+
+  return trimmed;
+}

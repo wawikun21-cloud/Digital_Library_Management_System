@@ -51,6 +51,8 @@ async function login(req, res) {
       username:   user.username,
       role:       user.role,
       avatar_url: user.avatar_url || null,
+      full_name:  user.full_name || null,
+      is_active:  user.is_active !== undefined ? user.is_active : 1,
     };
 
     // ── Audit: successful LOGIN ─────────────────────────
@@ -174,6 +176,8 @@ async function updateProfile(req, res) {
       username:   updated.username,
       role:       updated.role,
       avatar_url: updated.avatar_url || null,
+      full_name:  updated.full_name || null,
+      is_active:  updated.is_active !== undefined ? updated.is_active : 1,
     };
 
     return res.json({
