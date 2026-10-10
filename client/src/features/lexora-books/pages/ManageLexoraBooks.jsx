@@ -15,7 +15,15 @@ import {
 import { useAuth } from "../../../hooks/useAuth"
 
 export default function ManageLexoraBooks() {
-  const { user } = useAuth()
+  const { user, hasPermissionAction } = useAuth()
+
+  // ── Per-action permission gates (server enforces the same) ──
+  const canCreate  = hasPermissionAction("manage_lexora_books", "create")
+  const canEdit    = hasPermissionAction("manage_lexora_books", "edit")
+  const canDelete  = hasPermissionAction("manage_lexora_books", "delete")
+  const canPublish = hasPermissionAction("manage_lexora_books", "publish")
+  const canArchive = hasPermissionAction("manage_lexora_books", "archive")
+
   const {
     books, loading, error,
     query, setQuery,
@@ -95,13 +103,15 @@ export default function ManageLexoraBooks() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleAdd}
-            className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-opacity"
-            style={{ background: "var(--accent-amber)", color: "#fff" }}
-          >
-            <Plus size={16} /> Add Book
-          </button>
+          {canCreate && (
+            <button
+              onClick={handleAdd}
+              className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-opacity"
+              style={{ background: "var(--accent-amber)", color: "#fff" }}
+            >
+              <Plus size={16} /> Add Book
+            </button>
+          )}
         </div>
       </div>
 
@@ -210,14 +220,14 @@ export default function ManageLexoraBooks() {
           </div>
           <LexoraBookAdminTable
             books={books}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            canDelete={user?.role === "admin"}
+            onEdit={canEdit ? handleEdit : undefined}
+            onDelete={canDelete ? handleDelete : undefined}
+            canDelete={canDelete}
             onView={(book) => navigate(`/lexora-books/${book.id}?preview=1`)}
-            onPublish={(book) => handleStatusChange(book, publishLexoraBook, "Book published")}
-            onUnpublish={(book) => handleStatusChange(book, unpublishLexoraBook, "Book returned to draft")}
-            onArchive={(book) => handleStatusChange(book, archiveLexoraBook, "Book archived")}
-            onRestore={(book) => handleStatusChange(book, restoreLexoraBook, "Book restored to draft")}
+            onPublish={canPublish ? (book) => handleStatusChange(book, publishLexoraBook, "Book published") : undefined}
+            onUnpublish={canPublish ? (book) => handleStatusChange(book, unpublishLexoraBook, "Book returned to draft") : undefined}
+            onArchive={canArchive ? (book) => handleStatusChange(book, archiveLexoraBook, "Book archived") : undefined}
+            onRestore={canArchive ? (book) => handleStatusChange(book, restoreLexoraBook, "Book restored to draft") : undefined}
           />
           {totalPages > 1 && (
             <Pagination

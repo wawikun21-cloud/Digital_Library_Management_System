@@ -42,6 +42,11 @@ const rfidRoutes         = require("./routes/rfid");
 const coursesRoutes      = require("./features/courses/courses.routes");
 const coursesBuilderRoutes = require("./features/courses/builder.routes");
 const usersRoutes        = require("./features/users/users.routes");
+const portalRoutes       = require("./features/portal/portal.routes");
+const toolsRoutes        = require("./features/tools/tools.routes");
+
+// ── Roles & permissions feature (router + guards) ─────────
+const rolesFeature = require("./features/roles");
 
 // ── Analytics controller (for the /api/books/stats shortcut) ──
 const AnalyticsController = require("./controllers/analyticsController");
@@ -152,9 +157,20 @@ app.use("/api/rfid",         rfidRoutes);
 app.use("/api/courses",      coursesBuilderRoutes);
 app.use("/api/courses",      coursesRoutes);
 app.use("/api/users",        usersRoutes);
+app.use("/api/portal",       portalRoutes);
+app.use("/api/tools",        toolsRoutes);
+app.use("/api/roles",        rolesFeature.router);
 
-// KPI stats shortcut — keeps existing Dashboard fetch URL working
-app.get("/api/books/stats", AnalyticsController.getBookStats);
+// KPI stats shortcut — keeps existing Dashboard fetch URL working.
+// This shortcut previously had NO auth middleware at all; it now requires
+// an authenticated caller holding view_reports:view (super_admin + admin).
+app.get(
+  "/api/books/stats",
+  rolesFeature.requireAuth,
+  rolesFeature.resolvePermissions,
+  rolesFeature.requirePermissionAction("view_reports", "view"),
+  AnalyticsController.getBookStats
+);
 
 // ── Health check ──────────────────────────────────────────
 app.get("/api/health", (req, res) => {

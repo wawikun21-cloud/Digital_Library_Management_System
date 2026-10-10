@@ -1,88 +1,87 @@
-import { Link } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
-import authApi from "../../../services/api/authApi";
 import { useStudentPortal } from "../hooks/useStudentPortal";
-import { studentPortalCards } from "../utils/studentPortalCards";
+import { useStudentPortalHome } from "../hooks/useStudentPortalHome";
+import HeroCarousel from "../components/HeroCarousel";
+import HeroFallback from "../components/HeroFallback";
+import PortalSection from "../components/PortalSection";
+import PortalCourseCard from "../components/PortalCourseCard";
+import { BooksSkeleton, CoursesSkeleton, HeroSkeleton } from "../components/PortalSkeletons";
+import LexoraBookCard from "../../lexora-books/components/LexoraBookCard";
+import { useAuth } from "../../../hooks/useAuth";
 
-function StudentPortalSkeleton() {
+function PortalLoading() {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-600 dark:text-gray-400">Loading student portal...</p>
-      </div>
+    <div className="flex min-h-[60vh] items-center justify-center" role="status">
+      <div
+        className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
+        style={{ borderColor: "var(--accent-amber)", borderTopColor: "transparent" }}
+      />
+      <span className="sr-only">Loading student portal</span>
     </div>
-  );
-}
-
-function StudentHeader({ displayName, role }) {
-  return (
-    <div className="bg-white dark:bg-gray-800 shadow">
-      <div className="max-w-6xl mx-auto px-4 py-6 flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
-            <span className="text-xl font-medium text-gray-500 dark:text-gray-400">
-              {displayName.charAt(0)?.toUpperCase()}
-            </span>
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{displayName}</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{role}</p>
-          </div>
-        </div>
-        <button
-          onClick={async () => {
-            await authApi.logout();
-            localStorage.removeItem("lexora_user");
-            sessionStorage.removeItem("lexora_user");
-          }}
-          className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-        >
-          Logout
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function PortalCard({ card }) {
-  const Icon = card.icon;
-  return (
-    <Link
-      to={card.to}
-      className="block bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 hover:shadow-lg transition-shadow group"
-    >
-      <div className={`w-12 h-12 rounded-lg ${card.color} flex items-center justify-center mb-4 group-hover:scale-105 transition-transform`}>
-        <Icon size={24} className="text-white" />
-      </div>
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">{card.title}</h3>
-      <p className="text-sm text-gray-500 dark:text-gray-400">{card.description}</p>
-    </Link>
   );
 }
 
 export default function StudentPortalPage() {
-  const { role, loading, displayName } = useStudentPortal();
+  const { loading: accessLoading } = useStudentPortal();
+  const home = useStudentPortalHome();
+  const { hasPermission } = useAuth();
 
-  if (loading) {
-    return <StudentPortalSkeleton />;
-  }
+  // Hide a portal row when the viewer's resolved permissions exclude it.
+  const canViewLexora = hasPermission("view_lexora_books");
+  const canViewCourses = hasPermission("view_course_library");
+
+  if (accessLoading) return <PortalLoading />;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <StudentHeader displayName={displayName} role={role} />
+    <div className="flex flex-col gap-10">
+      {/* Full-bleed hero: cancels the layout <main> padding so it fills the whole section. */}
+      <div className="-mx-4 -mt-4 sm:-mx-6 sm:-mt-6 lg:-mx-7 lg:-mt-7">
+        {home.loading ? (
+          <HeroSkeleton />
+        ) : home.slides.length > 0 ? (
+          <HeroCarousel slides={home.slides} />
+        ) : (
+          <HeroFallback />
+        )}
+      </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Student Dashboard</h2>
-        <p className="text-gray-600 dark:text-gray-400 mb-8">
-          Welcome back, {displayName.split(" ")[0]}. Here are your available resources.
-        </p>
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-12">
+        {canViewLexora && (
+          <PortalSection
+            title="E-Books"
+            description="The latest additions to the digital library."
+            browseLabel="Browse all E-Books"
+            browseTo="/lexora-books"
+            loading={home.loading}
+            error={home.error}
+            onRetry={home.retry}
+            isEmpty={home.books.length === 0}
+            emptyMessage="No e-books have been published yet."
+            skeleton={<BooksSkeleton />}
+          >
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+              {home.books.map((book) => <LexoraBookCard key={book.id} book={book} />)}
+            </div>
+          </PortalSection>
+        )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {studentPortalCards.map((card) => (
-            <PortalCard key={card.id} card={card} />
-          ))}
-        </div>
+        {canViewCourses && (
+          <PortalSection
+            title="Courses"
+            description="Recently published courses you can open right away."
+            browseLabel="Browse all Courses"
+            browseTo="/dashboard/course-library"
+            loading={home.loading}
+            error={home.error}
+            onRetry={home.retry}
+            isEmpty={home.courses.length === 0}
+            emptyMessage="No courses have been published yet."
+            skeleton={<CoursesSkeleton />}
+          >
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+              {home.courses.map((course) => <PortalCourseCard key={course.id} course={course} />)}
+            </div>
+          </PortalSection>
+        )}
       </div>
     </div>
   );

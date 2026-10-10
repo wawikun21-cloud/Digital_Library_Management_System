@@ -18,7 +18,8 @@ const router         = express.Router();
 const rateLimit      = require("express-rate-limit");
 const { ipKeyGenerator } = require("express-rate-limit");
 const RfidController = require("../controllers/rfidController");
-const { requireAuth, requireAdminOrStaff } = require("../middleware/authMiddleware");
+const { requireAuth } = require("../middleware/authMiddleware");
+const { resolvePermissions, requirePermissionAction } = require("../features/roles");
 
 // ── Parse allowed IPs from env (comma-separated, e.g. "192.168.1.100,10.0.0.5") ─
 const allowedIPs = (process.env.RFID_ALLOWED_IPS || "")
@@ -81,29 +82,29 @@ router.post("/tap", ipWhitelist, rfidTapLimiter, RfidController.tap);
 /**
  * @route   GET /api/rfid/simulate
  * @desc    Simulate an RFID tap via the browser (testing without hardware)
- * @access  Admin + Staff
+ * @access  manage_rfid:view
  */
-router.get("/simulate", requireAuth, requireAdminOrStaff, RfidController.simulate);
+router.get("/simulate", requireAuth, resolvePermissions, requirePermissionAction("manage_rfid", "view"), RfidController.simulate);
 
 /**
  * @route   POST /api/rfid/register
  * @desc    Register an RFID card to a student
- * @access  Admin + Staff
+ * @access  manage_rfid:register
  */
-router.post("/register", requireAuth, requireAdminOrStaff, RfidController.register);
+router.post("/register", requireAuth, resolvePermissions, requirePermissionAction("manage_rfid", "register"), RfidController.register);
 
 /**
  * @route   GET /api/rfid
  * @desc    Get all registered RFID cards
- * @access  Admin + Staff
+ * @access  manage_rfid:view
  */
-router.get("/", requireAuth, requireAdminOrStaff, RfidController.getAll);
+router.get("/", requireAuth, resolvePermissions, requirePermissionAction("manage_rfid", "view"), RfidController.getAll);
 
 /**
  * @route   DELETE /api/rfid/:id
  * @desc    Remove an RFID card registration
- * @access  Admin + Staff
+ * @access  manage_rfid:delete
  */
-router.delete("/:id", requireAuth, requireAdminOrStaff, RfidController.delete);
+router.delete("/:id", requireAuth, resolvePermissions, requirePermissionAction("manage_rfid", "delete"), RfidController.delete);
 
 module.exports = router;

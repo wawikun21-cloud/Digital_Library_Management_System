@@ -2,7 +2,7 @@ import { useState } from "react";
 import UserRoleBadge from "./UserRoleBadge";
 import { ROLE_LABELS } from "../../../constants/roles";
 import { formatUserForDisplay } from "../validation/userValidation";
-import { Edit, Trash2, UserCheck, UserX, Shield } from "lucide-react";
+import { Edit, Trash2, UserCheck, UserX, Shield, KeyRound } from "lucide-react";
 
 export default function UserTable({
   users,
@@ -11,6 +11,7 @@ export default function UserTable({
   onRoleChange,
   onDeactivate,
   onReactivate,
+  onPermissions,
   currentUserId,
 }) {
   const [hoveredRow, setHoveredRow] = useState(null);
@@ -163,6 +164,16 @@ export default function UserTable({
                     >
                       <Edit size={14} />
                     </button>
+
+                    {!isSelf && onPermissions && (
+                      <button
+                        onClick={() => onPermissions(user)}
+                        title="Manage permissions"
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-sm font-medium text-violet-600 hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-300 bg-violet-50 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-all duration-150"
+                      >
+                        <KeyRound size={14} />
+                      </button>
+                    )}
 
                     {!isSelf && onRoleChange && isActive && (
                       <button

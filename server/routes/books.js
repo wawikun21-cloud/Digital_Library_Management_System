@@ -1,12 +1,18 @@
 // ─────────────────────────────────────────────────────────
-//  routes/books.js  —  Updated with Librarian RBAC
+//  routes/books.js  —  Permission-guarded catalog routes
 //
 //  CHANGE SUMMARY:
-//    Old: requireAdmin  on every protected books route
-//    New: requireAdminOrLibrarian  on catalog routes
-//         requireAdmin             on analytics/stats routes
+//    Role guards were replaced by permission guards so grants can be
+//    edited per role and per user from /dashboard/roles.
+//    • GET /, /:id, /:id/copies          → manage_books:view
+//    • POST /, /bulk-import              → manage_books:create / import
+//    • PUT /:id                          → manage_books:edit
+//    • DELETE /:id                       → manage_books:delete
+//    • /lexora*                          → manage_lexora_books:{view,create,edit,delete,import}
+//    • GET /count/all, GET /stats        → unchanged (requireAdmin)
 //
-//  Public routes (/public-search, /:id/copies/public) are unchanged.
+//  Public routes (/public-search, /:id/copies/public) stay open and
+//  are registered BEFORE the guard middleware so it never runs for them.
 // ─────────────────────────────────────────────────────────
 
 const express          = require("express");
@@ -15,20 +21,14 @@ const BookModel        = require("../models/Book");
 const booksController  = require("../controllers/booksController");
 const lexoraController = require("../controllers/lexoraController");
 
+const { requireAdmin } = require("../middleware/authMiddleware");
 const {
   requireAuth,
-  requireAdmin,
-  requireAdminOrLibrarian,
-} = require("../middleware/authMiddleware");
+  resolvePermissions,
+  requirePermissionAction,
+} = require("../features/roles");
 
-// ── GET /api/books ────────────────────────────────────────
-// Librarians need this to load the Books page.
-router.get("/", requireAuth, requireAdminOrLibrarian, booksController.getBooks);
-
-// ── POST /api/books ───────────────────────────────────────
-router.post("/", requireAuth, requireAdminOrLibrarian, booksController.createBook);
-
-// ── STATIC routes — MUST be before /:id ──────────────────
+// ── PUBLIC routes (no auth) — must precede router.use ──────
 
 // GET /api/books/public-search  (public — no auth)
 router.get("/public-search", async (req, res) => {
@@ -119,86 +119,6 @@ router.get("/public-search", async (req, res) => {
   }
 });
 
-// GET /api/books/count/all
-// Stats are admin-only (shown on the admin dashboard).
-router.get("/count/all", requireAuth, requireAdmin, async (req, res) => {
-  try {
-    const result = await BookModel.getCount();
-    if (!result.success) return res.status(400).json({ success: false, error: result.error });
-    res.json({ success: true, count: result.count });
-  } catch (err) {
-    console.error("[GET /api/books/count/all]", err.message);
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
-});
-
-// GET /api/books/stats  (admin dashboard KPI — admin only)
-router.get("/stats", requireAuth, requireAdmin, booksController.getStats);
-
-// ── Lexora catalog routes (admin + librarian) ────────────
-
-// GET  /api/books/lexora
-router.get("/lexora", requireAuth, requireAdminOrLibrarian, lexoraController.getLexoraBooks);
-
-// POST /api/books/lexora
-router.post("/lexora", requireAuth, requireAdminOrLibrarian, lexoraController.createLexoraBook);
-
-// PUT  /api/books/lexora/:id
-router.put("/lexora/:id", requireAuth, requireAdminOrLibrarian, lexoraController.updateLexoraBook);
-
-// DELETE /api/books/lexora/:id
-router.delete("/lexora/:id", requireAuth, requireAdminOrLibrarian, lexoraController.deleteLexoraBook);
-
-// POST /api/books/lexora-import
-router.post("/lexora-import", requireAuth, requireAdminOrLibrarian, lexoraController.bulkLexoraImport);
-
-// POST /api/books/check-duplicates
-router.post("/check-duplicates", requireAuth, requireAdminOrLibrarian, async (req, res) => {
-  try {
-    const { books } = req.body;
-    if (!Array.isArray(books) || !books.length) {
-      return res.status(400).json({ success: false, error: "No books provided" });
-    }
-    const result = await BookModel.checkDuplicatesBatch(books);
-    if (!result.success) {
-      return res.status(400).json({ success: false, error: result.error });
-    }
-    res.json({
-      success:             true,
-      hasDuplicates:       result.hasDuplicates       || false,
-      duplicateTitles:     result.duplicateTitles     || [],
-      duplicateAccessions: result.duplicateAccessions || [],
-    });
-  } catch (err) {
-    console.error("[POST /api/books/check-duplicates]", err.message);
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
-});
-
-// POST /api/books/bulk-import
-router.post("/bulk-import", requireAuth, requireAdminOrLibrarian, booksController.bulkImport);
-
-// POST /api/books/lexora-check-duplicates
-router.post("/lexora-check-duplicates", requireAuth, requireAdminOrLibrarian, async (req, res) => {
-  try {
-    const { books } = req.body;
-    if (!Array.isArray(books) || !books.length) {
-      return res.status(400).json({ success: false, error: "No books provided" });
-    }
-    const LexoraBookModel = require("../models/LexoraBook");
-    const result = await LexoraBookModel.checkDuplicates(books);
-    if (!result.success) {
-      return res.status(400).json({ success: false, error: result.error });
-    }
-    res.json({ success: true, duplicates: result.duplicates });
-  } catch (err) {
-    console.error("[POST /api/books/lexora-check-duplicates]", err.message);
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
-});
-
-// ── DYNAMIC routes — AFTER all static routes ─────────────
-
 // GET /api/books/:id/copies/public  (public — no auth)
 router.get("/:id/copies/public", async (req, res) => {
   try {
@@ -227,8 +147,103 @@ router.get("/:id/copies/public", async (req, res) => {
   }
 });
 
+// ── Everything below requires an authenticated caller with
+//    resolved permissions attached to the request. ──────────
+router.use(requireAuth, resolvePermissions);
+
+// ── STATIC routes — MUST be before /:id ──────────────────
+
+// GET /api/books/count/all
+// Stats are admin-only (shown on the admin dashboard) — unchanged:
+// mapping these to manage_books:view would newly grant librarians access.
+router.get("/count/all", requireAdmin, async (req, res) => {
+  try {
+    const result = await BookModel.getCount();
+    if (!result.success) return res.status(400).json({ success: false, error: result.error });
+    res.json({ success: true, count: result.count });
+  } catch (err) {
+    console.error("[GET /api/books/count/all]", err.message);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
+
+// GET /api/books/stats  (admin dashboard KPI — admin only, unchanged)
+router.get("/stats", requireAdmin, booksController.getStats);
+
+// ── Lexora catalog routes (manage_lexora_books) ───────────
+
+// GET  /api/books/lexora
+router.get("/lexora", requirePermissionAction("manage_lexora_books", "view"), lexoraController.getLexoraBooks);
+
+// POST /api/books/lexora
+router.post("/lexora", requirePermissionAction("manage_lexora_books", "create"), lexoraController.createLexoraBook);
+
+// PUT  /api/books/lexora/:id
+router.put("/lexora/:id", requirePermissionAction("manage_lexora_books", "edit"), lexoraController.updateLexoraBook);
+
+// DELETE /api/books/lexora/:id
+router.delete("/lexora/:id", requirePermissionAction("manage_lexora_books", "delete"), lexoraController.deleteLexoraBook);
+
+// POST /api/books/lexora-import
+router.post("/lexora-import", requirePermissionAction("manage_lexora_books", "import"), lexoraController.bulkLexoraImport);
+
+// POST /api/books/check-duplicates
+router.post("/check-duplicates", requirePermissionAction("manage_books", "import"), async (req, res) => {
+  try {
+    const { books } = req.body;
+    if (!Array.isArray(books) || !books.length) {
+      return res.status(400).json({ success: false, error: "No books provided" });
+    }
+    const result = await BookModel.checkDuplicatesBatch(books);
+    if (!result.success) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+    res.json({
+      success:             true,
+      hasDuplicates:       result.hasDuplicates       || false,
+      duplicateTitles:     result.duplicateTitles     || [],
+      duplicateAccessions: result.duplicateAccessions || [],
+    });
+  } catch (err) {
+    console.error("[POST /api/books/check-duplicates]", err.message);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
+
+// POST /api/books/bulk-import
+router.post("/bulk-import", requirePermissionAction("manage_books", "import"), booksController.bulkImport);
+
+// POST /api/books/lexora-check-duplicates
+router.post("/lexora-check-duplicates", requirePermissionAction("manage_lexora_books", "import"), async (req, res) => {
+  try {
+    const { books } = req.body;
+    if (!Array.isArray(books) || !books.length) {
+      return res.status(400).json({ success: false, error: "No books provided" });
+    }
+    const LexoraBookModel = require("../models/LexoraBook");
+    const result = await LexoraBookModel.checkDuplicates(books);
+    if (!result.success) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+    res.json({ success: true, duplicates: result.duplicates });
+  } catch (err) {
+    console.error("[POST /api/books/lexora-check-duplicates]", err.message);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
+
+// ── Books catalog ────────────────────────────────────────
+
+// GET /api/books  — librarians need this to load the Books page.
+router.get("/", requirePermissionAction("manage_books", "view"), booksController.getBooks);
+
+// POST /api/books
+router.post("/", requirePermissionAction("manage_books", "create"), booksController.createBook);
+
+// ── DYNAMIC routes — AFTER all static routes ─────────────
+
 // GET /api/books/:id
-router.get("/:id", requireAuth, requireAdminOrLibrarian, async (req, res) => {
+router.get("/:id", requirePermissionAction("manage_books", "view"), async (req, res) => {
   try {
     const result = await BookModel.getById(req.params.id);
     if (!result.success) return res.status(404).json({ success: false, error: result.error });
@@ -240,7 +255,7 @@ router.get("/:id", requireAuth, requireAdminOrLibrarian, async (req, res) => {
 });
 
 // GET /api/books/:id/copies
-router.get("/:id/copies", requireAuth, requireAdminOrLibrarian, async (req, res) => {
+router.get("/:id/copies", requirePermissionAction("manage_books", "view"), async (req, res) => {
   try {
     const result = await BookModel.getCopies(req.params.id);
     if (!result.success) return res.status(400).json({ success: false, error: result.error });
@@ -252,9 +267,9 @@ router.get("/:id/copies", requireAuth, requireAdminOrLibrarian, async (req, res)
 });
 
 // PUT /api/books/:id
-router.put("/:id", requireAuth, requireAdminOrLibrarian, booksController.updateBook);
+router.put("/:id", requirePermissionAction("manage_books", "edit"), booksController.updateBook);
 
 // DELETE /api/books/:id
-router.delete("/:id", requireAuth, requireAdminOrLibrarian, booksController.deleteBook);
+router.delete("/:id", requirePermissionAction("manage_books", "delete"), booksController.deleteBook);
 
 module.exports = router;

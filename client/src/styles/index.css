@@ -1,3 +1,6 @@
+@import "buttons.css";
+@import "drawer.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -97,6 +100,10 @@ body {
 ::-webkit-scrollbar          { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track    { background: transparent; }
 ::-webkit-scrollbar-thumb    { background: var(--border); border-radius: 4px; }
+
+/* Sidebar scrollbar — hidden but still scrollable */
+.sidebar-nav::-webkit-scrollbar { display: none; }
+.sidebar-nav { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* ── Sidebar width transition ───────────────── */
 .sidebar-w-transition {

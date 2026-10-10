@@ -32,7 +32,8 @@ export default function LexoraBookReader() {
   const { bookId } = useParams()
   const navigate  = useNavigate()
   const [searchParams] = useSearchParams()
-  const { user }  = useAuth()
+  const { user, hasPermissionAction } = useAuth()
+  const canRead = hasPermissionAction("view_lexora_books", "read")
   const requestedPage = Number(searchParams.get("page"))
   const startAtBeginning = searchParams.get("start") === "beginning"
 
@@ -85,7 +86,26 @@ export default function LexoraBookReader() {
 
     load()
     return () => { cancelled = true }
-  }, [bookId, isAuthenticated, requestedPage, startAtBeginning])
+  }, [bookId, isAuthenticated, canRead, requestedPage, startAtBeginning])
+
+  // The server enforces view_lexora_books:read on the reader payload; this
+  // keeps the UI from rendering a book the user may not open.
+  if (!loading && !canRead) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3"
+        style={{ background: "var(--bg-main)", color: "var(--text-secondary)" }}>
+        <AlertCircle size={28} />
+        <p className="text-sm">You do not have access to this book.</p>
+        <button
+          onClick={() => navigate("/lexora-books")}
+          className="rounded-lg border px-3 py-2 text-xs font-medium"
+          style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}
+        >
+          Back to catalog
+        </button>
+      </div>
+    )
+  }
 
   const sourcePages = useMemo(() => {
     if (!book) return []

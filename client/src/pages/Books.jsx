@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useLocation } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
 import useDebounce from "../hooks/useDebounce";
 import { PackageX } from "lucide-react";
 import BookTable from "../components/BookTable";
@@ -71,6 +72,14 @@ export default function Books() {
   const [toast, setToast]               = useState({ visible:false, message:"", type:"info" });
   const [currentPage, setCurrentPage]   = useState(1);
   const itemsPerPage = 10;
+
+  // ── Per-action permission gates (server enforces the same) ──
+  const { hasPermissionAction } = useAuth();
+  const canCreate      = hasPermissionAction("manage_books", "create");
+  const canEdit        = hasPermissionAction("manage_books", "edit");
+  const canDelete      = hasPermissionAction("manage_books", "delete");
+  const canImport      = hasPermissionAction("manage_books", "import");
+  const canImportLexora = hasPermissionAction("manage_lexora_books", "import");
 
   const location = useLocation();
 
@@ -441,7 +450,13 @@ const handleSubmit = useCallback(async () => {
         sortBy={sortBy}         setSortBy={setSortBy}
         ddOpen={ddOpen}         setDdOpen={setDdOpen}
         openModal={openModal}
-        importModes={["manual", "import"]}
+        // "manual" = create a book, "import" = Excel import, "lexora" = Lexora import.
+        // The server enforces the same permission on each endpoint.
+        importModes={[
+          ...(canCreate ? ["manual"] : []),
+          ...(canImport ? ["import"] : []),
+          ...(canImportLexora ? ["lexora"] : []),
+        ]}
       />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -491,8 +506,8 @@ const handleSubmit = useCallback(async () => {
         bookId={selectedBook?.id ?? null}
         form={form}            setForm={setForm}
         errors={errors}        setErrors={setErrors}
-        onSave={handleSubmit}  onUpdate={handleUpdate}
-        onDelete={handleDeleteClick} onEdit={handleEdit}
+        onSave={handleSubmit}  onUpdate={canEdit ? handleUpdate : undefined}
+        onDelete={canDelete ? handleDeleteClick : undefined} onEdit={canEdit ? handleEdit : undefined}
         importProps={importProps}
       />
 

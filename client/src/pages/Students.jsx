@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../hooks/useAuth';
 import {
   Search, Upload, FileSpreadsheet, Download, Plus, Edit,
   Trash2, User, Mail, Phone, Building2, GraduationCap, AlertCircle,
@@ -25,6 +26,14 @@ import Pagination from '../components/books/Pagination';
 const STUDENTS_PER_PAGE = 10;
 
 export default function Students() {
+  const { hasPermissionAction } = useAuth();
+
+  // ── Per-action permission gates (server enforces the same) ──
+  const canCreate = hasPermissionAction("manage_students", "create");
+  const canEdit   = hasPermissionAction("manage_students", "edit");
+  const canDelete = hasPermissionAction("manage_students", "delete");
+  const canImport = hasPermissionAction("manage_students", "import");
+
   // ── State management ──────────────────────────────────
   const [students, setStudents] = useState([]);
   const [stats, setStats] = useState(null);
@@ -489,35 +498,39 @@ export default function Students() {
             Refresh
           </button>
 
-          <button
-            onClick={() => {
-              const now = new Date();
-              const syStart = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
-              setImportSchoolYear(`${syStart}-${syStart + 1}`);
-              setIsImportModalOpen(true);
-            }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-all hover:opacity-90 active:scale-[.98]"
-            style={{
-              background: "rgba(45,122,71,0.1)",
-              border: "1.5px solid rgba(45, 63, 122, 0.35)",
-              color: "var(--text-primary)",
-            }}
-          >
-            <Upload size={14} />
-            Bulk Import
-          </button>
+          {canImport && (
+            <button
+              onClick={() => {
+                const now = new Date();
+                const syStart = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
+                setImportSchoolYear(`${syStart}-${syStart + 1}`);
+                setIsImportModalOpen(true);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-all hover:opacity-90 active:scale-[.98]"
+              style={{
+                background: "rgba(45,122,71,0.1)",
+                border: "1.5px solid rgba(45, 63, 122, 0.35)",
+                color: "var(--text-primary)",
+              }}
+            >
+              <Upload size={14} />
+              Bulk Import
+            </button>
+          )}
 
-          <button
-            onClick={() => {
-              setIsEditMode(false);
-              resetForm();
-              setIsModalOpen(true);
-            }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors"
-            style={{ background: "var(--accent-amber)", boxShadow: "0 2px 8px rgba(238,162,58,.3)" }}
-          >
-            <Plus size={14} /> Add Student
-          </button>
+          {canCreate && (
+            <button
+              onClick={() => {
+                setIsEditMode(false);
+                resetForm();
+                setIsModalOpen(true);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors"
+              style={{ background: "var(--accent-amber)", boxShadow: "0 2px 8px rgba(238,162,58,.3)" }}
+            >
+              <Plus size={14} /> Add Student
+            </button>
+          )}
         </div>
       </div>
 
@@ -808,9 +821,10 @@ export default function Students() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-1">
+                          {canEdit && (
                            <button
-                            onClick={() => {
-                              setSelectedStudent(student);
+                             onClick={() => {
+                               setSelectedStudent(student);
                               const now = new Date();
                               const syStart = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
                               const currentSY = `${syStart}-${syStart + 1}`;
@@ -827,19 +841,22 @@ export default function Students() {
                             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                             title="Edit"
                           >
-                            <Edit size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteStudent(student.id)}
-                            className="p-1.5 rounded-lg transition-colors duration-150"
-                            style={{ color: '#dc2626' }}
-                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.08)'; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                            title="Delete"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
+                             <Edit size={14} />
+                           </button>
+                           )}
+                           {canDelete && (
+                           <button
+                             onClick={() => handleDeleteStudent(student.id)}
+                             className="p-1.5 rounded-lg transition-colors duration-150"
+                             style={{ color: '#dc2626' }}
+                             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.08)'; }}
+                             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                             title="Delete"
+                           >
+                             <Trash2 size={14} />
+                           </button>
+                           )}
+                         </div>
                       </td>
                     </tr>
                   ))}

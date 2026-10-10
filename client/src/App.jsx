@@ -12,13 +12,8 @@ import { ROLES, ROLE_DEFAULT_ROUTES } from "./constants/roles.js";
 import { useAuth } from "./hooks/useAuth.js";
 import {
   ProtectedRoute,
-  AdminRoute,
-  AdminOrStaffRoute,
-  CatalogRoute,
-  AnyRoleRoute,
-  SuperAdminOrAdminRoute,
+  PermissionRoute,
   StudentRoute,
-  AllRolesRoute,
 } from "./components/auth/ProtectedRoute.jsx";
 
 // ── Lazy-loaded pages ─────────────────────────────────────
@@ -28,8 +23,7 @@ const Borrowed            = lazy(() => import("./pages/Borrowed"));
 const Attendance          = lazy(() => import("./pages/Attendance"));
 const Students            = lazy(() => import("./pages/Students"));
 const Faculty             = lazy(() => import("./pages/Faculty"));
-const RecentlyDeleted     = lazy(() => import("./pages/RecentlyDeleted"));
-const ManageLexoraBooks   = lazy(() => import("./features/lexora-books/pages/ManageLexoraBooks"));
+const RecentlyDeleted     = lazy(() => import("./features/trash/pages/RecentlyDeletedPage"));const ManageLexoraBooks   = lazy(() => import("./features/lexora-books/pages/ManageLexoraBooks"));
 const LexoraBooksCatalog  = lazy(() => import("./features/lexora-books/pages/LexoraBooksCatalog"));
 const LexoraBookDetails   = lazy(() => import("./features/lexora-books/pages/LexoraBookDetails"));
 const LexoraBookReader    = lazy(() => import("./features/lexora-books/pages/LexoraBookReader"));
@@ -49,6 +43,11 @@ const CourseDetails       = lazy(() => import("./features/courses/pages/CourseDe
 const CourseLearnerView   = lazy(() => import("./features/courses/pages/CourseLearnerView"));
 const CourseBuilder       = lazy(() => import("./features/courses/pages/CourseBuilderPage"));
 const Users               = lazy(() => import("./features/users/pages/UsersPage"));
+const Settings            = lazy(() => import("./features/settings/pages/SettingsPage"));
+const Roles               = lazy(() => import("./features/roles/pages/RolesPage"));
+const Tools               = lazy(() => import("./features/tools/pages/ToolsPage"));
+const StudentTools        = lazy(() => import("./features/tools/pages/StudentToolsPage"));
+const ToolDetails         = lazy(() => import("./features/tools/pages/ToolDetailsPage"));
 
 // ── Apply saved theme on first paint ─────────────────────
 const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
@@ -167,104 +166,140 @@ export default function App() {
             {/* ── Index: admin → Dashboard, librarian → /books, staff → /attendance */}
             <Route
               index
-              element={<AdminRoute><Page><Dashboard /></Page></AdminRoute>}
+              element={<PermissionRoute permission="view_dashboard"><Page><Dashboard /></Page></PermissionRoute>}
             />
 
             {/* ── Catalog routes: admin + librarian ──────── */}
             <Route
               path="books"
-              element={<CatalogRoute><Page><Books /></Page></CatalogRoute>}
+              element={<PermissionRoute permission="manage_books"><Page><Books /></Page></PermissionRoute>}
             />
             <Route
               path="lexora-books"
-              element={<CatalogRoute><Page><ManageLexoraBooks /></Page></CatalogRoute>}
+              element={<PermissionRoute permission="manage_lexora_books"><Page><ManageLexoraBooks /></Page></PermissionRoute>}
             />
             <Route
               path="lexora-books/import"
-              element={<CatalogRoute><Navigate to="/dashboard/lexora-books" replace /></CatalogRoute>}
+              element={<PermissionRoute permission="manage_lexora_books"><Navigate to="/dashboard/lexora-books" replace /></PermissionRoute>}
             />
             <Route
               path="lexora-books/manage"
-              element={<CatalogRoute><Page><ManageLexoraBooks /></Page></CatalogRoute>}
+              element={<PermissionRoute permission="manage_lexora_books"><Page><ManageLexoraBooks /></Page></PermissionRoute>}
             />
 
             {/* ── Book Dashboard: admin only ──────────────── */}
             <Route
               path="books/dashboard"
-              element={<AdminRoute><Page><BookDashboard /></Page></AdminRoute>}
+              element={<PermissionRoute permission="view_dashboard"><Page><BookDashboard /></Page></PermissionRoute>}
             />
 
             {/* ── Admin-only pages ────────────────────────── */}
             <Route
               path="borrowed"
-              element={<AdminRoute><Page><Borrowed /></Page></AdminRoute>}
+              element={<PermissionRoute permission="manage_transactions"><Page><Borrowed /></Page></PermissionRoute>}
             />
             <Route
               path="deleted"
-              element={<AdminRoute><Page><RecentlyDeleted /></Page></AdminRoute>}
+              element={<PermissionRoute permission="manage_trash"><Page><RecentlyDeleted /></Page></PermissionRoute>}
             />
             <Route
               path="audit-log"
-              element={<AdminRoute><Page><AuditLog /></Page></AdminRoute>}
+              element={<PermissionRoute permission="view_audit_logs"><Page><AuditLog /></Page></PermissionRoute>}
             />
 
             {/* ── Attendance dashboard: admin only ─────────── */}
             <Route
               path="attendance/dashboard"
-              element={<AdminRoute><Page><AttendanceDashboard /></Page></AdminRoute>}
+              element={<PermissionRoute permission="view_dashboard"><Page><AttendanceDashboard /></Page></PermissionRoute>}
             />
 
             {/* ── Admin + Staff pages ──────────────────────── */}
             <Route
               path="attendance"
-              element={<AdminOrStaffRoute><Page><Attendance /></Page></AdminOrStaffRoute>}
+              element={<PermissionRoute permission="manage_attendance"><Page><Attendance /></Page></PermissionRoute>}
             />
             <Route
               path="attendance/kiosk"
-              element={<AdminOrStaffRoute><Page><KioskAttendance /></Page></AdminOrStaffRoute>}
+              element={<PermissionRoute permission="use_kiosk"><Page><KioskAttendance /></Page></PermissionRoute>}
             />
             <Route
               path="students"
-              element={<AdminOrStaffRoute><Page><Students /></Page></AdminOrStaffRoute>}
+              element={<PermissionRoute permission="manage_students"><Page><Students /></Page></PermissionRoute>}
             />
             <Route
               path="faculty"
-              element={<AdminOrStaffRoute><Page><Faculty /></Page></AdminOrStaffRoute>}
+              element={<PermissionRoute permission="manage_faculty"><Page><Faculty /></Page></PermissionRoute>}
             />
             <Route
               path="courses"
-              element={<AdminOrStaffRoute><Page><Courses /></Page></AdminOrStaffRoute>}
+              element={<PermissionRoute permission="manage_courses"><Page><Courses /></Page></PermissionRoute>}
             />
             <Route
               path="course-library"
-              element={<AllRolesRoute><Page><CourseLibrary /></Page></AllRolesRoute>}
+              element={<PermissionRoute permission="view_course_library"><Page><CourseLibrary /></Page></PermissionRoute>}
             />
             <Route
               path="courses/create"
-              element={<AdminOrStaffRoute><Page><CourseCreate /></Page></AdminOrStaffRoute>}
+              element={<PermissionRoute permission="manage_courses"><Page><CourseCreate /></Page></PermissionRoute>}
             />
             <Route
               path="courses/:id"
-              element={<AllRolesRoute><Page><CourseDetails /></Page></AllRolesRoute>}
+              element={<PermissionRoute permission="view_course_library"><Page><CourseDetails /></Page></PermissionRoute>}
             />
             <Route
               path="courses/:id/learn"
-              element={<AllRolesRoute><Page><CourseLearnerView /></Page></AllRolesRoute>}
+              element={<PermissionRoute permission="view_course_library"><Page><CourseLearnerView /></Page></PermissionRoute>}
             />
             <Route
               path="courses/:id/learn/:lessonId"
-              element={<AllRolesRoute><Page><CourseLearnerView /></Page></AllRolesRoute>}
+              element={<PermissionRoute permission="view_course_library"><Page><CourseLearnerView /></Page></PermissionRoute>}
             />
             <Route
               path="courses/:id/builder"
-              element={<AdminOrStaffRoute><Page><CourseBuilder /></Page></AdminOrStaffRoute>}
+              element={<PermissionRoute permission="manage_courses"><Page><CourseBuilder /></Page></PermissionRoute>}
             />
 
             {/* ── User Management: Super Admin + Admin ────── */}
             <Route
               path="users"
-              element={<SuperAdminOrAdminRoute><Page><Users /></Page></SuperAdminOrAdminRoute>}
+              element={<PermissionRoute permission="manage_users"><Page><Users /></Page></PermissionRoute>}
             />
+            {/* ── Roles & Permissions: Super Admin only ────── */}
+            <Route
+              path="roles"
+              element={<PermissionRoute permission="manage_permissions"><Page><Roles /></Page></PermissionRoute>}
+            />
+            {/* ── Settings (Student Portal management): Super Admin + Admin ── */}
+            <Route
+              path="settings"
+              element={<PermissionRoute permission="manage_settings"><Page><Settings /></Page></PermissionRoute>}
+            />
+            <Route
+              path="settings/student-portal"
+              element={<PermissionRoute permission="manage_settings"><Page><Settings defaultTab="student-portal" /></Page></PermissionRoute>}
+            />
+
+            {/* ── Tools Management: Admin+ ────────────────── */}
+            <Route
+              path="tools"
+              element={<PermissionRoute permission="manage_tools"><Page><Tools /></Page></PermissionRoute>}
+            />
+
+            {/* ── Tools catalog: students ─────────────────── */}
+            <Route
+              path="student-tools"
+              element={<PermissionRoute permission="use_tools"><Page><StudentTools /></Page></PermissionRoute>}
+            />
+            <Route
+              path="student-tools/:toolId"
+              element={<PermissionRoute permission="use_tools"><Page><ToolDetails /></Page></PermissionRoute>}
+            />
+            {/* ── Student Portal: the student's landing route ──
+                Kept role-gated on purpose: `view_dashboard` is granted only
+                to admin roles, so a permission guard here would redirect
+                students straight back to their own ROLE_DEFAULT_ROUTES
+                target forever. The portal's content is gated per section
+                inside the page (view_lexora_books / view_course_library). */}
             <Route
               path="student"
               element={<StudentRoute><Page><StudentPortal /></Page></StudentRoute>}

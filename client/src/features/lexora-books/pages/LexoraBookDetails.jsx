@@ -16,7 +16,8 @@ export default function LexoraBookDetails() {
   const navigate  = useNavigate()
   const [searchParams] = useSearchParams()
   const isPreview = searchParams.get("preview") === "1"
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, hasPermissionAction } = useAuth()
+const canRead = hasPermissionAction("view_lexora_books", "read")
   const [book, setBook]         = useState(null)
   const [lastReadPage, setLastReadPage] = useState(null)
   const [loading, setLoading]   = useState(true)
@@ -250,15 +251,17 @@ export default function LexoraBookDetails() {
           )}
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => navigate(`/lexora-books/${book.id}/read`)}
-              className="flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-opacity"
-              style={{ background: "var(--accent-amber)", color: "#fff" }}
-              onMouseEnter={(e) => e.currentTarget.style.opacity = "0.9"}
-              onMouseLeave={(e) => e.currentTarget.style.opacity = "1"}
-            >
-              <BookOpen size={16} /> {lastReadPage ? `Continue Reading · Page ${lastReadPage}` : "Read Book"}
-            </button>
+            {canRead && (
+              <button
+                onClick={() => navigate(`/lexora-books/${book.id}/read`)}
+                className="flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-opacity"
+                style={{ background: "var(--accent-amber)", color: "#fff" }}
+                onMouseEnter={(e) => e.currentTarget.style.opacity = "0.9"}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = "1"}
+              >
+                <BookOpen size={16} /> {lastReadPage ? `Continue Reading · Page ${lastReadPage}` : "Read Book"}
+              </button>
+            )}
             {isAuthenticated && !isPreview && (
               <button
                 type="button"

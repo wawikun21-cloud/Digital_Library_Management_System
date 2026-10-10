@@ -7,6 +7,13 @@ const mysql  = require("mysql2/promise");
 const bcrypt = require("bcryptjs");
 require("dotenv").config();
 
+const {
+  PERMISSION_CATALOG,
+  SEED_ROLES,
+  SEED_ROLE_GRANTS,
+  SEED_BATCHES,
+} = require("../features/roles/permissionCatalog");
+
 const dbConfig = {
   host:               process.env.DB_HOST     || "localhost",
   port:               process.env.DB_PORT     || 3306,
@@ -345,6 +352,31 @@ async function initDatabase() {
     `);
     console.log("✅ Lesson progress table ready");
 
+    // ── tools ──────────────────────────────────────────────
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS tools (
+        id          INT          AUTO_INCREMENT PRIMARY KEY,
+        title       VARCHAR(255) NOT NULL,
+        description TEXT,
+        thumbnail_url VARCHAR(500) DEFAULT NULL,
+        file_path   VARCHAR(500) NOT NULL,
+        file_size   INT NOT NULL DEFAULT 0,
+        file_type   VARCHAR(50)  NOT NULL,
+        category    VARCHAR(100) DEFAULT 'general',
+        is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
+        download_count INT       NOT NULL DEFAULT 0,
+        created_by  INT NULL,
+        created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+        INDEX idx_tools_category (category),
+        INDEX idx_tools_active (is_active),
+        INDEX idx_tools_created (created_at),
+        INDEX idx_tools_downloads (download_count)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log("✅ Tools table ready");
+
     await conn.query(`
       CREATE TABLE IF NOT EXISTS course_enrollments (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -645,7 +677,113 @@ async function migrateSchema(conn) {
     `ALTER TABLE module_content ADD COLUMN file_name VARCHAR(500) DEFAULT NULL`,
     `ALTER TABLE courses ADD COLUMN deleted_at TIMESTAMP NULL`,
     `ALTER TABLE courses ADD COLUMN deleted_by VARCHAR(100) NULL`,
+
+    // -- portal_hero_slides (Student Portal hero carousel) --
+    `CREATE TABLE IF NOT EXISTS portal_hero_slides (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      image_url VARCHAR(500) NOT NULL,
+      sort_order INT NOT NULL DEFAULT 0,
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      created_by INT DEFAULT NULL,
+      created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_portal_hero_order (sort_order),
+      INDEX idx_portal_hero_active (is_active)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+    // Remove legacy text columns (no longer used by hero slides)
+    `ALTER TABLE portal_hero_slides DROP COLUMN title`,
+    `ALTER TABLE portal_hero_slides DROP COLUMN subtitle`,
+    `ALTER TABLE portal_hero_slides DROP COLUMN description`,
+
+    // ── Granular permissions: schema ─────────────────────────
+    // Order matters: every CREATE runs before any ALTER / seed so a
+    // fresh deployment never hits errno 1146 (table doesn't exist).
+    `CREATE TABLE IF NOT EXISTS roles (
+      name         VARCHAR(50)  NOT NULL PRIMARY KEY,
+      display_name VARCHAR(100) NOT NULL,
+      description  TEXT         NULL,
+      is_system    TINYINT(1)   NOT NULL DEFAULT 1,
+      created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS permissions (
+      id           INT          AUTO_INCREMENT PRIMARY KEY,
+      name         VARCHAR(100) NOT NULL UNIQUE,
+      display_name VARCHAR(150) NOT NULL,
+      category     VARCHAR(50)  NOT NULL,
+      actions      JSON         DEFAULT NULL,
+      is_active    TINYINT(1)   NOT NULL DEFAULT 1,
+      created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+      updated_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_permissions_category (category),
+      INDEX idx_permissions_active (is_active)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // actions = NULL means "all actions defined on the permission".
+    `CREATE TABLE IF NOT EXISTS role_permissions (
+      id              INT AUTO_INCREMENT PRIMARY KEY,
+      role_name       VARCHAR(50)  NOT NULL,
+      permission_name VARCHAR(100) NOT NULL,
+      actions         JSON DEFAULT NULL,
+      granted_by      INT DEFAULT NULL,
+      updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uk_role_permission (role_name, permission_name),
+      INDEX idx_rp_role (role_name),
+      INDEX idx_rp_permission (permission_name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS user_permission_overrides (
+      id              INT AUTO_INCREMENT PRIMARY KEY,
+      user_id         INT          NOT NULL,
+      permission_name VARCHAR(100) NOT NULL,
+      granted         TINYINT(1)   NOT NULL DEFAULT 1,
+      actions         JSON DEFAULT NULL,
+      updated_by      INT DEFAULT NULL,
+      updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uk_user_permission (user_id, permission_name),
+      INDEX idx_upo_user (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS role_entity_permissions (
+      id          INT AUTO_INCREMENT PRIMARY KEY,
+      role_name   VARCHAR(50)  NOT NULL,
+      entity_type VARCHAR(50)  NOT NULL,
+      entity_id   INT          NOT NULL,
+      granted     TINYINT(1)   NOT NULL DEFAULT 1,
+      updated_by  INT DEFAULT NULL,
+      updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uk_role_entity (role_name, entity_type, entity_id),
+      INDEX idx_rep_role (role_name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS entity_permission_overrides (
+      id          INT AUTO_INCREMENT PRIMARY KEY,
+      user_id     INT          NOT NULL,
+      entity_type VARCHAR(50)  NOT NULL,
+      entity_id   INT          NOT NULL,
+      granted     TINYINT(1)   NOT NULL DEFAULT 1,
+      updated_by  INT DEFAULT NULL,
+      updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uk_entity_override (user_id, entity_type, entity_id),
+      INDEX idx_epo_user (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS permission_seed_batches (
+      batch      VARCHAR(50) NOT NULL PRIMARY KEY,
+      applied_at TIMESTAMP   DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // Safety net for databases whose tables predate the `actions` column.
+    // errno 1060 (duplicate column) is already tolerated by the loop below.
+    `ALTER TABLE permissions ADD COLUMN actions JSON DEFAULT NULL`,
+    `ALTER TABLE role_permissions ADD COLUMN actions JSON DEFAULT NULL`,
+    `ALTER TABLE user_permission_overrides ADD COLUMN actions JSON DEFAULT NULL`,
+    // Legacy databases may carry the role/permission tables from an earlier
+    // abandoned attempt with a different shape — reconcile before seeding.
+    `ALTER TABLE roles ADD COLUMN is_system TINYINT(1) NOT NULL DEFAULT 1`,
   ];
+
+  await dropLegacyPermissionTables(conn);
 
   for (const sql of migrations) {
     try {
@@ -664,6 +802,150 @@ async function migrateSchema(conn) {
       }
     }
   }
+
+  await seedPermissions(conn);
+}
+
+/**
+ * Drop permission-system tables left behind by an earlier attempt whose
+ * schema does not match this implementation (e.g. `granted_at` instead of
+ * `updated_at`, a `permission_name` column on the entity tables).
+ *
+ * Each drop is keyed to a column signature this schema never produces, so
+ * it runs exactly once and never touches a correctly migrated database.
+ * No application code reads the legacy tables, and the seed recreates the
+ * canonical rows immediately afterwards.
+ */
+async function dropLegacyPermissionTables(conn) {
+  // table → column that only exists in the legacy schema
+  const LEGACY_SIGNATURES = {
+    roles:                      "is_active",
+    permissions:                "description",
+    role_permissions:           "granted_at",
+    user_permission_overrides:  "granted_at",
+    role_entity_permissions:    "permission_name",
+    entity_permission_overrides: "permission_name",
+  };
+
+  for (const [table, legacyColumn] of Object.entries(LEGACY_SIGNATURES)) {
+    try {
+      const [rows] = await conn.query(
+        `SELECT 1 FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?
+         LIMIT 1`,
+        [table, legacyColumn]
+      );
+      if (!rows.length) continue;
+
+      await conn.query("SET FOREIGN_KEY_CHECKS = 0");
+      await conn.query(`DROP TABLE ${table}`);
+      await conn.query("SET FOREIGN_KEY_CHECKS = 1");
+      console.log(`  ♻️  Recreated legacy permission table: ${table}`);
+    } catch (err) {
+      console.warn(`  ⚠️  Could not reconcile legacy table ${table}: ${err.message}`);
+    }
+  }
+}
+
+/**
+ * Seed the permission catalog and the default role grant matrix.
+ *
+ * Every batch is batch-guarded by `permission_seed_batches` and never
+ * re-runs: a plain idempotent seed would silently re-insert grants a
+ * Super Admin deleted through the management UI on the next boot.
+ */
+async function seedPermissions(conn) {
+  async function batchApplied(batch) {
+    try {
+      const [rows] = await conn.query(
+        "SELECT batch FROM permission_seed_batches WHERE batch = ? LIMIT 1",
+        [batch]
+      );
+      return rows.length > 0;
+    } catch (err) {
+      // Table missing (migrations disabled) — treat as not applied and let
+      // the seed fail loudly rather than silently skipping.
+      console.warn(`  ⚠️  Seed guard check failed for ${batch}: ${err.message}`);
+      return false;
+    }
+  }
+
+  async function markBatch(batch) {
+    await conn.query(
+      "INSERT IGNORE INTO permission_seed_batches (batch) VALUES (?)",
+      [batch]
+    );
+  }
+
+  // ── v1_roles ─────────────────────────────────────────────
+  if (!(await batchApplied(SEED_BATCHES.ROLES))) {
+    for (const role of SEED_ROLES) {
+      await conn.query(
+        `INSERT INTO roles (name, display_name, description, is_system)
+         VALUES (?, ?, ?, 1)
+         ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), description = VALUES(description)`,
+        [role.name, role.display_name, role.description]
+      );
+    }
+    await markBatch(SEED_BATCHES.ROLES);
+    console.log("  ✅ Seed batch: v1_roles");
+  }
+
+  // ── v1_permissions ───────────────────────────────────────
+  // ON DUPLICATE KEY UPDATE never touches `actions` on later runs —
+  // actions are server-owned. On this first run the drop above already
+  // cleared any legacy rows, so writing actions here is safe.
+  if (!(await batchApplied(SEED_BATCHES.PERMISSIONS))) {
+    for (const perm of PERMISSION_CATALOG) {
+      await conn.query(
+        `INSERT INTO permissions (name, display_name, category, actions, is_active)
+         VALUES (?, ?, ?, ?, 1)
+         ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), category = VALUES(category)`,
+        [perm.name, perm.display_name, perm.category, JSON.stringify(perm.actions)]
+      );
+    }
+    // Remove any permission row that is not part of the catalog.
+    const catalogNames = PERMISSION_CATALOG.map((p) => p.name);
+    const placeholders = catalogNames.map(() => "?").join(", ");
+    await conn.query(
+      `DELETE FROM permissions WHERE name NOT IN (${placeholders})`,
+      catalogNames
+    );
+    await markBatch(SEED_BATCHES.PERMISSIONS);
+    console.log("  ✅ Seed batch: v1_permissions");
+  }
+
+  // ── v1_action_backfill ───────────────────────────────────
+  // Guarantees `actions` is populated even for rows that existed
+  // before the column was added.
+  if (!(await batchApplied(SEED_BATCHES.ACTION_BACKFILL))) {
+    for (const perm of PERMISSION_CATALOG) {
+      await conn.query(
+        "UPDATE permissions SET actions = ? WHERE name = ? AND actions IS NULL",
+        [JSON.stringify(perm.actions), perm.name]
+      );
+    }
+    await markBatch(SEED_BATCHES.ACTION_BACKFILL);
+    console.log("  ✅ Seed batch: v1_action_backfill");
+  }
+
+  // ── v1_role_grants ───────────────────────────────────────
+  if (!(await batchApplied(SEED_BATCHES.ROLE_GRANTS))) {
+    for (const [roleName, granted] of Object.entries(SEED_ROLE_GRANTS)) {
+      await conn.query("DELETE FROM role_permissions WHERE role_name = ?", [roleName]);
+      for (const permissionName of granted) {
+        // actions = NULL → all actions defined on the permission.
+        await conn.query(
+          "INSERT INTO role_permissions (role_name, permission_name, actions) VALUES (?, ?, NULL)",
+          [roleName, permissionName]
+        );
+      }
+    }
+    await markBatch(SEED_BATCHES.ROLE_GRANTS);
+    console.log("  ✅ Seed batch: v1_role_grants");
+  }
+
+  console.log("✅ Permission catalog + default role grants ready");
 }
 
 async function testConnection() {

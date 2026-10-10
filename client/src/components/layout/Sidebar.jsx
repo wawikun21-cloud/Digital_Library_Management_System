@@ -1,84 +1,168 @@
 // ─────────────────────────────────────────────────────────
-//  components/layout/Sidebar.jsx  —  Updated with Librarian RBAC
+//  components/layout/Sidebar.jsx
 //
-//  Each NAV_ITEMS entry now has a `roles` array.
-//  Items without `roles` are visible to ALL authenticated users.
-//  Items with `roles` are visible only to the listed roles.
+//  Sidebar navigation with:
+//   - Permission-based item visibility (each item declares `permission`)
+//   - Expandable group menus (Dashboard, Attendance, Settings)
+//   - Section grouping (labels + dividers) → scannable, not tight
 //
-//  Role filter is applied once in Inner → visibleItems.
+//  items without `permission` → visible to everyone
+//  items with `permission`   → visible only when the resolved
+//                              permissions include it
 // ─────────────────────────────────────────────────────────
-
-import { ShieldCheck } from "lucide-react";
-import { useState, useEffect } from "react";
+import { ShieldCheck, KeyRound } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   BarChart3, BookOpen, ClipboardList, Trash2, Sun, Moon, X,
-  ChevronDown, Library, Users, User, Globe, UserCheck, LayoutDashboard, GraduationCap,
+  ChevronDown, Library, Users, User, Globe, UserCheck,
+  LayoutDashboard, GraduationCap, Settings, Package,
 } from "lucide-react";
 import Logo from "./Logo.jsx";
 import { STORAGE_KEYS } from "../../constants/index.js";
 import { ROLES } from "../../constants/roles.js";
+import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { hasPermission } from "../../utils/permissionUtils";
 
 const SIDEBAR_WIDTHS = { COLLAPSED: 58, EXPANDED: 220 };
 const BRAND_HEIGHT   = 66;
 
 // ─────────────────────────────────────────────────────────
+//  Section map
+//  Controls the order sections render in. Items without a
+//  matching section fall back to "MORE".
+// ─────────────────────────────────────────────────────────
+const SECTIONS = [
+  { id: "OVERVIEW",     label: "Overview" },
+  { id: "CATALOG",      label: "Catalog" },
+  { id: "TRANSACTIONS", label: "Transactions" },
+  { id: "ATTENDANCE",   label: "Attendance" },
+  { id: "PEOPLE",       label: "People" },
+  { id: "SYSTEM",       label: "System" },
+  { id: "MORE",         label: "More" },
+];
+
+// ─────────────────────────────────────────────────────────
 //  NAV_ITEMS
-//
-//  roles: undefined  → visible to everyone
-//  roles: [...]      → visible only to listed roles
 // ─────────────────────────────────────────────────────────
 const NAV_ITEMS = [
-   // ── Student Portal (first item for students) ───────────
-   { to: "/dashboard/student", label: "Student Portal", Icon: GraduationCap, roles: [ROLES.STUDENT] },
+  // ── Overview ──────────────────────────────────────────
+  // Student Portal / student Tools stay role-gated: they are audience pages
+  // and the portal is the student's landing route, so no permission applies.
+  { section: "OVERVIEW", to: "/dashboard/student", label: "Student Portal", Icon: GraduationCap, roles: [ROLES.STUDENT] },
+  { section: "OVERVIEW", to: "/dashboard/student-tools", label: "Tools", Icon: Package, roles: [ROLES.STUDENT] },
 
-   // ── Dashboard Analytics (super admin + admin) ──────────
-   {
-     label:   "Dashboard Analytics",
-     to:      "/dashboard",
-     Icon:    BarChart3,
-     isGroup: true,
-     roles:   [ROLES.SUPER_ADMIN, ROLES.ADMIN],
-     children: [
+  {
+    section: "OVERVIEW",
+    label: "Dashboard Analytics",
+    to: "/dashboard",
+    Icon: BarChart3,
+    isGroup: true,
+    permission: "view_dashboard",
+    children: [
       { to: "/dashboard/attendance/dashboard", label: "Attendance", Icon: LayoutDashboard },
       { to: "/dashboard/books/dashboard",      label: "Book",       Icon: BookOpen },
-     ],
-   },
-
-  // ── Books catalog (admin + librarian) ─────────────────
-  { to: "/dashboard/books",        label: "Books",        Icon: BookOpen, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.LIBRARIAN], end: true },
-  { to: "/lexora-books",           label: "Lexora E-Books", Icon: Globe },
-  { to: "/dashboard/lexora-books", label: "Manage Lexora Books", Icon: Globe, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.LIBRARIAN] },
-
-  // ── Courses (admin + staff) ───────────────────────────
-  { to: "/dashboard/courses", label: "Courses", Icon: Library, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF], end: true },
-  { to: "/dashboard/course-library", label: "Course Library", Icon: BookOpen },
-
-  // ── Admin-only destructive / audit pages ──────────────
-  { to: "/dashboard/borrowed",  label: "Borrowed",         Icon: ClipboardList, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN] },
-
-  // ── User Management (Super Admin + Admin) ────────────
-  { to: "/dashboard/users", label: "Users", Icon: Users, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN] },
-
-  // ── Attendance group (admin + staff) ──────────────────
-  {
-    label:   "Attendance",
-    to:      "/dashboard/attendance",
-    Icon:    Users,
-    isGroup: true,
-    roles:   [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.STAFF],
-    children: [
-      { to: "/dashboard/students",         label: "Students",         Icon: User      },
-      { to: "/dashboard/faculty",          label: "Faculty",          Icon: UserCheck },
-      { to: "/dashboard/attendance/kiosk", label: "Kiosk Attendance", Icon: UserCheck },
     ],
   },
 
-  // ── Super Admin + Admin destructive / audit pages ───────
-  { to: "/dashboard/deleted",   label: "Recently Deleted", Icon: Trash2,      roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN] },
-  { to: "/dashboard/audit-log", label: "Audit Trail",      Icon: ShieldCheck, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN] },
+  // ── Catalog ───────────────────────────────────────────
+  { section: "CATALOG", to: "/dashboard/books",        label: "Books",            Icon: BookOpen, permission: "manage_books", end: true },
+  { section: "CATALOG", to: "/lexora-books",           label: "Lexora E-Books",    Icon: Globe, permission: "view_lexora_books" },
+  { section: "CATALOG", to: "/dashboard/lexora-books", label: "Manage Lexora Books", Icon: Globe, permission: "manage_lexora_books" },
+  { section: "CATALOG", to: "/dashboard/courses",      label: "Courses",            Icon: Library, permission: "manage_courses", end: true },
+  { section: "CATALOG", to: "/dashboard/course-library", label: "Course Library",  Icon: BookOpen, permission: "view_course_library" },
+
+  // ── Transactions ──────────────────────────────────────
+  { section: "TRANSACTIONS", to: "/dashboard/borrowed", label: "Borrowed", Icon: ClipboardList, permission: "manage_transactions" },
+
+  // ── Attendance ────────────────────────────────────────
+  {
+    section: "ATTENDANCE",
+    label: "Attendance",
+    to: "/dashboard/attendance",
+    Icon: Users,
+    isGroup: true,
+    anyPermission: ["manage_attendance", "use_kiosk"],
+    children: [
+      { to: "/dashboard/students",          label: "Students",          Icon: User, permission: "manage_students" },
+      { to: "/dashboard/faculty",           label: "Faculty",           Icon: UserCheck, permission: "manage_faculty" },
+      { to: "/dashboard/attendance/kiosk",  label: "Kiosk Attendance",  Icon: UserCheck, permission: "use_kiosk" },
+    ],
+  },
+
+  // ── People ────────────────────────────────────────────
+  { section: "PEOPLE", to: "/dashboard/tools", label: "Tools", Icon: Package, permission: "manage_tools" },
+
+  // ── System ────────────────────────────────────────────
+  { section: "SYSTEM", to: "/dashboard/deleted",   label: "Recently Deleted", Icon: Trash2,      permission: "manage_trash" },
+  { section: "SYSTEM", to: "/dashboard/audit-log", label: "Audit Trail",      Icon: ShieldCheck, permission: "view_audit_logs" },
+
+  // ── More ──────────────────────────────────────────────
+  {
+    section: "MORE",
+    label: "Settings",
+    to: "/dashboard/settings",
+    Icon: Settings,
+    isGroup: true,
+    anyPermission: ["manage_settings", "manage_users", "manage_permissions"],
+    children: [
+      { to: "/dashboard/settings/student-portal", label: "Student Portal",     Icon: GraduationCap, permission: "manage_settings" },
+      { to: "/dashboard/users",                   label: "Users",              Icon: Users,         permission: "manage_users" },
+      { to: "/dashboard/roles",                   label: "Roles & Permissions", Icon: KeyRound,      permission: "manage_permissions" },
+    ],
+  },
 ];
 
+// ─────────────────────────────────────────────────────────
+//  Helpers
+// ─────────────────────────────────────────────────────────
+/**
+ * Visibility follows resolved permissions.
+ *
+ * `anyPermission` matches when the user holds at least one of the listed
+ * permissions (used by groups that stay open when any child is reachable).
+ *
+ * `roles` is the one role-based exception left: the Student Portal is an
+ * audience page, not a capability, and it is the student's landing route —
+ * no permission expresses "is a student". It is never granted by the seed
+ * as a capability, so gating it on a permission would loop students back
+ * to their own redirect target.
+ *
+ * A user whose cached entry predates the permission fields falls back to a
+ * conservative role check, so a stale localStorage cannot reveal an item —
+ * ProtectedRoute refreshes the entry from /api/auth/me right after.
+ */
+function isItemVisibleForUser(item, user) {
+  if (item.anyPermission) {
+    return item.anyPermission.some((name) => hasPermission(user, name));
+  }
+  if (item.permission) {
+    return hasPermission(user, item.permission);
+  }
+  if (item.roles) {
+    const role = user?.role;
+    return role ? item.roles.includes(role) : item.roles.includes(ROLES.ADMIN);
+  }
+  return true;
+}
+
+function isChildActive(children, pathname) {
+  return children.some((c) => pathname === c.to || pathname.startsWith(c.to + "/"));
+}
+
+/** Collapse a flat item list into ordered sections (role already filtered). */
+function groupBySection(items) {
+  const buckets = {};
+  items.forEach((item) => {
+    const key = item.section ?? "MORE";
+    (buckets[key] = buckets[key] || []).push(item);
+  });
+  return SECTIONS.filter((s) => buckets[s.id]?.length)
+    .map((s) => ({ id: s.id, label: s.label, items: buckets[s.id] }));
+}
+
+// ─────────────────────────────────────────────────────────
+//  Sidebar — desktop + mobile asides
 // ─────────────────────────────────────────────────────────
 export default function Sidebar({
   collapsed, darkMode, onToggleTheme, mobileOpen, onMobileClose, userRole,
@@ -86,12 +170,15 @@ export default function Sidebar({
   const [isHovered, setIsHovered] = useState(false);
   const effectiveCollapsed = collapsed && !isHovered;
   const desktopWidth = effectiveCollapsed ? SIDEBAR_WIDTHS.COLLAPSED : SIDEBAR_WIDTHS.EXPANDED;
+  const [cachedUser] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
+  // Fall back to the prop's role so the nav still renders before /me resolves.
+  const user = cachedUser ?? (userRole ? { role: userRole } : null);
 
   return (
     <>
       {/* ── Desktop sidebar ─────────────────────────────── */}
       <aside
-        className="sidebar-hover-expand fixed top-0 left-0 h-screen z-50 hidden lg:flex flex-col overflow-hidden transition-all duration-300"
+        className="fixed top-0 left-0 h-screen z-50 hidden lg:flex flex-col overflow-hidden transition-all duration-300"
         style={{ width: desktopWidth, background: "var(--bg-sidebar)", borderRight: "1px solid var(--border-sidebar)" }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
@@ -101,10 +188,9 @@ export default function Sidebar({
       >
         <Inner
           collapsed={effectiveCollapsed}
-          sidebarWidth={desktopWidth}
           darkMode={darkMode}
           onToggleTheme={onToggleTheme}
-          userRole={userRole}
+          user={user}
         />
       </aside>
 
@@ -127,10 +213,9 @@ export default function Sidebar({
         </button>
         <Inner
           collapsed={false}
-          sidebarWidth={240}
           darkMode={darkMode}
           onToggleTheme={onToggleTheme}
-          userRole={userRole}
+          user={user}
         />
       </aside>
     </>
@@ -138,97 +223,79 @@ export default function Sidebar({
 }
 
 // ─────────────────────────────────────────────────────────
-//  Helpers
+//  Inner — sidebar contents
 // ─────────────────────────────────────────────────────────
-function getRoleFromStorage(storageKey) {
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) return null;
-    return JSON.parse(raw)?.role ?? null;
-  } catch { return null; }
-}
-
-function isItemVisibleForRole(item, role) {
-  // No roles restriction → show to everyone
-  if (!item.roles) return true;
-  // Null/undefined role defaults to admin (backwards-compatible)
-  if (role === null || role === undefined) return item.roles.includes(ROLES.ADMIN);
-  return item.roles.includes(role);
-}
-
-function isChildActive(children, pathname) {
-  return children.some(c => pathname === c.to || pathname.startsWith(c.to + "/"));
-}
-
-// ─────────────────────────────────────────────────────────
-//  Inner — the actual sidebar contents
-// ─────────────────────────────────────────────────────────
-function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme, userRole }) {
+function Inner({ collapsed, darkMode, onToggleTheme, user }) {
   const location = useLocation();
 
-  // Role resolution: storage takes precedence, fallback to prop, then admin
-  const role = getRoleFromStorage(STORAGE_KEYS.LEXORA_USER) ?? userRole ?? ROLES.ADMIN;
+  // Derived from the freshly read cached user; the badge is decorative so it
+  // is safe to default to admin when the cache is still empty.
+  const role = user?.role ?? ROLES.ADMIN;
 
-  // Filter nav items by role
-  const visibleItems = NAV_ITEMS.filter(item => isItemVisibleForRole(item, role));
-
-  // Pre-find groups for accordion state
-  const dashboardGroup  = NAV_ITEMS.find(i => i.isGroup && i.label === "Dashboard Analytics");
-  const attendanceGroup = NAV_ITEMS.find(i => i.isGroup && i.label === "Attendance");
-
-  const [dashboardOpen,  setDashboardOpen]  = useState(
-    () => dashboardGroup  ? isChildActive(dashboardGroup.children,  location.pathname) : false
+  // Visible nav items for the current user's resolved permissions
+  const visibleItems = useMemo(
+    () => NAV_ITEMS.filter((item) => isItemVisibleForUser(item, user)),
+    [user]
   );
-  const [attendanceOpen, setAttendanceOpen] = useState(
-    () => attendanceGroup ? isChildActive(attendanceGroup.children, location.pathname) : false
-  );
+
+  // Groups keyed by label, open state auto-tracked on route change
+  const groupLabels = NAV_ITEMS.filter((i) => i.isGroup).map((i) => i.label);
+  const [openGroups, setOpenGroups] = useState(() => {
+    const initial = {};
+    NAV_ITEMS.forEach((item) => {
+      if (item.isGroup && item.children && isChildActive(item.children, location.pathname)) {
+        initial[item.label] = true;
+      }
+    });
+    return initial;
+  });
 
   useEffect(() => {
-    if (dashboardGroup  && isChildActive(dashboardGroup.children,  location.pathname)) setDashboardOpen(true);
-    if (attendanceGroup && isChildActive(attendanceGroup.children, location.pathname)) setAttendanceOpen(true);
+    groupLabels.forEach((label) => {
+      const item = NAV_ITEMS.find((i) => i.isGroup && i.label === label);
+      if (item?.children && isChildActive(item.children, location.pathname)) {
+        setOpenGroups((g) => (g[label] ? g : { ...g, [label]: true }));
+      }
+    });
   }, [location.pathname]);
 
-  const getOpen   = (label) => label === "Dashboard Analytics" ? dashboardOpen  : attendanceOpen;
-  const getToggle = (label) => label === "Dashboard Analytics"
-    ? () => setDashboardOpen(o => !o)
-    : () => setAttendanceOpen(o => !o);
+  const toggleGroup = (label) => setOpenGroups((g) => ({ ...g, [label]: !g[label] }));
+
+  const sections = useMemo(() => groupBySection(visibleItems), [visibleItems]);
 
   return (
     <div className="flex flex-col h-full">
-
-      {/* ── Brand ─────────────────────────────────────── */}
+      {/* ── Brand ────────────────────────────────────── */}
       <div
         className="flex items-center shrink-0 overflow-hidden border-b border-[var(--border-sidebar)]"
-        style={{ minHeight: BRAND_HEIGHT, width: sidebarWidth, padding: "10px 12px", transition: "width 300ms ease" }}
+        style={{ minHeight: BRAND_HEIGHT, padding: "10px 12px" }}
       >
         <Logo variant={collapsed ? "collapsed" : "expanded"} />
       </div>
 
-      {/* ── Nav items ─────────────────────────────────── */}
-      <nav className="flex-1 flex flex-col gap-0.5 p-2 pt-4 overflow-y-auto overflow-x-hidden">
-        {visibleItems.map((item) =>
-          item.isGroup ? (
-            <StudentsMenu
-              key={item.label}
-              item={item}
-              collapsed={collapsed}
-              open={getOpen(item.label)}
-              onToggle={getToggle(item.label)}
-            />
-          ) : (
-            <NavItem key={item.to} item={item} collapsed={collapsed} />
-          )
-        )}
+      {/* ── Nav items ────────────────────────────────── */}
+      <nav
+        className="sidebar-nav flex-1 flex flex-col gap-1 py-2 overflow-y-auto overflow-x-hidden"
+      >
+        {sections.map((sec) => (
+          <NavSection
+            key={sec.id}
+            section={sec}
+            collapsed={collapsed}
+            openGroups={openGroups}
+            onToggleGroup={toggleGroup}
+          />
+        ))}
       </nav>
 
-      {/* ── Role badge (shown when expanded) ─────────── */}
+      {/* ── Role badge (expanded only) ──────────────── */}
       {!collapsed && (
         <div
           style={{
-            padding:    "6px 12px 2px",
-            opacity:    0.55,
-            fontSize:   "10px",
-            fontWeight: "600",
+            padding: "6px 12px 2px",
+            opacity: 0.55,
+            fontSize: "10px",
+            fontWeight: 600,
             letterSpacing: "0.08em",
             textTransform: "uppercase",
             color: "var(--text-on-sidebar)",
@@ -238,7 +305,7 @@ function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme, userRole }) {
         </div>
       )}
 
-      {/* ── Theme toggle ──────────────────────────────── */}
+      {/* ── Theme toggle ─────────────────────────────── */}
       <div
         className="flex flex-col gap-2 p-2 shrink-0"
         style={{ borderTop: "1px solid var(--border-sidebar)" }}
@@ -251,8 +318,8 @@ function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme, userRole }) {
             collapsed ? "justify-center py-2 px-0" : "px-2.5 py-2",
           ].join(" ")}
           style={{ background: "rgba(255,255,255,0.04)" }}
-          onMouseEnter={e => e.currentTarget.style.background = "rgba(238,162,58,0.1)"}
-          onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(238,162,58,0.1)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
         >
           <span className="t-track">
             <span className={`t-thumb ${darkMode ? "t-thumb-on" : ""}`} />
@@ -266,13 +333,51 @@ function Inner({ collapsed, sidebarWidth, darkMode, onToggleTheme, userRole }) {
           )}
         </button>
       </div>
-
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────
-//  NavItem  —  single flat link
+//  NavSection — a labelled, divided group of nav items
+// ─────────────────────────────────────────────────────────
+function NavSection({ section, collapsed, openGroups, onToggleGroup }) {
+  const { label, items } = section;
+
+  return (
+    <div className="mb-1.5">
+      {/* ── Divider + label (expanded only) ──────────── */}
+      {!collapsed && (
+        <>
+          <span
+            className="block px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest"
+            style={{ color: "var(--text-on-sidebar)", opacity: 0.5 }}
+          >
+            {label}
+          </span>
+        </>
+      )}
+
+      <div className="flex flex-col gap-1 px-2">
+        {items.map((item) =>
+          item.isGroup ? (
+            <GroupMenu
+              key={item.label}
+              item={item}
+              collapsed={collapsed}
+              open={openGroups[item.label] ?? false}
+              onToggle={() => onToggleGroup(item.label)}
+            />
+          ) : (
+            <NavItem key={item.to} item={item} collapsed={collapsed} />
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+//  NavItem — single flat link
 // ─────────────────────────────────────────────────────────
 function NavItem({ item, collapsed }) {
   const { to, label, Icon, end } = item;
@@ -283,11 +388,11 @@ function NavItem({ item, collapsed }) {
       title={collapsed ? label : undefined}
       className={({ isActive }) => [
         "flex items-center rounded-lg text-sm font-medium",
-        "overflow-hidden whitespace-nowrap select-none transition-colors duration-150 px-3 py-2.5",
+        "overflow-hidden whitespace-nowrap select-none transition-colors duration-150 px-3 py-2",
         isActive ? "text-white" : "hover:text-amber-400",
       ].join(" ")}
       style={({ isActive }) => ({
-        color:      isActive ? "#fff" : "var(--text-on-sidebar)",
+        color: isActive ? "#fff" : "var(--text-on-sidebar)",
         background: isActive ? "rgba(238,162,58,0.18)" : "transparent",
       })}
     >
@@ -304,15 +409,15 @@ function NavItem({ item, collapsed }) {
 }
 
 // ─────────────────────────────────────────────────────────
-//  StudentsMenu  —  expandable group link
+//  GroupMenu — expandable group with a toggle chevron
 // ─────────────────────────────────────────────────────────
-function StudentsMenu({ item, collapsed, open, onToggle }) {
+function GroupMenu({ item, collapsed, open, onToggle }) {
   const { label, to, Icon, children } = item;
-  const location       = useLocation();
-  const anyChildActive = children.some(c =>
-    location.pathname === c.to || location.pathname.startsWith(c.to + "/")
+  const location = useLocation();
+  const anyChildActive = children.some(
+    (c) => location.pathname === c.to || location.pathname.startsWith(c.to + "/")
   );
-  const isSelfActive  = location.pathname === to;
+  const isSelfActive = location.pathname === to;
   const isHighlighted = isSelfActive || anyChildActive;
 
   return (
@@ -325,10 +430,9 @@ function StudentsMenu({ item, collapsed, open, onToggle }) {
           to={to}
           end
           title={collapsed ? label : undefined}
-          className="flex items-center flex-1 px-3 py-2.5 text-sm font-medium overflow-hidden whitespace-nowrap select-none transition-colors duration-150"
+          className="flex items-center flex-1 overflow-hidden whitespace-nowrap select-none transition-colors duration-150 px-3 py-2 text-sm font-medium"
           style={({ isActive }) => ({
-            color:      isActive || anyChildActive ? "#fff" : "var(--text-on-sidebar)",
-            background: "transparent",
+            color: isActive || anyChildActive ? "#fff" : "var(--text-on-sidebar)",
           })}
         >
           {({ isActive }) => (
@@ -343,7 +447,7 @@ function StudentsMenu({ item, collapsed, open, onToggle }) {
 
         {!collapsed && (
           <button
-            onClick={e => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
             aria-label="Toggle submenu"
             className="shrink-0 flex items-center justify-center rounded-md transition-colors duration-150 hover:bg-white/10"
             style={{ width: 28, height: 28, marginRight: 4, color: "var(--text-on-sidebar)" }}
@@ -360,34 +464,38 @@ function StudentsMenu({ item, collapsed, open, onToggle }) {
         )}
       </div>
 
+      {/* ── Submenu ── */}
       {!collapsed && (
-        <div style={{
-          overflow:   "hidden",
-          maxHeight:  open ? `${children.length * 48}px` : "0px",
-          transition: "max-height 280ms ease",
-          padding:    "3px 4px 4px 4px",
-        }}>
+        <div
+          style={{
+            overflow: "hidden",
+            maxHeight: open ? `${children.length * 36}px` : "0px",
+            transition: "max-height 280ms ease",
+            padding: "2px 4px 3px",
+          }}
+        >
           {children.map(({ to: cTo, label: cLabel, Icon: CIcon, end: cEnd }) => (
             <NavLink
               key={cTo}
               to={cTo}
               end={cEnd ?? false}
+              title={cLabel}
               className={({ isActive }) => [
                 "flex items-center rounded-lg font-medium select-none transition-colors duration-150",
                 isActive ? "text-white" : "hover:text-amber-400",
               ].join(" ")}
               style={({ isActive }) => ({
-                paddingLeft:   28,
-                paddingRight:  8,
-                paddingTop:    10,
-                paddingBottom: 10,
-                color:      isActive ? "#fff" : "var(--text-on-sidebar)",
-                background: isActive ? "rgba(238,162,58,0.15)" : "transparent",
+                paddingLeft: 30,
+                paddingRight: 8,
+                paddingTop: 7,
+                paddingBottom: 7,
+                color: isActive ? "#fff" : "var(--text-on-sidebar)",
+                background: isActive ? "rgba(238,162,58,0.12)" : "transparent",
               })}
             >
               {({ isActive }) => (
                 <>
-                  <span className="shrink-0 flex items-center justify-center" style={{ width: 14, minWidth: 14, marginRight: 8 }}>
+                  <span className="shrink-0 flex items-center justify-center" style={{ width: 12, minWidth: 12, marginRight: 8 }}>
                     <CIcon size={13} style={{ color: isActive ? "#f7e013" : undefined, opacity: isActive ? 1 : 0.7 }} />
                   </span>
                   <span style={{ fontSize: 11.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>

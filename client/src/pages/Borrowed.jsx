@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useAuth } from "../hooks/useAuth";
 import {
   Search, X, BookOpen, User, Calendar, Users,
   Loader2, AlertCircle, CheckCircle2, ChevronDown,
@@ -104,6 +105,16 @@ const EMPTY_FORM = {
 
 // ══════════════════════════════════════════════════════════
 export default function Borrowed() {
+  const { hasPermissionAction } = useAuth();
+
+  // ── Per-action permission gates (server enforces the same) ──
+  const canBorrow  = hasPermissionAction("manage_transactions", "create");
+  const canReturn  = hasPermissionAction("manage_transactions", "return");
+  const canExtend  = hasPermissionAction("manage_transactions", "extend");
+  const canEdit    = hasPermissionAction("manage_transactions", "edit");
+  const canDelete  = hasPermissionAction("manage_transactions", "delete");
+  const canPayFine = hasPermissionAction("manage_transactions", "pay_fine");
+
   const [loading, setLoading] = useState(true);
   const [txns, setTxns]       = useState([]);
 
@@ -641,13 +652,15 @@ body: JSON.stringify({
         </div>
 
         {/* Borrow button */}
-        <button
-          onClick={openBorrowModal}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white flex-shrink-0"
-          style={{ background: "var(--accent-amber)" }}
-        >
-          <Plus size={14} /> Borrow Book
-        </button>
+        {canBorrow && (
+          <button
+            onClick={openBorrowModal}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white flex-shrink-0"
+            style={{ background: "var(--accent-amber)" }}
+          >
+            <Plus size={14} /> Borrow Book
+          </button>
+        )}
       </div>
 
       {/* Result count */}
@@ -1187,7 +1200,7 @@ body: JSON.stringify({
                         </p>
                       </div>
                     </div>
-                    {finePaid ? (
+                    {!canPayFine ? null : finePaid ? (
                       <span className="text-[11px] font-bold px-2.5 py-1 rounded-full"
                         style={{ background: "rgba(50,127,79,0.15)", color: "#2d7a4f" }}>
                         ✓ Paid
@@ -1207,7 +1220,7 @@ body: JSON.stringify({
 
               {/* Actions */}
               <div className="flex gap-2 pt-1" style={{ borderTop: "1px solid var(--border-light)" }}>
-                {detailTxn.status !== "Returned" && (
+                {detailTxn.status !== "Returned" && canReturn && (
                   <button
                     onClick={() => { handleReturn(detailTxn.id); setDetailTxn(null); }}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[12px] font-semibold border-[1.5px] transition-colors"
@@ -1216,7 +1229,7 @@ body: JSON.stringify({
                     <CheckCircle2 size={13} /> Return
                   </button>
                 )}
-                {detailTxn.status !== "Returned" && (
+                {detailTxn.status !== "Returned" && canExtend && (
                   <button
                     onClick={() => { setDetailTxn(null); openExtendModal(detailTxn); }}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[12px] font-semibold border-[1.5px] transition-colors"
@@ -1225,20 +1238,24 @@ body: JSON.stringify({
                     <RefreshCw size={13} /> Renew
                   </button>
                 )}
-                <button
-                  onClick={() => { setDetailTxn(null); openEditModal(detailTxn); }}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[12px] font-semibold border-[1.5px] transition-colors"
-                  style={{ background: "rgba(50,102,127,0.08)", borderColor: "rgba(50,102,127,0.3)", color: "#32667F" }}
-                >
-                  <Edit2 size={13} /> Edit
-                </button>
-                <button
-                  onClick={() => { setDetailTxn(null); setDeleteModal({ open: true, id: detailTxn.id, title: detailTxn.book_title || "" }); }}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[12px] font-semibold border-[1.5px] transition-colors"
-                  style={{ background: "rgba(234,139,51,0.08)", borderColor: "rgba(234,139,51,0.3)", color: "#c05a0a" }}
-                >
-                  <Trash2 size={13} /> Delete
-                </button>
+                {canEdit && (
+                  <button
+                    onClick={() => { setDetailTxn(null); openEditModal(detailTxn); }}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[12px] font-semibold border-[1.5px] transition-colors"
+                    style={{ background: "rgba(50,102,127,0.08)", borderColor: "rgba(50,102,127,0.3)", color: "#32667F" }}
+                  >
+                    <Edit2 size={13} /> Edit
+                  </button>
+                )}
+                {canDelete && (
+                  <button
+                    onClick={() => { setDetailTxn(null); setDeleteModal({ open: true, id: detailTxn.id, title: detailTxn.book_title || "" }); }}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[12px] font-semibold border-[1.5px] transition-colors"
+                    style={{ background: "rgba(234,139,51,0.08)", borderColor: "rgba(234,139,51,0.3)", color: "#c05a0a" }}
+                  >
+                    <Trash2 size={13} /> Delete
+                  </button>
+                )}
               </div>
             </div>
           </div>

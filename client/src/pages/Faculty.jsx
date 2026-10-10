@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../hooks/useAuth';
 import {
   Search, Upload, Download, Plus, Edit, Trash2,
   UserCheck, AlertCircle, CheckCircle2, XCircle, ChevronDown,
@@ -37,6 +38,14 @@ const DEFAULT_COLOR = { bg: 'rgba(30,58,123,0.08)', text: '#2d4fa3', badge: 'rgb
 // ─────────────────────────────────────────────────────────
 
 export default function Faculty() {
+  const { hasPermissionAction } = useAuth();
+
+  // ── Per-action permission gates (server enforces the same) ──
+  const canCreate = hasPermissionAction("manage_faculty", "create");
+  const canEdit   = hasPermissionAction("manage_faculty", "edit");
+  const canDelete = hasPermissionAction("manage_faculty", "delete");
+  const canImport = hasPermissionAction("manage_faculty", "import");
+
   // ── Data state ────────────────────────────────────────
   const [faculty, setFaculty]         = useState([]);
   const [isLoading, setIsLoading]     = useState(true);
@@ -279,29 +288,33 @@ export default function Faculty() {
 
         <div className="flex items-center gap-2 flex-wrap">
 
-          <button
-            onClick={() => setIsImportOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-all hover:opacity-90 active:scale-[.98]"
-            style={{
-              background: "rgba(45,122,71,0.1)",
-              border: "1.5px solid rgba(45,122,71,0.35)",
-              color: "#2d7a47",
-            }}
-          >
-            <Upload size={14} />
-            Bulk Import
-          </button>
+          {canImport && (
+            <button
+              onClick={() => setIsImportOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold transition-all hover:opacity-90 active:scale-[.98]"
+              style={{
+                background: "rgba(45,122,71,0.1)",
+                border: "1.5px solid rgba(45,122,71,0.35)",
+                color: "#2d7a47",
+              }}
+            >
+              <Upload size={14} />
+              Bulk Import
+            </button>
+          )}
 
-          <button
-            onClick={openAddModal}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors"
-            style={{ 
-              background: "var(--accent-amber)", 
-              boxShadow: "0 2px 8px rgba(238,162,58,.3)" 
-            }}
-          >
-            <Plus size={14} /> Add Faculty
-          </button>
+          {canCreate && (
+            <button
+              onClick={openAddModal}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors"
+              style={{
+                background: "var(--accent-amber)",
+                boxShadow: "0 2px 8px rgba(238,162,58,.3)"
+              }}
+            >
+              <Plus size={14} /> Add Faculty
+            </button>
+          )}
         </div>
       </div>
 
@@ -568,26 +581,30 @@ export default function Faculty() {
                         {/* Actions */}
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => openEditModal(member)}
-                              className="p-1.5 rounded-lg transition-colors duration-150"
-                              style={{ color: '#2d4fa3' }}
-                              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(30,58,123,0.1)'; }}
-                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                              title="Edit"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(member.id)}
-                              className="p-1.5 rounded-lg transition-colors duration-150"
-                              style={{ color: '#dc2626' }}
-                              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.08)'; }}
-                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                              title="Delete"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {canEdit && (
+                              <button
+                                onClick={() => openEditModal(member)}
+                                className="p-1.5 rounded-lg transition-colors duration-150"
+                                style={{ color: '#2d4fa3' }}
+                                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(30,58,123,0.1)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                                title="Edit"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                onClick={() => handleDelete(member.id)}
+                                className="p-1.5 rounded-lg transition-colors duration-150"
+                                style={{ color: '#dc2626' }}
+                                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.08)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 
-export default function Modal({ isOpen, onClose, title, children, maxWidth = "max-w-lg" }) {
+export default function Modal({ isOpen, onClose, title, subtitle = null, children, maxWidth = "max-w-lg" }) {
   if (!isOpen) return null;
 
   return (
@@ -12,7 +12,7 @@ export default function Modal({ isOpen, onClose, title, children, maxWidth = "ma
       }}
     >
       <div
-        className={`w-full ${maxWidth} rounded-2xl overflow-hidden animate-[scaleIn_0.2s_ease-out]`}
+        className={`flex max-h-[90vh] w-full flex-col ${maxWidth} rounded-2xl overflow-hidden animate-[scaleIn_0.2s_ease-out]`}
         style={{
           background: "var(--bg-surface)",
           border: "1px solid var(--border)",
@@ -24,13 +24,20 @@ export default function Modal({ isOpen, onClose, title, children, maxWidth = "ma
             className="flex items-center justify-between px-6 py-4 shrink-0"
             style={{ borderBottom: "1px solid var(--border-light)" }}
           >
-            <h2 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>
-              {title}
-            </h2>
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-bold" style={{ color: "var(--text-primary)" }}>
+                {title}
+              </h2>
+              {subtitle && (
+                <p className="mt-0.5 truncate text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                  {subtitle}
+                </p>
+              )}
+            </div>
             {onClose && (
               <button
                 onClick={onClose}
-                className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors duration-150"
+                className="ml-3 w-8 h-8 flex shrink-0 items-center justify-center rounded-lg transition-colors duration-150"
                 style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = "rgba(238,162,58,0.15)";
@@ -46,7 +53,7 @@ export default function Modal({ isOpen, onClose, title, children, maxWidth = "ma
             )}
           </div>
         )}
-        <div className="px-6 py-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
       </div>
     </div>
   );

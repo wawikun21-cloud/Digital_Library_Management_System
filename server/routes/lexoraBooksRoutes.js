@@ -1,14 +1,31 @@
+// ─────────────────────────────────────────────────────────
+//  routes/lexoraBooksRoutes.js
+//
+//  Role guards were replaced by permission guards:
+//    • GET /, /:id, /:id/stats            → view_lexora_books:view / manage_lexora_books:view
+//    • GET /:id/pages                     → view_lexora_books:read
+//    • GET /categories/all, /tags/all     → manage_lexora_books:view
+//    • POST /, PUT /:id                   → manage_lexora_books:create / :edit
+//    • DELETE /:id, /:id/pdf, /:id/cover  → manage_lexora_books:delete / :edit
+//    • publish/unpublish                  → manage_lexora_books:publish
+//    • archive/restore                    → manage_lexora_books:archive
+//    • POST /lexora-import                → manage_lexora_books:import
+//
+//  Public and reader routes keep their current access and are
+//  registered BEFORE the guard middleware so it never runs for them.
+// ─────────────────────────────────────────────────────────
+
 const express        = require("express");
 const router         = express.Router();
 const lexoraCtrl     = require("../controllers/lexoraController");
 
+const { requireAuth } = require("../middleware/authMiddleware");
 const {
-  requireAuth,
-  requireAdmin,
-  requireAdminOrLibrarian,
-} = require("../middleware/authMiddleware");
+  resolvePermissions,
+  requirePermissionAction,
+} = require("../features/roles");
 
-// ── Public (read-only) ─────────────────────────────────────
+// ── Public (read-only) — no auth, registered first ─────────
 
 router.get("/public", async (req, res) => {
   try {
@@ -76,7 +93,7 @@ router.get("/public/:id", async (req, res) => {
   }
 });
 
-// ── Reader data ────────────────────────────────────────────
+// ── Reader data (public with in-handler role checks) ───────
 
 router.get("/:id/reader", async (req, res) => {
   try {
@@ -134,27 +151,31 @@ router.get("/:id/reader", async (req, res) => {
   }
 });
 
+// ── Everything below requires an authenticated caller with
+//    resolved permissions attached to the request. ──────────
+router.use(requireAuth, resolvePermissions);
+
 // ── Admin CRUD ─────────────────────────────────────────────
 
-router.get("/my-bookmarks", requireAuth, lexoraCtrl.getMyBookmarks);
+router.get("/my-bookmarks", lexoraCtrl.getMyBookmarks);
 
-router.get("/", requireAuth, requireAdminOrLibrarian, lexoraCtrl.getLexoraBooks);
+router.get("/", requirePermissionAction("view_lexora_books", "view"), lexoraCtrl.getLexoraBooks);
 
-router.get("/:id", requireAuth, requireAdminOrLibrarian, lexoraCtrl.getLexoraBook);
+router.get("/:id", requirePermissionAction("view_lexora_books", "view"), lexoraCtrl.getLexoraBook);
 
-router.post("/", requireAuth, requireAdminOrLibrarian, lexoraCtrl.createLexoraBook);
+router.post("/", requirePermissionAction("manage_lexora_books", "create"), lexoraCtrl.createLexoraBook);
 
-router.put("/:id", requireAuth, requireAdminOrLibrarian, lexoraCtrl.updateLexoraBook);
+router.put("/:id", requirePermissionAction("manage_lexora_books", "edit"), lexoraCtrl.updateLexoraBook);
 
-router.delete("/:id", requireAuth, requireAdmin, lexoraCtrl.deleteLexoraBook);
+router.delete("/:id", requirePermissionAction("manage_lexora_books", "delete"), lexoraCtrl.deleteLexoraBook);
 
-router.post("/:id/publish", requireAuth, requireAdminOrLibrarian, lexoraCtrl.publishLexoraBook);
+router.post("/:id/publish", requirePermissionAction("manage_lexora_books", "publish"), lexoraCtrl.publishLexoraBook);
 
-router.post("/:id/unpublish", requireAuth, requireAdminOrLibrarian, lexoraCtrl.unpublishLexoraBook);
+router.post("/:id/unpublish", requirePermissionAction("manage_lexora_books", "publish"), lexoraCtrl.unpublishLexoraBook);
 
-router.post("/:id/archive", requireAuth, requireAdminOrLibrarian, lexoraCtrl.archiveLexoraBook);
+router.post("/:id/archive", requirePermissionAction("manage_lexora_books", "archive"), lexoraCtrl.archiveLexoraBook);
 
-router.post("/:id/restore", requireAuth, requireAdminOrLibrarian, lexoraCtrl.restoreLexoraBook);
+router.post("/:id/restore", requirePermissionAction("manage_lexora_books", "archive"), lexoraCtrl.restoreLexoraBook);
 
 // ── Uploads ────────────────────────────────────────────────
 
@@ -167,137 +188,113 @@ const {
 } = require("../middleware/lexoraUpload");
 
 router.post("/:id/pdf",
-  requireAuth, requireAdminOrLibrarian,
+  requirePermissionAction("manage_lexora_books", "edit"),
   uploadPdf, handleLexoraUploadError,
   lexoraCtrl.uploadBookPdf
 );
 
-router.delete("/:id/pdf", requireAuth, requireAdminOrLibrarian, lexoraCtrl.removeBookPdf);
+router.delete("/:id/pdf", requirePermissionAction("manage_lexora_books", "edit"), lexoraCtrl.removeBookPdf);
 
 router.post("/:id/cover",
-  requireAuth, requireAdminOrLibrarian,
+  requirePermissionAction("manage_lexora_books", "edit"),
   uploadImage, handleLexoraUploadError,
   lexoraCtrl.uploadBookCover
 );
 
-router.delete("/:id/cover", requireAuth, requireAdminOrLibrarian, lexoraCtrl.removeBookCover);
+router.delete("/:id/cover", requirePermissionAction("manage_lexora_books", "edit"), lexoraCtrl.removeBookCover);
 
 router.post("/:id/thumbnail",
-  requireAuth, requireAdminOrLibrarian,
+  requirePermissionAction("manage_lexora_books", "edit"),
   uploadThumbnail, handleLexoraUploadError,
   lexoraCtrl.uploadBookThumbnail
 );
 
 router.post("/:id/pages",
-  requireAuth, requireAdminOrLibrarian,
+  requirePermissionAction("manage_lexora_books", "edit"),
   uploadPages, handleLexoraUploadError,
   lexoraCtrl.uploadBookPages
 );
 
 router.post("/:id/pages/:pageId/image",
-  requireAuth, requireAdminOrLibrarian,
+  requirePermissionAction("manage_lexora_books", "edit"),
   uploadImage, handleLexoraUploadError,
   lexoraCtrl.replaceBookPageImage
 );
 
 // ── Book pages management ──────────────────────────────────
 
-router.get("/:id/pages", requireAuth, requireAdminOrLibrarian, lexoraCtrl.getBookPages);
+router.get("/:id/pages", requirePermissionAction("view_lexora_books", "read"), lexoraCtrl.getBookPages);
 
 router.put("/pages/:pageId",
-  requireAuth, requireAdminOrLibrarian,
+  requirePermissionAction("manage_lexora_books", "edit"),
   lexoraCtrl.updateBookPage
 );
 
 router.delete("/pages/:pageId",
-  requireAuth, requireAdminOrLibrarian,
+  requirePermissionAction("manage_lexora_books", "edit"),
   lexoraCtrl.deleteBookPage
 );
 
 router.put("/:id/pages/reorder",
-  requireAuth, requireAdminOrLibrarian,
+  requirePermissionAction("manage_lexora_books", "edit"),
   lexoraCtrl.reorderBookPages
 );
 
 // ── Categories ─────────────────────────────────────────────
 
-router.get("/categories/all", requireAuth, requireAdminOrLibrarian, lexoraCtrl.getCategories);
+router.get("/categories/all", requirePermissionAction("manage_lexora_books", "view"), lexoraCtrl.getCategories);
 
 router.post("/categories",
-  requireAuth, requireAdminOrLibrarian,
+  requirePermissionAction("manage_lexora_books", "create"),
   lexoraCtrl.createCategory
 );
 
 router.delete("/categories/:id",
-  requireAuth, requireAdminOrLibrarian,
+  requirePermissionAction("manage_lexora_books", "delete"),
   lexoraCtrl.deleteCategory
 );
 
 router.put("/:id/categories",
-  requireAuth, requireAdminOrLibrarian,
+  requirePermissionAction("manage_lexora_books", "edit"),
   lexoraCtrl.setBookCategories
 );
 
 // ── Tags ───────────────────────────────────────────────────
 
-router.get("/tags/all", requireAuth, requireAdminOrLibrarian, lexoraCtrl.getTags);
+router.get("/tags/all", requirePermissionAction("manage_lexora_books", "view"), lexoraCtrl.getTags);
 
 router.post("/tags",
-  requireAuth, requireAdminOrLibrarian,
+  requirePermissionAction("manage_lexora_books", "create"),
   lexoraCtrl.createTag
 );
 
 router.delete("/tags/:id",
-  requireAuth, requireAdminOrLibrarian,
+  requirePermissionAction("manage_lexora_books", "delete"),
   lexoraCtrl.deleteTag
 );
 
 router.put("/:id/tags",
-  requireAuth, requireAdminOrLibrarian,
+  requirePermissionAction("manage_lexora_books", "edit"),
   lexoraCtrl.setBookTags
 );
 
-// ── Bookmarks ──────────────────────────────────────────────
+// ── Bookmarks (user-scoped) ────────────────────────────────
 
-router.get("/:id/bookmarks",
-  requireAuth,
-  lexoraCtrl.getBookmarks
-);
+router.get("/:id/bookmarks",   lexoraCtrl.getBookmarks);
+router.post("/:id/bookmarks",  lexoraCtrl.addBookmark);
+router.delete("/:id/bookmarks/:page", lexoraCtrl.removeBookmark);
 
-router.post("/:id/bookmarks",
-  requireAuth,
-  lexoraCtrl.addBookmark
-);
+// ── Reading progress (user-scoped) ────────────────────────
 
-router.delete("/:id/bookmarks/:page",
-  requireAuth,
-  lexoraCtrl.removeBookmark
-);
-
-// ── Reading Progress ───────────────────────────────────────
-
-router.get("/:id/progress",
-  requireAuth,
-  lexoraCtrl.getReadingProgress
-);
-
-router.put("/:id/progress",
-  requireAuth,
-  lexoraCtrl.saveReadingProgress
-);
+router.get("/:id/progress", lexoraCtrl.getReadingProgress);
+router.put("/:id/progress", lexoraCtrl.saveReadingProgress);
 
 // ── Stats ──────────────────────────────────────────────────
 
-router.get("/:id/stats",
-  requireAuth, requireAdminOrLibrarian,
-  lexoraCtrl.getBookStats
-);
+router.get("/:id/stats", requirePermissionAction("manage_lexora_books", "view"), lexoraCtrl.getBookStats);
 
 // ── Legacy import (preserved) ──────────────────────────────
 
-router.post("/lexora-import",
-  requireAuth, requireAdminOrLibrarian,
-  lexoraCtrl.bulkLexoraImport
-);
+router.post("/lexora-import", requirePermissionAction("manage_lexora_books", "import"), lexoraCtrl.bulkLexoraImport);
 
 module.exports = router;

@@ -5,6 +5,7 @@
 
 const User         = require("../models/User");
 const auditService = require("../services/auditService");
+const rolesFeature = require("../features/roles");
 
 /**
  * POST /api/auth/login
@@ -65,9 +66,14 @@ async function login(req, res) {
       new_data    : { username: user.username, role: user.role },
     });
 
+    // Permissions are resolved fresh on every response and attached to
+    // the payload only — never to req.session, which would trigger an
+    // express-session store write on every subsequent request.
+    const permissions = await rolesFeature.getAuthPermissionPayload(req.session.user);
+
     return res.json({
       success: true,
-      user: req.session.user,
+      user: { ...req.session.user, ...permissions },
     });
   } catch (err) {
     console.error("[Auth] Login error:", err);
@@ -103,11 +109,12 @@ function logout(req, res) {
 /**
  * GET /api/auth/me
  */
-function me(req, res) {
+async function me(req, res) {
   if (!req.session?.user) {
     return res.status(401).json({ success: false, error: "Not authenticated" });
   }
-  return res.json({ success: true, user: req.session.user });
+  const permissions = await rolesFeature.getAuthPermissionPayload(req.session.user);
+  return res.json({ success: true, user: { ...req.session.user, ...permissions } });
 }
 
 /**

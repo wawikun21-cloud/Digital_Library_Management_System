@@ -18,7 +18,7 @@ function CourseCard({ course }) {
       onMouseLeave={(event) => { event.currentTarget.style.borderColor = "var(--border)"; }}
     >
       <Link to={`/dashboard/courses/${course.id}`} className="block">
-        <div className="relative aspect-[3/4] w-full overflow-hidden rounded-t-xl" style={{ background: "var(--bg-primary)" }}>
+        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-t-xl" style={{ background: "var(--bg-primary)" }}>
           {course.thumbnail_url && !thumbnailFailed ? (
             <img
               src={course.thumbnail_url}
@@ -29,39 +29,29 @@ function CourseCard({ course }) {
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
-              <BookOpen size={36} style={{ color: "var(--text-muted)", opacity: 0.3 }} />
+              <BookOpen size={32} style={{ color: "var(--text-muted)", opacity: 0.3 }} />
             </div>
           )}
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-2">
-            <span className="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "rgba(34,197,94,0.9)", color: "#fff" }}>
-              Published
-            </span>
-          </div>
+          <span className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
+            <span className="inline-block rounded px-1.5 py-0.5 text-[9px] font-semibold" style={{ background: "rgba(34,197,94,0.9)", color: "#fff" }}>Published</span>
+          </span>
         </div>
-        <div className="flex flex-col gap-1 px-3 pb-3 pt-2">
-          <h2 className="line-clamp-2 text-[13px] font-semibold leading-tight" style={{ color: "var(--text-primary)" }}>
-            {course.title}
-          </h2>
+        <div className="flex flex-col gap-0.5 px-2.5 pb-2.5 pt-2">
+          <h2 className="line-clamp-1 text-[12px] font-semibold leading-tight" style={{ color: "var(--text-primary)" }}>{course.title}</h2>
           {course.instructor_name && (
-            <p className="truncate text-[11px]" style={{ color: "var(--text-muted)" }}>By {course.instructor_name}</p>
+            <p className="truncate text-[10px]" style={{ color: "var(--text-muted)" }}>By {course.instructor_name}</p>
           )}
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 mt-1">
             {course.category && (
-              <span className="rounded px-1.5 py-0.5 text-[10px]" style={{ background: "rgba(238,162,58,0.12)", color: "var(--accent-amber)" }}>
-                {course.category}
-              </span>
+              <span className="rounded px-1.5 py-0.5 text-[9px]" style={{ background: "rgba(238,162,58,0.12)", color: "var(--accent-amber)" }}>{course.category}</span>
             )}
-            <span className="rounded px-1.5 py-0.5 text-[10px] capitalize" style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}>
-              {course.difficulty?.replace(/_/g, " ") || "All levels"}
-            </span>
-            <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-              {course.module_count ?? 0} {(course.module_count ?? 0) === 1 ? "module" : "modules"}
-            </span>
+            <span className="rounded px-1.5 py-0.5 text-[9px] capitalize" style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}>{course.difficulty?.replace(/_/g, " ") || "All levels"}</span>
+            <span className="text-[9px]" style={{ color: "var(--text-muted)" }}>{course.module_count ?? 0} {(course.module_count ?? 0) === 1 ? "module" : "modules"}</span>
           </div>
           {course.description && (
             <RichTextContent
               value={course.description}
-              className="mt-1 line-clamp-3 text-[11px] leading-relaxed text-[color:var(--text-secondary)]"
+              className="mt-1 line-clamp-3 text-[10px] leading-relaxed text-[color:var(--text-secondary)]"
             />
           )}
         </div>

@@ -1,37 +1,46 @@
 const express = require('express');
 const router = express.Router();
 const CoursesController = require('./courses.controller');
-const { requireAuth, requireAdminOrStaff, requireAllRoles } = require('../../middleware/authMiddleware');
+const {
+  requireAuth,
+  resolvePermissions,
+  requirePermissionAction,
+} = require('../../features/roles');
 const { courseThumbnailUpload } = require('../../middleware/courseThumbnailUpload');
 
-router.get('/', requireAuth, requireAdminOrStaff, CoursesController.listCourses);
-router.get('/library', requireAuth, CoursesController.listLibraryCourses);
-router.get('/categories', requireAuth, requireAdminOrStaff, (req, res) => {
+router.use(requireAuth, resolvePermissions);
+
+// Static paths first so they are never shadowed by /:id
+router.get('/library', requirePermissionAction('view_course_library', 'view'), CoursesController.listLibraryCourses);
+router.get('/categories', requirePermissionAction('manage_courses', 'view'), (req, res) => {
   res.status(200).json({ success: true, data: [] });
 });
-router.post('/thumbnail', requireAuth, requireAdminOrStaff, courseThumbnailUpload, CoursesController.uploadThumbnail);
-router.get('/:id', requireAuth, requireAllRoles, CoursesController.getCourse);
-router.post('/', requireAuth, requireAdminOrStaff, CoursesController.createCourse);
-router.put('/:id', requireAuth, requireAdminOrStaff, CoursesController.updateCourse);
-router.delete('/:id', requireAuth, requireAdminOrStaff, CoursesController.deleteCourse);
-router.patch('/:id/archive', requireAuth, requireAdminOrStaff, CoursesController.archiveCourse);
-router.patch('/:id/publish', requireAuth, requireAdminOrStaff, CoursesController.publishCourse);
+router.post('/thumbnail', requirePermissionAction('manage_courses', 'edit'), courseThumbnailUpload, CoursesController.uploadThumbnail);
 
-router.get('/:courseId/modules', requireAuth, requireAllRoles, CoursesController.listModules);
-router.post('/:courseId/modules', requireAuth, requireAdminOrStaff, CoursesController.createModule);
-router.put('/:courseId/modules/:moduleId', requireAuth, requireAdminOrStaff, CoursesController.updateModule);
-router.delete('/:courseId/modules/:moduleId', requireAuth, requireAdminOrStaff, CoursesController.deleteModule);
+router.get('/', requirePermissionAction('manage_courses', 'view'), CoursesController.listCourses);
+router.post('/', requirePermissionAction('manage_courses', 'create'), CoursesController.createCourse);
+router.put('/:id', requirePermissionAction('manage_courses', 'edit'), CoursesController.updateCourse);
+router.delete('/:id', requirePermissionAction('manage_courses', 'delete'), CoursesController.deleteCourse);
+router.patch('/:id/archive', requirePermissionAction('manage_courses', 'archive'), CoursesController.archiveCourse);
+router.patch('/:id/publish', requirePermissionAction('manage_courses', 'publish'), CoursesController.publishCourse);
 
-router.get('/:courseId/modules/:moduleId/content', requireAuth, requireAllRoles, CoursesController.listContent);
-router.post('/:courseId/modules/:moduleId/content', requireAuth, requireAdminOrStaff, CoursesController.createContent);
-router.put('/:courseId/modules/:moduleId/content/:contentId', requireAuth, requireAdminOrStaff, CoursesController.updateContent);
-router.delete('/:courseId/modules/:moduleId/content/:contentId', requireAuth, requireAdminOrStaff, CoursesController.deleteContent);
+router.get('/:id', requirePermissionAction('view_course_library', 'view'), CoursesController.getCourse);
 
-router.get('/:courseId/enrollments', requireAuth, requireAllRoles, CoursesController.listEnrollments);
-router.post('/:courseId/enrollments', requireAuth, requireAdminOrStaff, CoursesController.enrollStudent);
-router.delete('/:courseId/enrollments', requireAuth, requireAdminOrStaff, CoursesController.unenrollStudent);
+router.get('/:courseId/modules', requirePermissionAction('view_course_library', 'view'), CoursesController.listModules);
+router.post('/:courseId/modules', requirePermissionAction('manage_courses', 'edit'), CoursesController.createModule);
+router.put('/:courseId/modules/:moduleId', requirePermissionAction('manage_courses', 'edit'), CoursesController.updateModule);
+router.delete('/:courseId/modules/:moduleId', requirePermissionAction('manage_courses', 'edit'), CoursesController.deleteModule);
 
-router.get('/:courseId/progress', requireAuth, requireAllRoles, CoursesController.getCourseProgress);
-router.post('/:courseId/lessons/:lessonId/complete', requireAuth, requireAllRoles, CoursesController.markLessonComplete);
+router.get('/:courseId/modules/:moduleId/content', requirePermissionAction('view_course_library', 'view'), CoursesController.listContent);
+router.post('/:courseId/modules/:moduleId/content', requirePermissionAction('manage_courses', 'edit'), CoursesController.createContent);
+router.put('/:courseId/modules/:moduleId/content/:contentId', requirePermissionAction('manage_courses', 'edit'), CoursesController.updateContent);
+router.delete('/:courseId/modules/:moduleId/content/:contentId', requirePermissionAction('manage_courses', 'edit'), CoursesController.deleteContent);
+
+router.get('/:courseId/enrollments', requirePermissionAction('view_course_library', 'view'), CoursesController.listEnrollments);
+router.post('/:courseId/enrollments', requirePermissionAction('manage_courses', 'enroll'), CoursesController.enrollStudent);
+router.delete('/:courseId/enrollments', requirePermissionAction('manage_courses', 'enroll'), CoursesController.unenrollStudent);
+
+router.get('/:courseId/progress', requirePermissionAction('view_course_library', 'view'), CoursesController.getCourseProgress);
+router.post('/:courseId/lessons/:lessonId/complete', requirePermissionAction('view_course_library', 'complete'), CoursesController.markLessonComplete);
 
 module.exports = router;

@@ -11,6 +11,7 @@ import authApi from "../../services/api/authApi";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { STORAGE_KEYS } from "../../constants/index.js";
 import { ROLES, ROLE_DEFAULT_ROUTES } from "../../constants/roles.js";
+import { hasPermission } from "../../utils/permissionUtils";
 
 // ── Tiny inline spinner (no external dep) ─────────────────
 function FullPageLoader() {
@@ -33,20 +34,34 @@ function FullPageLoader() {
 // ─────────────────────────────────────────────────────────
 //  1. ProtectedRoute
 //     Verifies an active session exists.
+//     Persists the fresh /me payload so the cached user always
+//     carries resolved permissions after a page load.
 //     Redirects to /login if not authenticated.
 // ─────────────────────────────────────────────────────────
 export function ProtectedRoute({ children }) {
   const [status, setStatus] = useState("checking");
+  const [cachedUser, setCachedUser] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
 
   useEffect(() => {
+    let active = true;
+
     authApi.me()
-      .then(() => setStatus("ok"))
+      .then((data) => {
+        if (!active) return;
+        // Persist the server's resolved permission fields so nav items and
+        // button gating are accurate immediately after a reload.
+        if (data?.user) setCachedUser(data.user);
+        setStatus("ok");
+      })
       .catch(() => {
+        if (!active) return;
         sessionStorage.removeItem("lexora_user");
         localStorage.removeItem(STORAGE_KEYS.LEXORA_USER);
         setStatus("unauth");
       });
-  }, []);
+
+    return () => { active = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (status === "checking") return <FullPageLoader />;
   if (status === "unauth")   return <Navigate to="/login" replace />;
@@ -72,6 +87,29 @@ export function RoleRoute({ allow, children }) {
   const role   = user?.role ?? ROLES.ADMIN;
 
   if (!allow.includes(role)) {
+    const fallback = ROLE_DEFAULT_ROUTES[role] ?? "/dashboard";
+    return <Navigate to={fallback} replace />;
+  }
+
+  return children;
+}
+
+// ─────────────────────────────────────────────────────────
+//  3. PermissionRoute
+//     Checks a resolved permission (any action) instead of a role,
+//     so a role whose grants were edited by a Super Admin still
+//     follows the server's decision.
+//
+//  Usage:
+//    <PermissionRoute permission="manage_trash">
+//      <RecentlyDeletedPage />
+//    </PermissionRoute>
+// ─────────────────────────────────────────────────────────
+export function PermissionRoute({ permission, children }) {
+  const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
+  const role   = user?.role ?? ROLES.ADMIN;
+
+  if (!hasPermission(user, permission)) {
     const fallback = ROLE_DEFAULT_ROUTES[role] ?? "/dashboard";
     return <Navigate to={fallback} replace />;
   }

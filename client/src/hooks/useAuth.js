@@ -1,6 +1,7 @@
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { STORAGE_KEYS } from "../constants";
 import { ROLES } from "../constants/roles";
+import { hasPermission, hasPermissionAction, canAccessEntity } from "../utils/permissionUtils";
 
 export function useAuth() {
   const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
@@ -18,5 +19,10 @@ export function useAuth() {
     isStaff: role === ROLES.STAFF,
     isStudent: role === ROLES.STUDENT,
     hasRole,
+
+    // ── Permission checks ──────────────────────────────────
+    hasPermission: (name) => hasPermission(user, name),
+    hasPermissionAction: (name, action) => hasPermissionAction(user, name, action),
+    canAccessEntity: (entityType, id) => canAccessEntity(user, entityType, id),
   };
 }

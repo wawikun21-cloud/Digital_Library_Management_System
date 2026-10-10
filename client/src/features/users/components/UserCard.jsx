@@ -1,6 +1,6 @@
 import UserRoleBadge from "./UserRoleBadge";
 import { formatUserForDisplay } from "../validation/userValidation";
-export default function UserCard({ user, onEdit, onDeactivate, onReactivate, onRoleChange, currentUserId }) {
+export default function UserCard({ user, onEdit, onDeactivate, onReactivate, onRoleChange, onPermissions, currentUserId }) {
   const display = formatUserForDisplay(user);
   const isSelf = user.id === currentUserId;
   const isActive = Boolean(user.is_active);
@@ -46,6 +46,14 @@ export default function UserCard({ user, onEdit, onDeactivate, onReactivate, onR
           </button>
           {!isSelf && (
             <>
+              {onPermissions && (
+                <button
+                  onClick={() => onPermissions(user)}
+                  className="px-2 py-1 text-violet-600 hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-300"
+                >
+                  Permissions
+                </button>
+              )}
               {onRoleChange && (
                 <button
                   onClick={() => onRoleChange(user)}

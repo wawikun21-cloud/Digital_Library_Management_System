@@ -1,4 +1,5 @@
 const usersService = require("./users.service");
+const rolesFeature = require("../roles");
 const auditService = require("../../services/auditService");
 const {
   validateCreateUser,
@@ -97,7 +98,9 @@ const UsersController = {
       if (!user) {
         return res.status(404).json({ success: false, error: "User not found" });
       }
-      res.status(200).json({ success: true, data: user });
+      // Resolved permissions are merged in fresh, never read from the session.
+      const permissions = await rolesFeature.getAuthPermissionPayload(req.session.user);
+      res.status(200).json({ success: true, data: { ...user, ...permissions } });
     } catch (err) {
       console.error("[UsersController.getCurrentUser] Error:", err);
       res.status(500).json({ success: false, error: "Internal server error" });

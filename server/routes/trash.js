@@ -1,22 +1,33 @@
 // ─────────────────────────────────────────────────────────
 //  routes/trash.js
+//
+//  Permission-guarded (previously requireAdmin):
+//    GET /                      → manage_trash:view
+//    POST /restore/:trashLogId  → manage_trash:restore
+//    DELETE /all, /:trashLogId  → manage_trash:delete
 // ─────────────────────────────────────────────────────────
 
 const express         = require("express");
 const router          = express.Router();
 const TrashController = require("../controllers/trashController");
-const { requireAuth, requireAdmin } = require("../middleware/authMiddleware");
+const {
+  requireAuth,
+  resolvePermissions,
+  requirePermissionAction,
+} = require("../features/roles");
+
+router.use(requireAuth, resolvePermissions);
 
 /** GET  /api/trash                          — list trash */
-router.get("/", requireAuth, requireAdmin, TrashController.getAll);
+router.get("/", requirePermissionAction("manage_trash", "view"), TrashController.getAll);
 
 /** POST /api/trash/restore/:trashLogId      — restore one */
-router.post("/restore/:trashLogId", requireAuth, requireAdmin, TrashController.restore);
+router.post("/restore/:trashLogId", requirePermissionAction("manage_trash", "restore"), TrashController.restore);
 
 /** DELETE /api/trash/all                    — empty all (or ?entityType=book) */
-router.delete("/all", requireAuth, requireAdmin, TrashController.permanentDeleteAll);
+router.delete("/all", requirePermissionAction("manage_trash", "delete"), TrashController.permanentDeleteAll);
 
 /** DELETE /api/trash/:trashLogId            — permanent delete one */
-router.delete("/:trashLogId", requireAuth, requireAdmin, TrashController.permanentDelete);
+router.delete("/:trashLogId", requirePermissionAction("manage_trash", "delete"), TrashController.permanentDelete);
 
 module.exports = router;

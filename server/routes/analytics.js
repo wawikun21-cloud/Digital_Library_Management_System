@@ -1,20 +1,22 @@
 // ─────────────────────────────────────────────────────────
-//  routes/analytics.js  —  Admin only (unchanged behavior)
+//  routes/analytics.js  —  Permission-guarded (was requireAdmin)
 //
-//  Librarians do NOT have access to analytics.
-//  This file is unchanged in terms of access rules — it was
-//  already requireAuth-only. We now explicitly add requireAdmin
-//  so a librarian hitting /api/analytics/* gets a clean 403.
+//  The bare requireAdmin on this router is replaced by
+//  requireAuth + requirePermissionAction('view_reports','view'),
+//  which the seed grants to exactly super_admin + admin — the same
+//  effective access as before. Librarians therefore still get a 403.
 // ─────────────────────────────────────────────────────────
 
 const express    = require("express");
 const router     = express.Router();
 const controller = require("../controllers/analyticsController");
 
-const { requireAuth, requireAdmin } = require("../middleware/authMiddleware");
+const { requireAuth } = require("../middleware/authMiddleware");
+const { resolvePermissions, requirePermissionAction } = require("../features/roles");
 
-// All analytics routes: authenticated + admin only
-router.use(requireAuth, requireAdmin);
+// All analytics routes: authenticated + view_reports:view
+router.use(requireAuth, resolvePermissions);
+router.use(requirePermissionAction("view_reports", "view"));
 
 // ── KPI stats ─────────────────────────────────────────────
 router.get("/stats",              controller.getBookStats);
