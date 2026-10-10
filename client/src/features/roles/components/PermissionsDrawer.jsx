@@ -224,7 +224,7 @@ export default function PermissionsDrawer({
             )}
           </>
         )}
-      </div>
+      </main>
     </div>
   );
 }

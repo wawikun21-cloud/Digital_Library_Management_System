@@ -77,9 +77,9 @@ describe("assembled permission drawer", () => {
     expect(headers[0].textContent).toContain("Edit: Staff");
     expect(panel.querySelector("h2")).toBeNull();
 
-    // One scrollable body — inherited by PermissionsDrawer's flex-1 region.
-    const bodies = [...panel.querySelectorAll("div")].filter(
-      (d) => typeof d.className === "string" && d.className.includes("overflow-y-auto")
+    // One scrollable body — PermissionsDrawer's flex-1 region.
+    const bodies = [...panel.querySelectorAll("*")].filter(
+      (el) => typeof el.className === "string" && el.className.includes("overflow-y-auto")
     );
     expect(bodies).toHaveLength(1);
 
