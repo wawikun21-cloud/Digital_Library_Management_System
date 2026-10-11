@@ -1,15 +1,20 @@
-// ─────────────────────────────────────────────────────────
-//  pages/Unauthorized.jsx
-//  Shown when a user tries to access a route outside their role.
-// ─────────────────────────────────────────────────────────
+/**
+ * features/auth/pages/UnauthorizedPage.jsx
+ *
+ * Shown when a user tries to access a route outside their role.
+ *
+ * This page was already compliant (83 lines, composition only) — moved
+ * verbatim from pages/Unauthorized.jsx so both auth-domain screens live
+ * together in the feature. No behavior change.
+ */
 
 import { useNavigate } from "react-router-dom";
 import { ShieldOff } from "lucide-react";
-import { useLocalStorage } from "../hooks/useLocalStorage";
-import { STORAGE_KEYS } from "../constants/index.js";
-import { ROLE_DEFAULT_ROUTES } from "../constants/roles.js";
+import { useLocalStorage } from "../../../hooks/useLocalStorage";
+import { STORAGE_KEYS } from "../../../constants/index.js";
+import { ROLE_DEFAULT_ROUTES } from "../../../constants/roles.js";
 
-export default function Unauthorized() {
+export default function UnauthorizedPage() {
   const navigate = useNavigate();
   const [user]   = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
 

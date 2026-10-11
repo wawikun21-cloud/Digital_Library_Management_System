@@ -1,9 +1,9 @@
 /**
- * features/attendance/components/ModalAnimations.jsx
+ * components/ui/ModalAnimations.jsx
  *
- * Shared overlay/modal keyframes. Previously injected separately by the
- * attendance page and the records table modal (with slightly different
- * values); now a single source. Extracted from pages/Attendance.jsx.
+ * Shared overlay/modal keyframes. Previously duplicated in the attendance
+ * feature and inline in the students page; now a single source. Renders a
+ * `<style>` tag with the two keyframes both modals rely on.
  */
 
 export default function ModalAnimations() {

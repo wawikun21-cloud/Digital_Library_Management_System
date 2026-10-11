@@ -484,3 +484,228 @@ features/faculty/
 ## E24. Execution order
 
 1. constants + utils + validation. 2. Hooks (2). 3. Section components (header/stats/tabs/search/table). 4. Form modal. 5. Import modal (+ import utils). 6. Page + index.js + App.jsx. 7. Delete `pages/Faculty.jsx`. 8. Verify: grep, `npm run build`, `npm test`.
+
+---
+
+# EXTENSION 7 — KioskAttendance.jsx (added to scope)
+
+`client/src/pages/KioskAttendance.jsx` (909 lines, routed at `/dashboard/attendance/kiosk`) violates the same rules: 6 in-file sub-components (`Avatar`, `LiveTimer`, `StudentCard`, `TapCard`, `UnregisteredBanner`, `NotFoundBanner`), 3 in-file hooks (`useLiveClock`, `useFullscreen`, `useElapsed`), module-top helpers duplicating `getInitials`/`getFullName` (already in shared `utils/helpers.js` and `features/attendance/utils/studentName.js`), a **raw `socket.io-client` connection created inside the page** (§8/§14), and an inline `<style>` block with a Google-Fonts `@import` + 7 keyframes.
+
+## E25. Target structure (extends features/attendance/)
+
+```
+features/attendance/
+├── kioskAnimations.css                 # the inline <style> block, verbatim (fonts + keyframes + scrollbar)
+├── pages/KioskAttendancePage.jsx       # composition only (~90 lines)
+├── constants/kioskTheme.js             # NAVY/GREEN/AMBER tone palette + AVATAR_COLORS (kiosk-only, hardcoded light theme)
+├── utils/kioskFormat.js                # pad, fmtElapsed, parseTimestamp, fmtCheckIn, avatarColors;
+│                                        #   getInitials/getFullName re-exported (no third copy)
+├── hooks/
+│   ├── useLiveClock.js useFullscreen.js useElapsed.js   # the three former in-file hooks (feature-scoped for now)
+│   ├── useKioskAttendance.js           # active list + socket sync + 60s fallback + tap handler + banners + online + cooldown
+│   └── useRfidCapture.js               # key buffer + keydown + auto-focus/click-refocus effects
+└── components/kiosk/
+    ├── KioskRfidInput.jsx              # hidden always-focused capture input
+    ├── KioskHeader.jsx                 # logo, live clock, online pill, RFID status, inside-count, fullscreen toggle
+    ├── KioskActiveGrid.jsx             # "Currently In Library" grid + empty state
+    ├── KioskAvatar.jsx KioskLiveTimer.jsx KioskStudentCard.jsx
+    ├── KioskTapCard.jsx                # animated tap result
+    ├── KioskUnregisteredBanner.jsx     # unregistered RFID banner
+    └── KioskNotFoundBanner.jsx         # student-not-found banner
+```
+
+## E26. Behavior-preservation contract (kiosk)
+
+1. Socket verbatim: same `io()` options (`/socket.io`, websocket+polling, credentials, `reconnectionDelay: 2000`, `reconnectionAttempts: 10`), both listeners (`attendance:update`, `rfid:tap`) → `applyAttendanceUpdate` (checked_in prepend-with-duplicate-guard / checked_out filter), 60 s `fetchActive` fallback, disconnect + clearInterval cleanup.
+2. Tap handler verbatim: 3 s debounce measured from last SUCCESS only, `processing` guard, `res.unregistered` → banner, `res.error` contains "not found" → banner, silent catch, optimistic active-list update from the HTTP response, focus restore in `finally`, `nextScanIn` countdown (16 ms ticks).
+3. Focus management verbatim: focus on mount, refocus 100 ms after ANY document click, hidden read-only input with `onChange={() => {}}`, `tabIndex={0}`, `aria-hidden`.
+4. Banners verbatim: TapCard (2.7 s exit timer, `onAnimationEnd` dismiss, tone #3F7A5C in / #C0792A out, duration box for check-outs with `≥60 → Xh Ym`), UnregisteredBanner (3.5 s), NotFoundBanner (2.7 s, #cc1f1f) — including the `progressBar` keyframe durations that match each timer.
+5. StudentCard verbatim: once-per-mount entry animation via ref, staggered 35 ms delay, course/yr-level chips, `in at HH:MM`, LiveTimer with the >1 h amber shift.
+6. Header verbatim: brand bar, live clock (`2-digit` h/m/s + weekday-long date), online/offline pill from `navigator.onLine`, RFID status pill (Next scan Ns / Processing… / RFID Ready), inside-count, fullscreen toggle with webkit fallbacks.
+7. All hex colors, the background image URL (`/gate-background.png`), fonts, and the scrollbar styling preserved exactly.
+
+## E27. Flagged deviations
+
+1. `getInitials` / `getFullName` no longer redefined — re-exported from shared `utils/helpers.js` / `features/attendance/utils/studentName.js` (identical semantics; §1.9).
+2. The socket connection moves into `useKioskAttendance` — the page holds no transport code. Options and cleanup are unchanged.
+3. The kiosk's hardcoded light-theme hex values become a small `kioskTheme.js` constant (values unchanged) instead of being scattered across six components.
+
+## E28. Execution order
+
+1. constants + utils + 3 generic hooks. 2. Socket/tap hook + RFID capture hook. 3. kiosk components (9). 4. Page + index.js + App.jsx. 5. Delete `pages/KioskAttendance.jsx`. 6. Verify: grep, `npm run build`, `npm test`.
+
+---
+
+# EXTENSION 8 — Students.jsx (added to scope)
+
+`client/src/pages/Students.jsx` (1383 lines, routed at `/dashboard/students`) violates the same rules: ~25 `useState`, Excel parse + import-progress logic in the page body, two full modals inline (form ~120 lines, import ~350 lines), four inline copies of the "current school year" computation, an IIFE generating the school-year options, and an inline `<style>` keyframes block. API access already correct (shared `studentsApi`, multi-consumer — stays shared).
+
+**Shared extraction first:** the modal keyframes (`overlayIn`/`modalIn`) now appear in BOTH the attendance feature and this page, byte-identical → `components/ui/ModalAnimations.jsx`; the attendance feature's copy is removed and its two importers rewired.
+
+## E29. Target structure
+
+```
+features/students/
+├── index.js
+├── pages/StudentsPage.jsx                 # composition only (~150 lines)
+├── hooks/
+│   ├── useStudents.js                     # students/stats/fetch + create (local+server dup checks) + update + delete + checkIdExists
+│   └── useStudentImport.js                # file/parse/course/SY/progress/import/reset state machine
+├── constants/studentsUi.js                # STUDENTS_PER_PAGE, EMPTY_FORM, FORM_FIELDS (the field-config array), COURSES, SAMPLE_TEMPLATE, IMPORT_SY_COUNT
+├── utils/
+│   ├── studentFilters.js                  # currentSchoolYear (June rule), schoolYears sort, filterStudents, paginate
+│   └── studentExcel.js                    # parseStudentsExcel (multi-sheet + year-level detection) + template rows
+├── validation/studentValidation.js        # validateImportFields
+└── components/
+    ├── StudentsPageHeader.jsx             # refresh / bulk import / add buttons
+    ├── StudentsStatsCards.jsx             # total / top course / year-level cards
+    ├── StudentsSchoolYearFilter.jsx       # SY dropdown + count badge
+    ├── StudentsFilterBar.jsx              # search + course + year-level + results count
+    ├── StudentsTable.jsx                  # table + loading + empty + pagination
+    ├── StudentFormModal.jsx               # add/edit — owns form state + ID blur check
+    └── StudentImportModal.jsx             # progress bar, dropzone, course/SY, preview, results
+```
+
+## E30. Behavior-preservation contract (students)
+
+1. Data verbatim: parallel fetch of students + stats, error/catch toasts, `resetForm` seeding `student_school_year` with the June-based current SY.
+2. Create verbatim: trimmed-ID required check → local duplicate check against loaded students (toast + `idExists`) → server `checkStudentIdExists` (toast + `idExists`) → create → success toast → close + reset + refetch.
+3. Update/delete verbatim: update → toast → close/reset/refetch; delete → `window.confirm` → toast + refetch.
+4. Filters verbatim: search over name/ID/course; course + year-level selects sourced from `stats`; SY default effect (keeps a valid selection, falls back to `''` = all); page reset on search/filters/SY change; SY sort (`bYear - aYear` on the part after the dash); pagination slice.
+5. Stats cards verbatim: total, `byCourse[0]` top course, `byYearLevel.slice(0,4)` with the fixed color array, `lg:grid-cols-6`.
+6. Excel import verbatim: extension check + toast, multi-sheet loop, year-level detection from sheet name (numeric match first, then 1st/first … 4th/fourth), column aliases, rows filtered on ID+name, "Successfully parsed N students" / "No valid student data found" / "Failed to parse Excel file" toasts; required course + SY pre-validation with field errors; progress simulation (90-step cap, increments 4/2/0.5 every 200 ms, jump to 100 on success); course/SY applied to every row; results panel (`successful`/`failed` + per-row "Row {index+2}" errors); "Import Again" reset; template download with the exact sample row.
+7. Table verbatim: 7 columns, avatar initial fallback `<User size={13} />`, Active/Inactive pills, course/year chips, monospace ID, permission-gated actions, loading spinner copy, empty-state copy (two variants), pagination wrapper.
+8. Permission gates verbatim: `manage_students` create/edit/delete/import.
+
+## E31. Flagged deviations
+
+1. **The June-based school-year rule stays local.** This page (and its import dropdown) derive the current S.Y. from `month >= 5`, while `utils/schoolYearUtils.js` uses `month >= 8` (August). The two rules disagree — kept separate to preserve this page's behavior, with comments; recommend confirming which rule the backend actually enforces before unifying.
+2. The SY-options IIFE becomes `schoolYearOptions(count)` in `utils/studentFilters.js` (same 6-year window).
+3. Duplicate inline keyframes removed — `components/ui/ModalAnimations.jsx` now serves both features.
+
+## E32. Execution order
+
+1. Move `ModalAnimations` to `components/ui` + rewire attendance. 2. constants + utils + validation. 3. Hooks (2). 4. Components (7). 5. Page + index.js + App.jsx. 6. Delete `pages/Students.jsx`. 7. Verify: grep, `npm run build`, `npm test`.
+
+---
+
+# EXTENSION 9 — StudentsDashboard.jsx (investigated; removed as dead code)
+
+`client/src/pages/StudentsDashboard.jsx` (114 lines) was submitted for refactoring. **It needs none — and cannot receive one:**
+
+1. **The page itself is already compliant** — 114 lines, composition only, hooks for UI state, no fetch, no business logic.
+2. **Its entire dependency tree is missing.** It imports 16 named exports (`Card`, `C`, `KpiCards`, `FilterBar`, `FilterHeader`, `filterOptions`, `CourseDemandCard`, `FeederSchoolsCard`, `AttendanceInsightsCard`, `LocationVsCourseCard`, `EnrollmentTrendsCard`, `CourseGrowthTrendsCard`, `GenderDistributionCard`, `CourseDetailsModal`, `FeederSchoolsModal`, `AtRiskModal`, `LocationsModal`) from `../components/dashboard` — no such folder or file exists under `client/src/components/`. It also imports `../components/SurigaoDelNorteMap`, which likewise does not exist.
+3. **It is unreachable.** App.jsx never imports it; no route references it; the sidebar's dashboard children are only the attendance and book dashboards. Nothing else in the repo mentions `StudentsDashboard` or `SurigaoDelNorteMap`.
+4. The build passes only because the file is never bundled — the broken imports would fail the build the moment anything imported it (same class of latent breakage as the dead `AuditLogs.jsx` removed earlier).
+
+**Action:** deleted `client/src/pages/StudentsDashboard.jsx`. If this screen is meant to exist, it needs the missing `components/dashboard` module and the Surigao del Norte map component rebuilt first — say the word and it can be designed as a proper `features/students` dashboard screen.
+
+---
+
+# EXTENSION 10 — Login.jsx + Unauthorized.jsx (last files in pages/)
+
+`client/src/pages/Login.jsx` (487 lines) exceeded the ~400-line hard limit — but ~300 of those lines were an inline `<style>` block containing **global** rules (`* { margin: 0; padding: 0 }`, `body { … }`, `:root { … }`) injected from a page component. `pages/Unauthorized.jsx` (83 lines) was already fully compliant and needed no refactor.
+
+## E33. Target structure — new `features/auth/` (the rules' own example structure)
+
+```
+features/auth/
+├── index.js
+├── login.css                     # the inline <style> block, verbatim
+├── hooks/useLogin.js             # form state + validation + submit + storage + role redirect
+└── pages/
+    ├── LoginPage.jsx             # ~110 lines, composition only
+    └── UnauthorizedPage.jsx      # moved verbatim (already compliant)
+```
+
+## E34. Behavior-preservation contract (auth)
+
+1. Login submit verbatim: required-field errors, `authApi.login`, the localStorage+sessionStorage dual write (with the original FIX comment), the `lexora_remember` session flag when "Remember Me" is off, and the role-based redirect via `ROLE_DEFAULT_ROUTES`.
+2. JSX verbatim: same class names, the base64 background image asset, logo, inline SVGs, footer, and "Back home" link.
+3. CSS moved verbatim into `login.css` (same global scope as before — see flag below).
+4. Unauthorized moved byte-for-byte.
+
+## E35. Flagged deviations
+
+1. **`STORAGE_KEYS.LEXORA_USER` now used** instead of the hardcoded `"lexora_user"` literal (identical value — the constants file even carried a comment pointing back at Login.jsx). The `lexora_remember` session key has no constant and is preserved as a literal.
+2. **The stylesheet's global rules are preserved as-is** (`*` reset, `body`, `:root`) — scoping them to `.login-page` is a safe follow-up, but changing them now would alter appearance during a structural refactor.
+3. `Unauthorized` moved into the feature for organizational consistency (zero code change) — both auth-domain screens now live together.
+
+**Result:** `client/src/pages/` is now empty; every screen in the app lives in a feature.
+
+---
+
+# EXTENSION 11 — landing/landingpage.jsx (final page)
+
+`client/src/landing/landingpage.jsx` (1138 lines, routed at `/`) violates the same rules: module-top helpers incl. a **duplicate `useDebounce`** (the shared `hooks/useDebounce` exists), in-file components `StatusPill` and `CopiesBlock` **declared inside the component body** (§5), three raw `fetch` calls (§8), an **IIFE rendering the entire detail panel** (§4), a ~350-line inline `<style>` block with global resets, and commented-out JSX blocks.
+
+Also flagged: `landing/BookDetail.jsx` (149 lines, zero importers) — dead, left in place.
+
+## E36. Target structure
+
+```
+features/landing/
+├── index.js
+├── landing.css                     # the inline <style> block, verbatim
+├── pages/LandingPage.jsx           # composition only (~90 lines)
+├── api/publicSearchApi.js          # suggestions / search / public copies (§8)
+├── hooks/
+│   ├── useLandingSearch.js         # results/loading/searched/error/selected + doSearch + clear
+│   └── useSearchSuggestions.js     # debounced suggestions + history + dropdown + keyboard nav
+├── utils/
+│   ├── searchHistory.js            # localStorage history get/add/remove
+│   └── bookDisplay.js              # highlight, formatYear, statusColor, copy-pill config, status order
+└── components/
+    ├── LandingTopBar.jsx LandingFooter.jsx StatsStrip.jsx
+    ├── SearchCard.jsx              # input + clear + actions
+    ├── SearchDropdown.jsx          # suggestions + recent history
+    ├── ResultsSection.jsx          # header + loading/error/empty/split states
+    ├── ResultsList.jsx             # left result rows
+    ├── BookDetailPanel.jsx         # the IIFE, as a real component
+    ├── CopyStatusPill.jsx          # was StatusPill
+    └── CopiesBlock.jsx             # was declared inside the component body
+```
+
+## E37. Behavior-preservation contract (landing)
+
+1. Search verbatim: `doSearch` via queryRef fallback, AbortController cancel-previous, history add + refresh, `setSelectedBook(rows[0] || null)`, AbortError silence, the "only clear loading if this controller wasn't replaced" guard, and the 100 ms delayed `scrollIntoView`.
+2. Suggestions verbatim: debounced fetch with the ≥2-char guard, cancelled-flag handling, `activeSugIdx` reset, dropdown visibility rules (`showSuggestions` = query ≥2 && suggestions, `showHistory` = empty query && history), keyboard nav (Arrow/Enter/Escape incl. the Enter-without-dropdown submit path).
+3. History verbatim: max 5, most-recent-first, dedupe on add, per-item remove.
+4. Results verbatim: split list/detail, source badges (NEMCO/Lexora), status colors, the conditional field set (callNumber/total_copies/year/pages/sublocation/isbn for NEMCO; year/source_url/resource_type/program/subject_course/format for Lexora), the Lexora external link, `CopiesBlock` for NEMCO only, the stats strip hidden after search, footer year.
+5. CopiesBlock verbatim: public copies endpoint, sort order (Available→Reserved→Borrowed→Damaged→Lost→OutOfStock then accession), loading/empty copy, `StatusPill` rendering.
+6. CSS moved verbatim (same global scope — same flag as the login stylesheet).
+
+## E38. Flagged deviations
+
+1. **Duplicate `useDebounce` removed** — the shared `hooks/useDebounce` is used instead (identical implementation).
+2. **Raw fetches moved into `api/publicSearchApi.js`** — including the copies call, which used a hardcoded `/api/...`; it now goes through the module's `API_BASE` (same URL when `VITE_API_URL` is unset).
+3. **The detail-panel IIFE became `BookDetailPanel`**, and `StatusPill`/`CopiesBlock` became real files — no logic change.
+4. The commented-out JSX blocks are carried over verbatim (they are intentionally disabled feature toggles, not accidents).
+5. `landing/BookDetail.jsx` flagged as dead (zero importers), left in place.
+
+## E39. Execution order
+
+1. CSS + utils + api. 2. Hooks (2). 3. Small components (topbar/footer/stats/pill/copies). 4. SearchCard + dropdown. 5. Results + list + detail panel. 6. Page + index.js + App.jsx. 7. Delete `landing/landingpage.jsx`. 8. Verify: grep, `npm run build`, `npm test`.
+
+**Completed.** `LandingPage.jsx` is 52 lines (was 1,138); largest component 182. Note: the shared hero/login background is a 158 KB base64 data URL that file reads truncate — both new files were seeded from the originals via scripted extraction and byte-verified at 158,155 chars (this also repaired a truncated copy accidentally introduced into `LoginPage.jsx` during the auth refactor).
+
+# SESSION SUMMARY — pages/ → features/ migration
+
+| Original file | Lines | Outcome |
+|---|---|---|
+| Dashboard.jsx | 883 | → features/analytics (+ extraction of shared ui primitives, palette, school-year util) |
+| DashboardAnalytics.jsx | 883 | deleted — dead, zero importers |
+| BookDashboard.jsx | 1166 | → features/analytics (book dashboard) |
+| AttendanceDashboard.jsx | 837 | → features/attendance |
+| AuditLog.jsx | 837 | → features/audit |
+| AuditLogs.jsx | 155 | deleted — dead + imported two nonexistent API methods |
+| Attendance.jsx | 1560 | → features/attendance (+ AttendanceTable moved in) |
+| Books.jsx | 532 | → features/books (+ BookTable, FilterBadge, 8-file books family moved in) |
+| KioskAttendance.jsx | 909 | → features/attendance (kiosk) |
+| Students.jsx | 1383 | → features/students |
+| StudentsDashboard.jsx | 114 | deleted — dead, entire dependency tree missing |
+| Faculty.jsx | 963 | → features/faculty |
+| Login.jsx / Unauthorized.jsx | 487 / 83 | → features/auth |
+| landing/landingpage.jsx | 1138 | → features/landing |
+
+`client/src/pages/` is empty. Every page now follows §1: pages compose, hooks hold state, business rules live in utils/services, all HTTP goes through api modules, shared primitives live in `components/ui/`, and dead code was removed or flagged throughout. Verified after each step with `npm run build` + `npm test` (101/101) + reference greps.

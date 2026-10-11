@@ -7,7 +7,7 @@
 
 import { useEffect, useRef } from "react";
 import { Clock, BookOpen, Timer, CheckCircle2, AlertCircle, Download, X } from "lucide-react";
-import ModalAnimations from "./ModalAnimations";
+import ModalAnimations from "../../../components/ui/ModalAnimations";
 import LiveTimer from "./LiveTimer";
 import AttendanceStatusPill from "./AttendanceStatusPill";
 import SessionActions from "./SessionActions";

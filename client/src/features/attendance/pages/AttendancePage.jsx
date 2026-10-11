@@ -18,7 +18,7 @@ import { useAttendanceRecords } from "../hooks/useAttendanceRecords";
 import { useStudentLookup } from "../hooks/useStudentLookup";
 import { useAttendanceFilters } from "../hooks/useAttendanceFilters";
 import { downloadGeneralPDF } from "../utils/attendancePdf";
-import ModalAnimations from "../components/ModalAnimations";
+import ModalAnimations from "../../../components/ui/ModalAnimations";
 import AttendancePageHeader from "../components/AttendancePageHeader";
 import AttendanceStatsCards from "../components/AttendanceStatsCards";
 import CheckInPanel from "../components/CheckInPanel";
