@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react"
+import { useFlipbookPanels } from "./useFlipbookPanels"
 import {
   loadPdf,
   preloadPdfRange,
@@ -48,9 +49,6 @@ const EMPTY_STATE = () => ({
   isFullscreen: false,
   isFlipping: false,
   flipDirection: null,
-  showThumbnails: false,
-  showTOC: false,
-  showSearch: false,
   loadedPages: new Set(),
   pageImages: new Map(),
   pageThumbs: new Map(),
@@ -77,12 +75,20 @@ export function useFlipbookEngine(props) {
     defaultZoom = 1,
   } = props
 
-  const [state, setState] = useState(() => ({
+  const [engineState, setState] = useState(() => ({
     ...EMPTY_STATE(),
     viewMode: initialViewMode,
     zoom: defaultZoom,
     sound,
   }))
+
+  // Panel visibility lives in its own hook; merged back in so consumers keep
+  // reading state.showThumbnails / state.showSearch / … and actions.toggleSearch.
+  const panels = useFlipbookPanels()
+  const state = useMemo(
+    () => ({ ...engineState, ...panels.visibility }),
+    [engineState, panels.visibility]
+  )
 
   const stateRef = useRef(state)
   stateRef.current = state
@@ -364,23 +370,11 @@ export function useFlipbookEngine(props) {
     }
   }, [])
 
-  const toggleThumbnails = useCallback(() => {
-    setState((s) => ({ ...s, showThumbnails: !s.showThumbnails, showTOC: false, showSearch: false }))
-  }, [])
-
-  const toggleTOC = useCallback(() => {
-    setState((s) => ({ ...s, showTOC: !s.showTOC, showThumbnails: false, showSearch: false }))
-  }, [])
-
-  const toggleSearch = useCallback(() => {
-    setState((s) => ({ ...s, showSearch: !s.showSearch, showThumbnails: false, showTOC: false }))
-  }, [])
-
   const setDragging = useCallback((dragging, progress = 0) => {
     setState((s) => ({ ...s, isDragging: dragging, dragProgress: progress }))
   }, [])
 
-  // ── Keyboard ────────────────────────────────────────────
+  // ── Keyboard (panel closing is handled by useFlipbookPanels) ──
   useEffect(() => {
     const handler = (e) => {
       if (e.key === "ArrowRight" || e.key === "ArrowDown") {
@@ -389,8 +383,6 @@ export function useFlipbookEngine(props) {
       } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
         e.preventDefault()
         goPrev()
-      } else if (e.key === "Escape") {
-        setState((s) => ({ ...s, showThumbnails: false, showTOC: false, showSearch: false }))
       }
     }
     window.addEventListener("keydown", handler)
@@ -417,10 +409,8 @@ export function useFlipbookEngine(props) {
     toggleViewMode,
     toggleSound,
     toggleFullscreen,
-    toggleThumbnails,
-    toggleTOC,
-    toggleSearch,
     setDragging,
+    ...panels.actions,
   }
 
   return { state, actions, effectiveViewMode, pdfDocRef }

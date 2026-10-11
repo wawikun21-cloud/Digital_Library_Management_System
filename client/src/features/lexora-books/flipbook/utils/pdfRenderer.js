@@ -1,4 +1,5 @@
 import * as pdfjsLib from "pdfjs-dist"
+import { pdfItemsToText } from "./pdfText"
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.mjs",
@@ -157,6 +158,20 @@ export async function getPageDimensions(pdfDoc, pageNum, scale = 1) {
   const viewport = page.getViewport({ scale })
   page.cleanup()
   return { width: viewport.width, height: viewport.height }
+}
+
+/**
+ * Plain text of a single page (1-based). Returns "" for image-only pages,
+ * or throws if the page cannot be read — callers surface the error.
+ */
+export async function getPageText(pdfDoc, pageNum) {
+  const page = await pdfDoc.getPage(pageNum)
+  try {
+    const textContent = await page.getTextContent()
+    return pdfItemsToText(textContent.items)
+  } finally {
+    page.cleanup()
+  }
 }
 
 /** Render pages around centerPage (1-based), nearest first. Returns Map<pageNum, url>. */

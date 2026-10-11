@@ -8,6 +8,7 @@ import FlipbookPageFlipMode from "./FlipbookPageFlipMode"
 import FlipbookCSSMode    from "./FlipbookCSSMode"
 import FlipbookLoading    from "./FlipbookLoading"
 import FlipbookError      from "./FlipbookError"
+import FlipbookCapturePanel from "./FlipbookCapturePanel"
 import { searchPdf, loadPdf, getPdfTableOfContents } from "./utils/pdfRenderer"
 
 function createPageList(totalPages) {
@@ -104,6 +105,15 @@ export default function FlipbookReader({
   const hasPdf = !!pdfUrl
   const hasTOC = tocItems.length > 0
 
+  // Pages the user actually sees right now — the capture target for both
+  // text copy and screenshots. Double view shows the spread [current, +1].
+  const capturePages = useMemo(() => {
+    const visible = effectiveViewMode === "double"
+      ? [state.currentPage, state.currentPage + 1]
+      : [state.currentPage]
+    return visible.filter((index) => index >= 0 && index < state.totalPages)
+  }, [effectiveViewMode, state.currentPage, state.totalPages])
+
   const cssVars = {}
   if (theme?.toolbarBg)    cssVars["--flipbook-toolbar-bg"]    = theme.toolbarBg
   if (theme?.btnColor)     cssVars["--flipbook-btn-color"]     = theme.btnColor
@@ -184,6 +194,17 @@ export default function FlipbookReader({
           onSearch={handleSearch}
           onNavigate={actions.goToPage}
           onClose={actions.toggleSearch}
+        />
+      )}
+
+      {state.showCapture && state.totalPages > 0 && (
+        <FlipbookCapturePanel
+          hasPdf={hasPdf}
+          pdfDocRef={pdfDocRef}
+          pages={pages}
+          pageNumbers={capturePages}
+          viewMode={effectiveViewMode}
+          onClose={actions.toggleCapture}
         />
       )}
 

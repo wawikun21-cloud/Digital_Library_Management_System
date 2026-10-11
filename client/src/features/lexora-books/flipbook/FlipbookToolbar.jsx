@@ -2,16 +2,15 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import {
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
   Maximize2, Minimize2, Volume2, VolumeX,
-  LayoutGrid, List, Search, BookOpen, Columns, X,
+  LayoutGrid, List, Search, BookOpen, Columns, X, Camera,
 } from "lucide-react"
+import FlipbookPageJump from "./FlipbookPageJump"
 
 export default function FlipbookToolbar({
   state, actions, theme, viewMode,
   hasPdf = false, hasTOC = false, hasCover = false,
 }) {
   const [isVisible, setIsVisible] = useState(true)
-  const [jumpValue, setJumpValue] = useState("")
-  const [showJumpInput, setShowJumpInput] = useState(false)
   const idleTimerRef = useRef(null)
 
   const resetIdleTimer = useCallback(() => {
@@ -30,18 +29,6 @@ export default function FlipbookToolbar({
   useEffect(() => {
     if (state.isDragging) setIsVisible(true)
   }, [state.isDragging])
-
-  const handleJump = () => {
-    const page = parseInt(jumpValue, 10)
-    if (!isNaN(page) && page >= 1 && page <= totalDisplayPages) {
-      const targetPage = hasCover && viewMode === "double"
-        ? page <= 2 ? page - 1 : 2 + (page - 3) * 2
-        : viewMode === "double" ? (page - 1) * 2 : page - 1
-      actions.goToPage(targetPage)
-    }
-    setShowJumpInput(false)
-    setJumpValue("")
-  }
 
   const toolbarStyle = {
     backgroundColor: theme?.toolbarBg || "rgba(26, 26, 46, 0.85)",
@@ -101,31 +88,13 @@ export default function FlipbookToolbar({
         <ChevronLeft size={18} />
       </button>
 
-      {showJumpInput ? (
-        <form onSubmit={(e) => { e.preventDefault(); handleJump() }}
-          className="flex items-center gap-1">
-          <input
-            type="number"
-            min={1}
-            max={totalDisplayPages}
-            value={jumpValue}
-            onChange={(e) => setJumpValue(e.target.value)}
-            className="h-7 w-14 rounded-lg bg-white/10 px-2 text-center text-xs text-white outline-none"
-            autoFocus
-            onBlur={handleJump}
-          />
-        </form>
-      ) : (
-        <button
-          className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs transition-colors hover:bg-white/10"
-          onClick={() => { setShowJumpInput(true); setJumpValue(String(displayPage)) }}
-          title="Jump to page"
-        >
-          <span className="font-medium">{displayPage}</span>
-          <span className="opacity-50">/</span>
-          <span className="opacity-70">{totalDisplayPages}</span>
-        </button>
-      )}
+      <FlipbookPageJump
+        displayPage={displayPage}
+        totalPages={totalDisplayPages}
+        hasCover={hasCover}
+        viewMode={viewMode}
+        onNavigate={actions.goToPage}
+      />
 
       <button
         className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${btnHoverClass}`}
@@ -169,6 +138,15 @@ export default function FlipbookToolbar({
           <Search size={16} />
         </button>
       )}
+
+      <button
+        className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${btnHoverClass} ${state.showCapture ? "bg-white/15" : ""}`}
+        style={btnStyle}
+        onClick={actions.toggleCapture}
+        title="Copy text & screenshot"
+      >
+        <Camera size={16} />
+      </button>
 
       <div className="mx-1 h-5 w-px" style={{ background: "rgba(255,255,255,0.15)" }} />
 
