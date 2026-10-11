@@ -1,88 +1,88 @@
+import { Pencil, KeyRound, ShieldCheck, Trash2, UserCheck } from "lucide-react";
 import UserRoleBadge from "./UserRoleBadge";
 import { formatUserForDisplay } from "../validation/userValidation";
+
+/**
+ * Mobile user card (shown below lg — UserTable covers larger screens).
+ *
+ * Same permission-gating contract as UserTable: an action handler that
+ * arrives `undefined` renders no button, so a restricted admin never sees
+ * a control that would throw on click.
+ */
 export default function UserCard({ user, onEdit, onDeactivate, onReactivate, onRoleChange, onPermissions, currentUserId }) {
   const display = formatUserForDisplay(user);
   const isSelf = user.id === currentUserId;
   const isActive = Boolean(user.is_active);
 
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-3 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50">
-      <div className="flex items-start justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+    <div className="rp-card mb-3 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+            style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
+          >
             {user.avatar_url ? (
-              <img src={user.avatar_url} alt={display.fullName} className="h-10 w-10 rounded-full object-cover" />
+              <img src={user.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover" />
             ) : (
-              <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              <span className="text-sm font-semibold" aria-hidden="true">
                 {display.fullName?.charAt(0)?.toUpperCase() || "?"}
               </span>
             )}
           </div>
-          <div>
-            <div className="font-medium text-gray-900 dark:text-gray-100">{display.fullName}</div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">@{user.username}</div>
+          <div className="min-w-0">
+            <p className="truncate font-medium" style={{ color: "var(--text-primary)" }}>{display.fullName}</p>
+            <p className="truncate text-[13px]" style={{ color: "var(--text-secondary)" }}>
+              @{user.username}
+              {isSelf && <span style={{ color: "var(--color-primary)" }}> (you)</span>}
+            </p>
           </div>
         </div>
-        <UserRoleBadge role={user.role} size="sm" />
+        <UserRoleBadge role={user.role} />
       </div>
 
-      {user.email && <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 break-all">{user.email}</p>}
+      {user.email && (
+        <p className="mt-2 break-all text-[13px]" style={{ color: "var(--text-secondary)" }}>{user.email}</p>
+      )}
 
-      <div className="mt-3 flex items-center justify-between">
-        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-          isActive
-            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
-            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"
-        }`}>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className={`rp-badge ${isActive ? "rp-badge--ok" : "rp-badge--off"}`}>
           {isActive ? "Active" : "Inactive"}
         </span>
 
-        <div className="flex space-x-1 text-xs">
-          {/* Handlers arrive undefined when the user lacks the matching
-              manage_users action — render nothing rather than a button whose
-              onClick throws. Same pattern as RolesTable / UserTable. */}
+        <div className="flex flex-wrap items-center justify-end gap-1">
           {onEdit && (
-            <button
-              onClick={() => onEdit(user)}
-              className="px-2 py-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-            >
-              Edit
+            <button type="button" onClick={() => onEdit(user)} className="rp-btn rp-btn--ghost rp-btn--sm">
+              <Pencil size={13} aria-hidden="true" />Edit
             </button>
           )}
           {!isSelf && (
             <>
               {onPermissions && (
-                <button
-                  onClick={() => onPermissions(user)}
-                  className="px-2 py-1 text-violet-600 hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-300"
-                >
-                  Permissions
+                <button type="button" onClick={() => onPermissions(user)} className="rp-btn rp-btn--ghost rp-btn--sm">
+                  <KeyRound size={13} aria-hidden="true" />Permissions
                 </button>
               )}
               {onRoleChange && (
-                <button
-                  onClick={() => onRoleChange(user)}
-                  className="px-2 py-1 text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300"
-                >
-                  Role
+                <button type="button" onClick={() => onRoleChange(user)} className="rp-btn rp-btn--ghost rp-btn--sm">
+                  <ShieldCheck size={13} aria-hidden="true" />Role
                 </button>
               )}
               {isActive ? (
                 onDeactivate && (
                   <button
+                    type="button"
                     onClick={() => onDeactivate(user)}
-                    className="px-2 py-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                    className="rp-btn rp-btn--ghost rp-btn--sm"
+                    style={{ color: "var(--accent-danger)" }}
                   >
-                    Deactivate
+                    <Trash2 size={13} aria-hidden="true" />Deactivate
                   </button>
                 )
               ) : (
                 onReactivate && (
-                  <button
-                    onClick={() => onReactivate(user)}
-                    className="px-2 py-1 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
-                  >
-                    Reactivate
+                  <button type="button" onClick={() => onReactivate(user)} className="rp-btn rp-btn--ghost rp-btn--sm">
+                    <UserCheck size={13} aria-hidden="true" />Reactivate
                   </button>
                 )
               )}

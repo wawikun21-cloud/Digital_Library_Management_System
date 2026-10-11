@@ -1,9 +1,27 @@
-import { useState } from "react";
+import { Pencil, KeyRound, ShieldCheck, Trash2, UserCheck } from "lucide-react";
 import UserRoleBadge from "./UserRoleBadge";
-import { ROLE_LABELS } from "../../../constants/roles";
+import UsersEmptyState from "./UsersEmptyState";
 import { formatUserForDisplay } from "../validation/userValidation";
-import { Edit, Trash2, UserCheck, UserX, Shield, KeyRound } from "lucide-react";
+import { formatDate } from "../../../utils/helpers";
+import "./usersUi.css";
 
+function StatusBadge({ isActive }) {
+  return (
+    <span className={`rp-badge ${isActive ? "rp-badge--ok" : "rp-badge--off"}`}>
+      {isActive ? "Active" : "Inactive"}
+    </span>
+  );
+}
+
+/**
+ * Desktop user list (hidden below lg — UserCard covers small screens).
+ *
+ * Follows the RolesTable / LexoraBookAdminTable pattern: token-driven
+ * surfaces from src/styles/ui.css, right-aligned icon actions, and a
+ * skeleton while loading. Each row action arrives as `undefined` when the
+ * signed-in user lacks the matching manage_users permission — render
+ * nothing rather than a button whose onClick throws.
+ */
 export default function UserTable({
   users,
   loading,
@@ -13,180 +31,146 @@ export default function UserTable({
   onReactivate,
   onPermissions,
   currentUserId,
+  hasFilters = false,
 }) {
-  const [hoveredRow, setHoveredRow] = useState(null);
-
-  const getStatusBadge = (isActive) => {
-    if (isActive) {
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-          Active
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-        Inactive
-      </span>
-    );
-  };
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "-";
-    return new Date(dateStr).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
-
-  const ActionButton = ({ icon: Icon, label, onClick, color, title }) => (
-    <button
-      onClick={onClick}
-      title={title}
-      className={`inline-flex items-center justify-center w-8 h-8 rounded-lg text-xs font-medium transition-all duration-150 ${color} hover:opacity-90 hover:scale-105 active:scale-95`}
-    >
-      <Icon size={14} />
-      <span className="sr-only">{label}</span>
-    </button>
-  );
-
   if (loading) {
     return (
-      <div className="animate-pulse">
-        <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded-t-lg"></div>
-        <div className="space-y-0 divide-y divide-gray-200 dark:divide-gray-700">
+      <div className="rp-card p-4" role="status" aria-busy="true">
+        <div className="space-y-4">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-14 bg-gray-100 dark:bg-gray-800"></div>
+            <div key={i} className="flex items-center gap-3">
+              <div className="rp-skeleton h-10 w-10 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <div className="rp-skeleton h-3.5 w-1/3" />
+                <div className="rp-skeleton h-3 w-1/4" />
+              </div>
+              <div className="rp-skeleton h-6 w-16 rounded-full" />
+              <div className="rp-skeleton h-6 w-16 rounded-full" />
+            </div>
           ))}
         </div>
+        <span className="sr-only">Loading users…</span>
       </div>
     );
   }
 
   if (!users || users.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 mb-4">
-          <UserX size={24} className="text-gray-400 dark:text-gray-500" />
-        </div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-1">No users found</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Try adjusting your search or filter criteria.</p>
-      </div>
-    );
+    return <UsersEmptyState hasFilters={hasFilters} />;
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl shadow ring-1 ring-black ring-opacity-5 dark:ring-opacity-10">
-      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-        <thead className="bg-gray-50 dark:bg-gray-800/50">
-          <tr>
-            <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
-              User
-            </th>
-            <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
-              Role
-            </th>
-            <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
-              Status
-            </th>
-            <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
-              Created
-            </th>
-            <th className="px-4 py-3.5 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
-              Actions
-            </th>
+    <div
+      className="overflow-x-auto rounded-xl border shadow-sm"
+      style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
+    >
+      <table className="min-w-full text-sm">
+        <thead>
+          <tr style={{ background: "var(--bg-subtle, var(--bg-hover))", borderBottom: "1px solid var(--border)" }}>
+            {["User", "Role", "Status", "Created", "Actions"].map((heading, i) => (
+              <th
+                key={heading}
+                scope="col"
+                className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider ${i === 4 ? "text-right" : "text-left"}`}
+                style={{ color: "var(--text-muted)" }}
+              >
+                {i === 4 ? <span className="sr-only">{heading}</span> : heading}
+              </th>
+            ))}
           </tr>
         </thead>
-        <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+        <tbody>
           {users.map((user) => {
             const display = formatUserForDisplay(user);
             const isSelf = user.id === currentUserId;
             const isActive = Boolean(user.is_active);
 
             return (
-              <tr
-                key={user.id}
-                className="transition-colors duration-150"
-                onMouseEnter={() => setHoveredRow(user.id)}
-                onMouseLeave={() => setHoveredRow(null)}
-              >
-                <td className="px-4 py-3.5 whitespace-nowrap">
-                  <div className="flex items-center space-x-3">
+              <tr key={user.id} className="us-tr">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
                     <div className="relative flex-shrink-0">
-                      <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center overflow-hidden border-2 border-gray-200 dark:border-gray-700">
+                      <div
+                        className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full"
+                        style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
+                      >
                         {user.avatar_url ? (
                           <img
                             src={user.avatar_url}
                             alt={display.fullName}
-                            className="w-full h-full object-cover"
+                            className="h-full w-full object-cover"
                           />
                         ) : (
-                          <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                          <span className="text-sm font-semibold" aria-hidden="true">
                             {display.fullName?.charAt(0)?.toUpperCase() || "?"}
                           </span>
                         )}
                       </div>
                       {isActive && (
-                        <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-gray-900 bg-green-500"></span>
+                        <span
+                          className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2"
+                          style={{ background: "var(--rp-success)", borderColor: "var(--bg-surface)" }}
+                        />
                       )}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium" style={{ color: "var(--text-primary)" }}>
                         {display.fullName}
-                      </div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center space-x-1">
-                        <span>@{user.username}</span>
-                        {isSelf && (
-                          <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">(you)</span>
-                        )}
-                      </div>
+                      </p>
+                      <p className="truncate text-[13px]" style={{ color: "var(--text-secondary)" }}>
+                        @{user.username}
+                        {isSelf && <span style={{ color: "var(--color-primary)" }}> (you)</span>}
+                      </p>
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3.5 whitespace-nowrap">
+                <td className="px-4 py-3">
                   <UserRoleBadge role={user.role} />
                 </td>
-                <td className="px-4 py-3.5 whitespace-nowrap">
-                  {getStatusBadge(user.is_active)}
+                <td className="px-4 py-3">
+                  <StatusBadge isActive={isActive} />
                 </td>
-                <td className="px-4 py-3.5 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                  {formatDate(user.created_at)}
+                <td className="px-4 py-3 whitespace-nowrap tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                  {formatDate(user.created_at) || "—"}
                 </td>
-                <td className="px-4 py-3.5 whitespace-nowrap">
-                  <div className="flex items-center justify-center space-x-1.5">
-                    {/* The handler is passed as undefined when the user lacks
-                        manage_users:edit — render nothing rather than a button
-                        whose onClick throws. Same pattern as RolesTable. */}
+                <td className="px-3 py-3">
+                  <div className="flex items-center justify-end gap-1">
+                    {/* Handlers arrive undefined when the user lacks the
+                        matching manage_users action — render nothing rather
+                        than a button whose onClick throws. Same pattern as
+                        RolesTable. */}
                     {onEdit && (
                       <button
+                        type="button"
                         onClick={() => onEdit(user)}
                         title="Edit user"
-                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all duration-150"
+                        aria-label={`Edit ${display.fullName}`}
+                        className="rp-icon-btn"
                       >
-                        <Edit size={14} />
+                        <Pencil size={14} aria-hidden="true" />
                       </button>
                     )}
 
                     {!isSelf && onPermissions && (
                       <button
+                        type="button"
                         onClick={() => onPermissions(user)}
                         title="Manage permissions"
-                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-sm font-medium text-violet-600 hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-300 bg-violet-50 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-all duration-150"
+                        aria-label={`Manage permissions for ${display.fullName}`}
+                        className="rp-icon-btn"
                       >
-                        <KeyRound size={14} />
+                        <KeyRound size={14} aria-hidden="true" />
                       </button>
                     )}
 
                     {!isSelf && onRoleChange && isActive && (
                       <button
+                        type="button"
                         onClick={() => onRoleChange(user)}
                         title="Change role"
-                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-sm font-medium text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all duration-150"
+                        aria-label={`Change role for ${display.fullName}`}
+                        className="rp-icon-btn"
                       >
-                        <Shield size={14} />
+                        <ShieldCheck size={14} aria-hidden="true" />
                       </button>
                     )}
 
@@ -194,20 +178,24 @@ export default function UserTable({
                       <>
                         {isActive && onDeactivate && (
                           <button
+                            type="button"
                             onClick={() => onDeactivate(user)}
                             title="Deactivate user"
-                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-sm font-medium text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all duration-150"
+                            aria-label={`Deactivate ${display.fullName}`}
+                            className="rp-icon-btn rp-icon-btn--danger"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={14} aria-hidden="true" />
                           </button>
                         )}
                         {!isActive && onReactivate && (
                           <button
+                            type="button"
                             onClick={() => onReactivate(user)}
                             title="Reactivate user"
-                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-sm font-medium text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 transition-all duration-150"
+                            aria-label={`Reactivate ${display.fullName}`}
+                            className="rp-icon-btn"
                           >
-                            <UserCheck size={14} />
+                            <UserCheck size={14} aria-hidden="true" />
                           </button>
                         )}
                       </>

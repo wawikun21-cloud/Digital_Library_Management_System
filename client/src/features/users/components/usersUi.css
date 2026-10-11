@@ -1,0 +1,44 @@
+/* ─────────────────────────────────────────────────────────
+   Users — feature-specific UI.
+
+   The generic management primitives (rp-btn, rp-field, rp-badge,
+   rp-icon-btn, rp-empty, rp-card, rp-skeleton, …) come from the shared
+   src/styles/ui.css — this file only holds what is unique to the users
+   feature: the non-clickable table row hover and the per-role badge
+   tints. Everything reads the app's tokens from src/styles/index.css.
+
+   Lives next to the users components it styles — it is feature-specific,
+   so it is not a global stylesheet in src/styles/.
+   ───────────────────────────────────────────────────────── */
+
+/* ── Table row ─────────────────────────────────────────
+   Users rows are not clickable (every action is a row button), so this
+   is the shared .rp-tr minus cursor:pointer. */
+.us-tr {
+  border-top: 1px solid var(--border-light);
+  transition: background-color 0.12s;
+}
+.us-tr:hover { background: var(--bg-hover); }
+
+/* ── Invalid form field ───────────────────────────────── */
+.us-field--error { border-color: var(--accent-danger); }
+.us-field--error:focus {
+  border-color: var(--accent-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-danger) 18%, transparent);
+}
+
+/* ── Role badge tints ──────────────────────────────────
+   Washed fills from the app palette, with a stronger label colour per
+   theme so contrast holds on both --bg-surface (#ffffff / #112233).
+   Unknown roles fall back to .rp-badge--muted in UserRoleBadge. */
+.us-role--super_admin { background: rgba(168, 85, 247, 0.13); border-color: rgba(168, 85, 247, 0.32); color: #6d28d9; }
+.us-role--admin       { background: rgba(50, 102, 127, 0.13); border-color: rgba(50, 102, 127, 0.32); color: var(--color-primary); }
+.us-role--librarian   { background: rgba(34, 197, 94, 0.13);  border-color: rgba(34, 197, 94, 0.32);  color: #15803d; }
+.us-role--staff       { background: rgba(238, 162, 58, 0.15); border-color: rgba(238, 162, 58, 0.36); color: #a16207; }
+.us-role--student     { background: rgba(244, 63, 94, 0.12);  border-color: rgba(244, 63, 94, 0.30);  color: #be123c; }
+
+[data-theme="dark"] .us-role--super_admin { color: #c4b5fd; }
+[data-theme="dark"] .us-role--admin       { color: #7dd3fc; }
+[data-theme="dark"] .us-role--librarian   { color: #86efac; }
+[data-theme="dark"] .us-role--staff       { color: #fcd34d; }
+[data-theme="dark"] .us-role--student     { color: #fda4af; }

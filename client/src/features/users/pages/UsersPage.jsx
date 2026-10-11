@@ -1,9 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { Plus, Users, AlertTriangle, RotateCw } from "lucide-react";
 import { useUsers } from "../hooks/useUsers";
 import { useAuth } from "../../../hooks/useAuth";
-import { ROLES, ROLE_LABELS, ROLE_HIERARCHY } from "../../../constants/roles";
+import { ROLE_HIERARCHY } from "../../../constants/roles";
 import { UserPermissionsDrawer } from "../../roles";
+import Pagination from "../../../components/books/Pagination";
+import UsersToolbar from "../components/UsersToolbar";
+import UsersEmptyState from "../components/UsersEmptyState";
 import UserTable from "../components/UserTable";
 import UserCard from "../components/UserCard";
 import UserFormModal from "../components/UserFormModal";
@@ -11,6 +15,18 @@ import UserRoleModal from "../components/UserRoleModal";
 import Toast from "../../../components/Toast";
 import { useToast } from "../../../hooks/useToast";
 
+/**
+ * User Management — composition only.
+ *
+ * The shell, header scale and error panel follow the same pattern as
+ * RolesPage, CourseLibrary and ManageLexoraBooks (shared primitives from
+ * src/styles/ui.css). Data lives in `useUsers`; UI-level state is limited
+ * to which modal is open, which row is selected, and the query filters.
+ *
+ * Per-action gating mirrors the server: a handler the signed-in user is
+ * not allowed to run is passed as `undefined`, and the tables render no
+ * button for it.
+ */
 export default function UsersPage() {
   const { user: currentUser, hasPermissionAction } = useAuth();
   const { toast, success, error: showError, hideToast } = useToast();
@@ -31,6 +47,8 @@ export default function UsersPage() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [reloadToken, setReloadToken] = useState(0);
 
   const [roleModalOpen, setRoleModalOpen] = useState(false);
   const [roleModalUser, setRoleModalUser] = useState(null);
@@ -40,7 +58,7 @@ export default function UsersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const drawerUserId = searchParams.get("permissions") ? Number(searchParams.get("permissions")) : null;
 
-  // Per-action gating — the server already enforces the same checks.
+  // ── Per-action gating — the server already enforces the same checks. ──
   const canCreate       = hasPermissionAction("manage_users", "create");
   const canEdit         = hasPermissionAction("manage_users", "edit");
   const canDelete       = hasPermissionAction("manage_users", "delete");
@@ -48,23 +66,35 @@ export default function UsersPage() {
   const canManageRoles  = hasPermissionAction("manage_users", "manage_roles");
   const canEditPerms    = hasPermissionAction("manage_permissions", "view");
 
-  useEffect(() => {
-    loadUsers({ page: 1, limit: pagination.limit, ...(roleFilter && { role: roleFilter }), ...(search && { search }) });
-  }, [loadUsers, search, roleFilter, pagination.limit]);
+  // The effect below is the single loader; bumping the token forces a
+  // refetch of the current query without duplicating its parameter map.
+  const reload = () => setReloadToken((token) => token + 1);
 
-  const handleSearch = (e) => {
-    setSearch(e.target.value);
+  useEffect(() => {
+    loadUsers({
+      page,
+      limit: pagination.limit,
+      ...(roleFilter && { role: roleFilter }),
+      ...(search && { search }),
+    });
+  }, [loadUsers, page, search, roleFilter, pagination.limit, reloadToken]);
+
+  const handleSearch = (value) => {
+    setSearch(value);
+    setPage(1);
   };
 
-  const handleRoleFilter = (e) => {
-    setRoleFilter(e.target.value);
+  const handleRoleFilter = (value) => {
+    setRoleFilter(value);
+    setPage(1);
   };
 
   const handleCreate = async (formData) => {
     const result = await addUser({ ...formData, password: "password123" });
     if (result.success) {
       setModalMode(null);
-      loadUsers({ page: 1, limit: pagination.limit, ...(roleFilter && { role: roleFilter }), ...(search && { search }) });
+      setPage(1);
+      reload();
     }
   };
 
@@ -79,12 +109,14 @@ export default function UsersPage() {
 
   const handleDeactivate = async (user) => {
     const result = await removeUser(user.id);
-    if (!result.success) showError(result.error || "Failed to deactivate user");
+    if (result.success) success("User deactivated");
+    else showError(result.error || "Failed to deactivate user");
   };
 
   const handleReactivate = async (user) => {
     const result = await restoreUser(user.id);
-    if (!result.success) showError(result.error || "Failed to reactivate user");
+    if (result.success) success("User reactivated");
+    else showError(result.error || "Failed to reactivate user");
   };
 
   const handleRoleChange = (user) => {
@@ -129,74 +161,86 @@ export default function UsersPage() {
     ? (ROLE_HIERARCHY[currentUser.role] || [])
     : [];
 
+  const hasFilters = Boolean(search.trim() || roleFilter);
+  const editProps = {
+    onEdit: canEdit ? (u) => { setSelectedUser(u); setModalMode("edit"); } : undefined,
+    onDeactivate: canDelete ? handleDeactivate : undefined,
+    onReactivate: canReactivate ? handleReactivate : undefined,
+    onRoleChange: canManageRoles ? handleRoleChange : undefined,
+    onPermissions: canEditPerms ? handleOpenPermissions : undefined,
+    currentUserId: currentUser?.id,
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-101">User Management</h1>
+    <div className="flex flex-col gap-5">
+      {/* ── Header ──────────────────────────────────────── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="flex items-center gap-2.5 text-[22px] font-bold" style={{ color: "var(--text-primary)" }}>
+            <Users size={22} style={{ color: "var(--accent-amber)" }} aria-hidden="true" />
+            User Management
+          </h1>
+          <p className="mt-0.5 text-[13px]" style={{ color: "var(--text-secondary)" }}>
+            Manage accounts, roles, and permissions
+          </p>
+        </div>
         {canCreate && (
           <button
             onClick={() => { setSelectedUser(null); setModalMode("create"); }}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            className="rp-btn rp-btn--primary"
           >
-            Create New User
+            <Plus size={16} aria-hidden="true" /> Create New User
           </button>
         )}
       </div>
-      <div className="h-px bg-gray-200 dark:bg-gray-700" />
 
+      {/* ── Load failure ────────────────────────────────── */}
       {apiError && (
-        <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
-          {apiError}
+        <div
+          role="alert"
+          className="rounded-xl border p-4 text-sm"
+          style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
+        >
+          <p className="flex items-start gap-2" style={{ color: "var(--accent-danger)" }}>
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+            {apiError}
+          </p>
+          <button type="button" onClick={reload} className="rp-btn rp-btn--secondary mt-3">
+            <RotateCw size={14} aria-hidden="true" /> Retry
+          </button>
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <input
-          type="text"
-          placeholder="Search by username, name, or email..."
-          value={search}
-          onChange={handleSearch}
-          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
-        />
-        <select
-          value={roleFilter}
-          onChange={handleRoleFilter}
-          className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-101 focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">All Roles</option>
-          {availableRoles.map((r) => (
-            <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-          ))}
-        </select>
-      </div>
+      <UsersToolbar
+        search={search}
+        onSearch={handleSearch}
+        roleFilter={roleFilter}
+        onRoleFilter={handleRoleFilter}
+        roleOptions={availableRoles}
+        total={pagination.total}
+      />
 
+      {/* ── Desktop table ───────────────────────────────── */}
       <div className="hidden lg:block">
-        <UserTable
-          users={users}
-          loading={loading}
-          onEdit={canEdit ? (u) => { setSelectedUser(u); setModalMode("edit"); } : undefined}
-          onDeactivate={canDelete ? handleDeactivate : undefined}
-          onReactivate={canReactivate ? handleReactivate : undefined}
-          onRoleChange={canManageRoles ? handleRoleChange : undefined}
-          onPermissions={canEditPerms ? handleOpenPermissions : undefined}
-          currentUserId={currentUser?.id}
-        />
+        <UserTable users={users} loading={loading} hasFilters={hasFilters} {...editProps} />
       </div>
 
+      {/* ── Mobile cards ────────────────────────────────── */}
       <div className="lg:hidden">
-        {users.map((u) => (
-          <UserCard
-            key={u.id}
-            user={u}
-            onEdit={canEdit ? (usr) => { setSelectedUser(usr); setModalMode("edit"); } : undefined}
-            onDeactivate={canDelete ? handleDeactivate : undefined}
-            onReactivate={canReactivate ? handleReactivate : undefined}
-            onRoleChange={canManageRoles ? handleRoleChange : undefined}
-            onPermissions={canEditPerms ? handleOpenPermissions : undefined}
-            currentUserId={currentUser?.id}
-          />
-        ))}
+        {loading ? (
+          <div role="status" className="flex items-center justify-center py-20">
+            <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Loading users…</span>
+          </div>
+        ) : users.length === 0 ? (
+          <UsersEmptyState hasFilters={hasFilters} />
+        ) : (
+          users.map((u) => <UserCard key={u.id} user={u} {...editProps} />)
+        )}
       </div>
+
+      {pagination.totalPages > 1 && (
+        <Pagination currentPage={page} totalPages={pagination.totalPages} setCurrentPage={setPage} />
+      )}
 
       <UserFormModal
         open={!!modalMode}

@@ -17,12 +17,12 @@ import {
 } from "./components/auth/ProtectedRoute.jsx";
 
 // ── Lazy-loaded pages ─────────────────────────────────────
-const Dashboard           = lazy(() => import("./pages/Dashboard"));
-const Books               = lazy(() => import("./pages/Books"));
-const Borrowed            = lazy(() => import("./pages/Borrowed"));
-const Attendance          = lazy(() => import("./pages/Attendance"));
+const Dashboard           = lazy(() => import("./features/analytics/pages/AnalyticsDashboardPage"));
+const Books                = lazy(() => import("./features/books/pages/BooksPage"));
+const Borrowed             = lazy(() => import("./features/transactions/pages/BorrowedPage"));
+const Attendance          = lazy(() => import("./features/attendance/pages/AttendancePage"));
 const Students            = lazy(() => import("./pages/Students"));
-const Faculty             = lazy(() => import("./pages/Faculty"));
+const Faculty             = lazy(() => import("./features/faculty/pages/FacultyPage"));
 const RecentlyDeleted     = lazy(() => import("./features/trash/pages/RecentlyDeletedPage"));const ManageLexoraBooks   = lazy(() => import("./features/lexora-books/pages/ManageLexoraBooks"));
 const LexoraBooksCatalog  = lazy(() => import("./features/lexora-books/pages/LexoraBooksCatalog"));
 const LexoraBookDetails   = lazy(() => import("./features/lexora-books/pages/LexoraBookDetails"));
@@ -31,9 +31,9 @@ const LexoraBookmarks     = lazy(() => import("./features/lexora-books/pages/Lex
 const Login               = lazy(() => import("./pages/Login"));
 const LandingPage         = lazy(() => import("./landing/landingpage"));
 const KioskAttendance     = lazy(() => import("./pages/KioskAttendance"));
-const AuditLog            = lazy(() => import("./pages/AuditLog"));
-const AttendanceDashboard = lazy(() => import("./pages/AttendanceDashboard"));
-const BookDashboard       = lazy(() => import("./pages/BookDashboard"));
+const AuditLog            = lazy(() => import("./features/audit/pages/AuditLogPage"));
+const AttendanceDashboard = lazy(() => import("./features/attendance/pages/AttendanceDashboardPage"));
+const BookDashboard       = lazy(() => import("./features/analytics/pages/BookDashboardPage"));
 const Unauthorized        = lazy(() => import("./pages/Unauthorized"));
 const StudentPortal       = lazy(() => import("./features/students/pages/StudentPortalPage"));
 const Courses             = lazy(() => import("./features/courses/pages/CourseCatalog"));

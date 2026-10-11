@@ -1,5 +1,6 @@
 @import "buttons.css";
 @import "drawer.css";
+@import "ui.css";
 
 @tailwind base;
 @tailwind components;
