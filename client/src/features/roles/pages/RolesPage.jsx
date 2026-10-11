@@ -45,7 +45,7 @@ export default function RolesPage() {
         <button
           onClick={() => { manager.setFormData({}); manager.setShowAddModal(true); }}
           className="flex items-center gap-2 self-start rounded-lg px-3 py-2 text-xs font-semibold text-white transition-opacity duration-150 sm:self-auto"
-          style={{ background: "#EEA23A" }}
+          style={{ background: "var(--accent-amber)" }}
         >
           <Plus size={15} /> Add Role
         </button>

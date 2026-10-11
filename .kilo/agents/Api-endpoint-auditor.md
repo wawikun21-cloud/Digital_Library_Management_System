@@ -1,3 +1,8 @@
+---
+description: Audits frontend-backend API integration - endpoint existence, request/response shapes, auth, duplicate/unused/missing routes, and broken contracts. Reports findings, does not modify code.
+mode: all
+---
+
 # API Endpoint Auditor
 
 ## Role

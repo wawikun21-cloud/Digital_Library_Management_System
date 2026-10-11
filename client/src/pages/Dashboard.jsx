@@ -585,7 +585,7 @@ const HoldingsBreakdown = React.memo(function HoldingsBreakdown({ data = [], loa
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl"
             style={{ background: "rgba(19,47,69,0.07)", border: "1px solid rgba(19,47,69,0.14)" }}>
             <BookOpen size={11} style={{ color: NEMCO_COLOR }} />
-            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: NEMCO_COLOR }}>NEMCO</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: NEMCO_COLOR }}>SCHOOL</span>
             <span className="text-[13px] font-extrabold tabular-nums" style={{ color: NEMCO_COLOR }}>
               {totalNemco.toLocaleString()}
             </span>
@@ -617,7 +617,7 @@ const HoldingsBreakdown = React.memo(function HoldingsBreakdown({ data = [], loa
                   style={{ color: NEMCO_COLOR, borderBottom: "2px solid var(--border)", borderLeft: `2px solid ${NEMCO_COLOR}22` }}>
                   <div className="flex items-center justify-center gap-1.5 px-4 py-3"
                     style={{ borderBottom: `3px solid ${NEMCO_COLOR}` }}>
-                    <BookOpen size={11} /> NEMCO
+                    <BookOpen size={11} /> SCHOOL
                   </div>
                 </th>
                 <th colSpan={2} className="py-0 text-center text-[10px] font-bold uppercase tracking-widest"
@@ -805,7 +805,7 @@ export default function Dashboard() {
 
     const { nemcoTotal = 0, lexoraTotal = 0, nemcoOutOfStock = 0, returned = 0 } = kpiStats;
     return [
-      { label: "NEMCO BOOKS",  value: Number(nemcoTotal).toLocaleString(),      change: "Live", accent: "#132F45", percentage: nemcoTotal ? 100 : undefined, onClick: () => navigate("/dashboard/books") },
+      { label: "SCHOOL BOOKS",  value: Number(nemcoTotal).toLocaleString(),      change: "Live", accent: "#132F45", percentage: nemcoTotal ? 100 : undefined, onClick: () => navigate("/dashboard/books") },
       { label: "LEXORA BOOKS", value: Number(lexoraTotal).toLocaleString(),     change: "Live", accent: "#32667F", percentage: lexoraTotal ? 100 : undefined, onClick: () => navigate("/dashboard/lexora-books") },
       { label: "Out of Stock", value: Number(nemcoOutOfStock).toLocaleString(), change: "Live", accent: "#dc2626", percentage: pctOf(nemcoOutOfStock, nemcoTotal), onClick: () => navigate("/dashboard/books?status=OutOfStock") },
       { label: "Returned",     value: Number(returned).toLocaleString(),        change: "Live", accent: "#32667F", percentage: pctOf(returned, nemcoTotal),        onClick: () => navigate("/dashboard/borrowed?status=Returned") },

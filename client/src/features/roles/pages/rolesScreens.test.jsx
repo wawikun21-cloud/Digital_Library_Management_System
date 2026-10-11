@@ -69,7 +69,7 @@ describe("PermissionsDrawer — editRole", () => {
     })));
 
     expect(html).toContain("Edit: Staff");
-    expect(html).toContain("Users with this Role (1)");
+    expect(html).toContain("Users with this role");
     expect(html).toContain("Manage Books");
     expect(html).toContain("restore");          // an action toggle label
     expect(html).toContain("Ana Reyes");
@@ -177,7 +177,8 @@ describe("RolesTable", () => {
       roles: [], search: "zz", onSearch: () => {}, onRoleClick: () => {},
       onEditClick: () => {}, onDeleteClick: () => {},
     })));
-    expect(html).toContain("No roles match your search.");
+    expect(html).toContain('No roles match “zz”');
+    expect(html).toContain("Check the spelling or try a shorter search.");
   });
 });
 

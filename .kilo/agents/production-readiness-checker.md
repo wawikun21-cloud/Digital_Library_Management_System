@@ -1,5 +1,5 @@
 ---
-description: Reviews and gates code against the project's production-readiness rules (React/Vite, JS, Node.js, PostgreSQL). Read-only by default — flags issues instead of silently fixing them.
+description: Reviews and gates code against the project's production-readiness rules (React/Vite, JS, Node.js, PostgreSQL). Read-only by default - flags issues instead of silently fixing them.
 mode: primary
 permission:
   read: allow

@@ -11,18 +11,15 @@
   z-index: 60; /* above the sidebar (50) and the topbar */
   display: flex;
   justify-content: flex-end;
+  margin: 0 !important; /* see "Overlay margin guard" below */
 }
 
-/* The dim layer must not use backdrop-filter. Chrome promotes a filtered
-   element into its own compositing pass that paints below the sticky,
-   z-indexed topbar, so the dim layer stops short of it and leaves a visible
-   strip above the panel. Raising z-index does not fix it — the blur simply
-   cannot coexist with full-viewport coverage, so compensate with a slightly
-   stronger background instead. */
 .drawer-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(10, 22, 34, 0.62);
+  background: rgba(10, 22, 34, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   animation: drawer-fade 0.2s ease-out;
 }
 
@@ -67,4 +64,21 @@
 @media (prefers-reduced-motion: reduce) {
   .drawer-panel,
   .drawer-backdrop { animation: none; }
+}
+
+/* ─────────────────────────────────────────────────────────
+   Overlay margin guard
+
+   Tailwind's space-y-N / space-x-N put a margin on every child after the
+   first. A `position: fixed; inset: 0` overlay that is a direct child of
+   such a container inherits that margin, so it starts N*0.25rem lower than
+   the viewport (space-y-5 => a 20px un-dimmed strip at the top). Fixed
+   elements are positioned against the viewport and must never be spaced
+   as siblings, so cancel the margin for them.
+   ───────────────────────────────────────────────────────── */
+[class*="space-y-"] > .fixed,
+[class*="space-x-"] > .fixed,
+[class*="space-y-"] > .drawer-root,
+[class*="space-x-"] > .drawer-root {
+  margin: 0 !important;
 }

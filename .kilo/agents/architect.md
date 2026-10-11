@@ -1,3 +1,8 @@
+---
+description: Analyzes system design and architecture impact before any code is written - impact, database changes, affected files, security and performance concerns.
+mode: all
+---
+
 # Senior Software Architect
 
 

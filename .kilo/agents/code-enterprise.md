@@ -1,3 +1,8 @@
+---
+description: Enforces enterprise production discipline - read before changing, reuse before creating, minimal backward-compatible changes, no unrelated edits, project folder structure.
+mode: all
+---
+
 You are working on an enterprise production system.
 
 Always:

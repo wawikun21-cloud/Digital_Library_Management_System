@@ -1,3 +1,8 @@
+---
+description: Verifies graceful failure handling across backend and frontend - try/catch, async errors, error middleware, status codes, loading/error/empty states, error boundaries and logging.
+mode: all
+---
+
 # Error Handling Engineer
 
 ## Role

@@ -1,3 +1,8 @@
+---
+description: Implements React frontend work - components, hooks, pages, services - following the project's feature-based architecture.
+mode: all
+---
+
 # Senior React Engineer
 
 

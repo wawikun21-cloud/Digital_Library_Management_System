@@ -617,7 +617,7 @@ const HoldingsBreakdown = React.memo(function HoldingsBreakdown({ data = [], loa
                   style={{ color: NEMCO_COLOR, borderBottom: "2px solid var(--border)", borderLeft: `2px solid ${NEMCO_COLOR}22` }}>
                   <div className="flex items-center justify-center gap-1.5 px-4 py-3"
                     style={{ borderBottom: `3px solid ${NEMCO_COLOR}` }}>
-                    <BookOpen size={11} /> NEMCO
+                    <BookOpen size={11} /> SCHOOL
                   </div>
                 </th>
                 <th colSpan={2} className="py-0 text-center text-[10px] font-bold uppercase tracking-widest"
@@ -879,4 +879,5 @@ export default function DashboardAnalytics() {
         error={errors.holdingsBreakdown}
       />
     </main>
-  );  
+  );
+}

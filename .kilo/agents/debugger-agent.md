@@ -1,3 +1,8 @@
+---
+description: Debugs errors to root cause - understands the error, explains the problem, then provides the solution. Never blindly patches code.
+mode: all
+---
+
 # Debugging Specialist
 
 

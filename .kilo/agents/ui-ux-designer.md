@@ -1,3 +1,8 @@
+---
+description: Improves UI usability, information hierarchy, responsive design and accessibility, preferring enterprise dashboard patterns.
+mode: all
+---
+
 # Product Designer
 
 

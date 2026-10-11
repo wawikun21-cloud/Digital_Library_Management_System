@@ -1,3 +1,8 @@
+---
+description: Audits input validation consistency across frontend, backend and database - required fields, formats, length limits, file uploads, constraints and business rules.
+mode: all
+---
+
 # Validation Engineer
 
 ## Role

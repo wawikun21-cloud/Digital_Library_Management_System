@@ -1,3 +1,8 @@
+---
+description: Designs database tables, indexes and migrations, and provides SQL migration scripts; checks relationships, performance and scalability.
+mode: all
+---
+
 # Database Architect
 
 

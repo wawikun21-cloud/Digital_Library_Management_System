@@ -71,6 +71,8 @@ const NAV_ITEMS = [
   { section: "CATALOG", to: "/dashboard/lexora-books", label: "Manage Lexora Books", Icon: Globe, permission: "manage_lexora_books" },
   { section: "CATALOG", to: "/dashboard/courses",      label: "Courses",            Icon: Library, permission: "manage_courses", end: true },
   { section: "CATALOG", to: "/dashboard/course-library", label: "Course Library",  Icon: BookOpen, permission: "view_course_library" },
+  { section: "CATALOG", to: "/dashboard/tools", label: "Tools", Icon: Package, permission: "manage_tools" },
+
 
   // ── Transactions ──────────────────────────────────────
   { section: "TRANSACTIONS", to: "/dashboard/borrowed", label: "Borrowed", Icon: ClipboardList, permission: "manage_transactions" },
@@ -90,11 +92,8 @@ const NAV_ITEMS = [
     ],
   },
 
-  // ── People ────────────────────────────────────────────
-  { section: "PEOPLE", to: "/dashboard/tools", label: "Tools", Icon: Package, permission: "manage_tools" },
 
   // ── System ────────────────────────────────────────────
-  { section: "SYSTEM", to: "/dashboard/deleted",   label: "Recently Deleted", Icon: Trash2,      permission: "manage_trash" },
   { section: "SYSTEM", to: "/dashboard/audit-log", label: "Audit Trail",      Icon: ShieldCheck, permission: "view_audit_logs" },
 
   // ── More ──────────────────────────────────────────────
@@ -109,6 +108,8 @@ const NAV_ITEMS = [
       { to: "/dashboard/settings/student-portal", label: "Student Portal",     Icon: GraduationCap, permission: "manage_settings" },
       { to: "/dashboard/users",                   label: "Users",              Icon: Users,         permission: "manage_users" },
       { to: "/dashboard/roles",                   label: "Roles & Permissions", Icon: KeyRound,      permission: "manage_permissions" },
+      { to: "/dashboard/deleted",   label: "Recently Deleted", Icon: Trash2,      permission: "manage_trash" },
+
     ],
   },
 ];
