@@ -69,6 +69,18 @@ describe("computeRolePermState", () => {
     expect(state[0].granted).toBe(false);
     expect(state[0].selectedActions).toEqual([]);
   });
+
+  // A permission absent from the grants map is the common case — the map only
+  // lists what the role actually holds. `selected` is undefined there, and the
+  // short-circuit used to leak that through as `granted: undefined`.
+  it("reads a permission missing from the grants map as an explicit false", () => {
+    const state = computeRolePermState([BOOKS, TRASH], { manage_books: new Set(["view"]) });
+    expect(state[0].granted).toBe(true);
+
+    expect(state[1].granted).toBe(false);
+    expect(state[1].useDefaults).toBe(false);
+    expect(state[1].selectedActions).toEqual([]);
+  });
 });
 
 /* ── user state ─────────────────────────────────────────── */

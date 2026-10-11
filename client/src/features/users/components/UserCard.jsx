@@ -38,12 +38,17 @@ export default function UserCard({ user, onEdit, onDeactivate, onReactivate, onR
         </span>
 
         <div className="flex space-x-1 text-xs">
-          <button
-            onClick={() => onEdit(user)}
-            className="px-2 py-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-          >
-            Edit
-          </button>
+          {/* Handlers arrive undefined when the user lacks the matching
+              manage_users action — render nothing rather than a button whose
+              onClick throws. Same pattern as RolesTable / UserTable. */}
+          {onEdit && (
+            <button
+              onClick={() => onEdit(user)}
+              className="px-2 py-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              Edit
+            </button>
+          )}
           {!isSelf && (
             <>
               {onPermissions && (
@@ -63,19 +68,23 @@ export default function UserCard({ user, onEdit, onDeactivate, onReactivate, onR
                 </button>
               )}
               {isActive ? (
-                <button
-                  onClick={() => onDeactivate(user)}
-                  className="px-2 py-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                >
-                  Deactivate
-                </button>
+                onDeactivate && (
+                  <button
+                    onClick={() => onDeactivate(user)}
+                    className="px-2 py-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                  >
+                    Deactivate
+                  </button>
+                )
               ) : (
-                <button
-                  onClick={() => onReactivate(user)}
-                  className="px-2 py-1 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
-                >
-                  Reactivate
-                </button>
+                onReactivate && (
+                  <button
+                    onClick={() => onReactivate(user)}
+                    className="px-2 py-1 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
+                  >
+                    Reactivate
+                  </button>
+                )
               )}
             </>
           )}

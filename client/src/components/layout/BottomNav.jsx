@@ -1,14 +1,29 @@
 import { NavLink } from "react-router-dom";
 import { BarChart3, BookOpen, ClipboardList, Trash2 } from "lucide-react";
+import { useAuth } from "../../hooks/useAuth";
+import { isItemVisibleForUser } from "./navItems.js";
 
 const NAV = [
-  { to: "/dashboard",         label: "Dashboard",     Icon: BarChart3     },
-  { to: "/dashboard/books",    label: "Books",    Icon: BookOpen      },
-  { to: "/dashboard/borrowed", label: "Borrowed", Icon: ClipboardList },
-  { to: "/dashboard/deleted",  label: "Deleted",  Icon: Trash2        },
+  { to: "/dashboard",         label: "Dashboard",     Icon: BarChart3,     permission: "view_dashboard" },
+  { to: "/dashboard/books",    label: "Books",    Icon: BookOpen,      permission: "manage_books" },
+  { to: "/dashboard/borrowed", label: "Borrowed", Icon: ClipboardList, permission: "manage_transactions" },
+  { to: "/dashboard/deleted",  label: "Deleted",  Icon: Trash2,        permission: "manage_trash" },
 ];
 
+/**
+ * Mobile bottom navigation.
+ *
+ * Each entry carries the permission its route is guarded by, and entries
+ * the user cannot reach are not rendered — an unreachable entry is a link
+ * that bounces straight back, which is worse than no link. A user with no
+ * reachable entry (students) gets no bar at all.
+ */
 export default function BottomNav() {
+  const { user } = useAuth();
+  const items = NAV.filter((item) => isItemVisibleForUser(item, user ?? null));
+
+  if (items.length === 0) return null;
+
   return (
     <nav 
       className="lg:hidden fixed bottom-0 left-0 right-0 h-16 z-50 flex items-center justify-around px-2 border-t"
@@ -18,7 +33,7 @@ export default function BottomNav() {
         boxShadow: "0 -2px 10px rgba(0,0,0,0.1)"
       }}
     >
-      {NAV.map(({ to, label, Icon }) => (
+      {items.map(({ to, label, Icon }) => (
         <NavLink
           key={to}
           to={to}

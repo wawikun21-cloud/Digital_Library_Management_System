@@ -36,9 +36,17 @@ export function hasPermission(user, permissionName) {
 /**
  * Does `user` hold `permissionName` with `action`?
  *
- * Legacy fallback: if the permission is present but its details are
- * missing, the permission counts as fully granted (old clients cannot
- * distinguish).
+ * Details missing *entirely* (a cached user from before per-action details
+ * shipped) falls back to the same conservative role check as
+ * `hasPermission` — granting every action there is what let restricted
+ * users keep clicking buttons the server refused with a 403. ProtectedRoute
+ * refreshes the entry from `/api/auth/me` right after, so the conservative
+ * window is one request long.
+ *
+ * A details map that exists but omits this one permission still counts as
+ * fully granted (old-client compatibility: the server only lists granted
+ * permissions, and a client that cannot distinguish must not lock users
+ * out of actions their role allows).
  */
 export function hasPermissionAction(user, permissionName, action) {
   if (!user) return false;
@@ -49,7 +57,11 @@ export function hasPermissionAction(user, permissionName, action) {
   if (!user.permissions.includes(permissionName)) return false;
   if (!action) return true;
 
-  const detail = user.permissionDetails?.[permissionName];
+  if (!user.permissionDetails || typeof user.permissionDetails !== "object") {
+    return FALLBACK_ROLES.includes(user.role);
+  }
+
+  const detail = user.permissionDetails[permissionName];
   if (!detail || !Array.isArray(detail.actions)) return true;
 
   return detail.actions.includes(action);

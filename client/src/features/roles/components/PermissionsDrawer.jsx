@@ -1,4 +1,4 @@
-import { Loader2, ChevronLeft, ChevronRight, X, CheckCheck, RotateCcw, ShieldCheck, Info } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, X, RotateCcw, ShieldCheck, Info } from "lucide-react";
 import PermissionGrid from "./PermissionGrid";
 import ResourceRestrictionPanel from "./ResourceRestrictionPanel";
 import { getInitials, getAvatarColor } from "../utils/roleUtils";
@@ -49,8 +49,8 @@ export default function PermissionsDrawer({
   onRoleChange,
   onRoleActionToggle,
   onUserActionToggle,
-  onGrantAll,
-  onResetDefaults,
+  onResetRoleDefaults,
+  onResetUserDefaults,
   onManageAccessRestrictions,
   onScopeToggle,
   onRecordToggle,
@@ -80,11 +80,11 @@ export default function PermissionsDrawer({
             </button>
           )}
           <div className="min-w-0">
-            <h3 className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            <h3 className="truncate text-base font-bold" style={{ color: "var(--text-primary)" }}>
               {headerTitle(drawerMode, editRole, editUser)}
             </h3>
             {subtitle && (
-              <p className="truncate text-[11px]" style={{ color: "var(--text-secondary)" }}>
+              <p className="truncate text-[12px]" style={{ color: "var(--text-secondary)" }}>
                 {subtitle}
               </p>
             )}
@@ -118,7 +118,10 @@ export default function PermissionsDrawer({
                   permStates={rolePermStates}
                   onToggleAction={onRoleActionToggle}
                   links={[
-                    { label: "Reset to role defaults →", onClick: onResetDefaults },
+                    // Restores the role's saved grants. This link used to call
+                    // the same "reset" that clears a *user's* overrides, so in
+                    // the role editor it did nothing at all.
+                    { label: "Reset changes →", onClick: onResetRoleDefaults },
                   ]}
                 />
 
@@ -138,19 +141,26 @@ export default function PermissionsDrawer({
                     </div>
                   ) : (
                     <div className="rp-card space-y-0.5 p-1">
-                      {editRoleUsers.map((u) => (
+                      {editRoleUsers.map((u) => {
+                        // full_name and email are both nullable in `users`.
+                        // Falling straight through to neither is what rendered
+                        // these rows with a "?" avatar and a blank name;
+                        // username is unique and NOT NULL, so it is the last
+                        // resort before giving up on the row entirely.
+                        const label = u.full_name || u.email || u.username || `User #${u.id}`;
+                        return (
                         <button key={u.id} type="button" onClick={() => onOpenUserEditor(u)} className="rp-nav-row">
                           <span
                             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
-                            style={{ background: getAvatarColor(u.full_name || u.email) }}
+                            style={{ background: getAvatarColor(label) }}
                             aria-hidden="true"
                           >
-                            {getInitials(u.full_name || u.email)}
+                            {getInitials(label)}
                           </span>
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium">{u.full_name || "—"}</span>
+                            <span className="block truncate text-sm font-medium">{label}</span>
                             <span className="block truncate text-[11px]" style={{ color: "var(--text-secondary)" }}>
-                              {u.email || "—"}
+                              {u.email || u.username || "—"}
                             </span>
                           </span>
                           <ChevronRight
@@ -160,7 +170,8 @@ export default function PermissionsDrawer({
                             style={{ color: "var(--text-secondary)" }}
                           />
                         </button>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </section>
@@ -173,7 +184,7 @@ export default function PermissionsDrawer({
                 <div>
                   <label
                     htmlFor="drawer-role-select"
-                    className="mb-1.5 block text-xs font-semibold"
+                    className="mb-1.5 block text-[13px] font-semibold"
                     style={{ color: "var(--text-primary)" }}
                   >
                     Role
@@ -199,10 +210,11 @@ export default function PermissionsDrawer({
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={onGrantAll} className="rp-btn rp-btn--secondary rp-btn--sm">
-                    <CheckCheck size={14} aria-hidden="true" /> Grant all
-                  </button>
-                  <button type="button" onClick={onResetDefaults} className="rp-btn rp-btn--secondary rp-btn--sm">
+                  {/* One bulk action, named for what it does. "Grant all" used
+                      to sit beside this and clear the same overrides — a user's
+                      permissions are bounded by their role, so granting every
+                      action is indistinguishable from having no override. */}
+                  <button type="button" onClick={onResetUserDefaults} className="rp-btn rp-btn--secondary rp-btn--sm">
                     <RotateCcw size={13} aria-hidden="true" /> Reset to role defaults
                   </button>
                 </div>

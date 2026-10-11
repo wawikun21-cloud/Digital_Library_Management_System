@@ -100,6 +100,11 @@ export function RoleRoute({ allow, children }) {
 //     so a role whose grants were edited by a Super Admin still
 //     follows the server's decision.
 //
+//  On denial the user lands on /unauthorized, which says why, instead
+//  of bouncing silently to their role's default route — a dead redirect
+//  with no explanation looked exactly like the bug it was hiding
+//  (a restricted menu item that "does nothing").
+//
 //  Usage:
 //    <PermissionRoute permission="manage_trash">
 //      <RecentlyDeletedPage />
@@ -107,11 +112,9 @@ export function RoleRoute({ allow, children }) {
 // ─────────────────────────────────────────────────────────
 export function PermissionRoute({ permission, children }) {
   const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
-  const role   = user?.role ?? ROLES.ADMIN;
 
   if (!hasPermission(user, permission)) {
-    const fallback = ROLE_DEFAULT_ROUTES[role] ?? "/dashboard";
-    return <Navigate to={fallback} replace />;
+    return <Navigate to="/dashboard/unauthorized" replace />;
   }
 
   return children;

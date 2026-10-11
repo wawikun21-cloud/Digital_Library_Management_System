@@ -42,8 +42,8 @@ const PROPS = {
   onRoleChange: () => {},
   onRoleActionToggle: () => {},
   onUserActionToggle: () => {},
-  onGrantAll: () => {},
-  onResetDefaults: () => {},
+  onResetRoleDefaults: () => {},
+  onResetUserDefaults: () => {},
   onManageAccessRestrictions: () => {},
   onScopeToggle: () => {},
   onRecordToggle: () => {},
@@ -112,9 +112,36 @@ describe("assembled permission drawer", () => {
     });
 
     expect(container.textContent).toContain("Edit User: Ana Reyes");
-    expect(container.textContent).toContain("Grant all");
+    // The user editor offers one bulk action, named for what it does. It used
+    // to show "Grant all" beside "Reset to role defaults", both wired to the
+    // same handler — see resetUserDefaults in useRolesManager.
+    expect(container.textContent).toContain("Reset to role defaults");
+    expect(container.textContent).not.toContain("Grant all");
     expect(container.textContent).toContain("Manage Access Restrictions");
     expect(container.querySelector("#drawer-role-select")).not.toBeNull();
+
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("offers a working reset in the role editor", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        React.createElement(
+          Drawer,
+          { open: true, onClose: () => {}, width: 520, label: "Permissions" },
+          React.createElement(PermissionsDrawer, PROPS)
+        )
+      );
+    });
+
+    // The role editor's bulk link must act on the role, not on user overrides.
+    expect(container.textContent).toContain("Reset changes");
+    expect(container.textContent).not.toContain("Grant all");
 
     act(() => root.unmount());
     container.remove();

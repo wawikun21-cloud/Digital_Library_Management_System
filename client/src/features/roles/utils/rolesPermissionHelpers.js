@@ -89,7 +89,10 @@ export function computeRolePermState(allPermissions, rolePermActions) {
   return (allPermissions || []).map((perm) => {
     const defined = getDefinedActions(perm);
     const selected = rolePermActions?.[perm.name];
-    const isGranted = selected && selected.size > 0;
+    // `selected` is undefined for a permission the role does not grant. The
+    // short-circuit used to leak that through, so `granted` came out as
+    // undefined rather than false — falsy either way, but not a boolean.
+    const isGranted = !!(selected && selected.size > 0);
     return {
       name: perm.name,
       display_name: perm.display_name,
@@ -97,8 +100,7 @@ export function computeRolePermState(allPermissions, rolePermActions) {
       granted: isGranted,
       definedActions: defined,
       selectedActions: isGranted ? Array.from(selected) : [],
-      useDefaults: isGranted && selected.size === defined.length,
-    };
+      useDefaults: isGranted && selected.size === defined.length,    };
   });
 }
 

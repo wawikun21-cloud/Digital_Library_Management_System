@@ -55,8 +55,8 @@ export default function UserPermissionsDrawer({ userId, onClose }) {
           onRoleChange={manager.setEditUserNewRoleName}
           onRoleActionToggle={manager.handleRoleActionToggle}
           onUserActionToggle={manager.handleUserActionToggle}
-          onGrantAll={manager.grantAll}
-          onResetDefaults={manager.grantAll}
+          onResetRoleDefaults={manager.resetRoleDefaults}
+          onResetUserDefaults={manager.resetUserDefaults}
           onManageAccessRestrictions={manager.enterAccessRestrictions}
           onScopeToggle={manager.handleScopeToggle}
           onRecordToggle={manager.handleRecordToggle}

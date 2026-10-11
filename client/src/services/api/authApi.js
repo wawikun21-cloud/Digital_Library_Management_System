@@ -35,6 +35,40 @@ function resetCsrfToken() {
   csrfToken = null;
 }
 
+/**
+ * Map the server's auth payload onto the camelCase fields the client
+ * permission helpers read.
+ *
+ * `login` / `me` / `updateProfile` answer with snake_case
+ * `permission_details` and `entity_overrides`, while `permissionUtils`
+ * reads `permissionDetails` / `entityOverrides`. Storing the raw response
+ * left both undefined, which made every `hasPermissionAction` gate fall
+ * through to its "details missing = fully granted" legacy branch — so
+ * action-level buttons stayed visible and the server then refused them.
+ *
+ * Normalizing once here (the API layer owns response shaping) fixes every
+ * gate that consumes the cached user. Idempotent: an already-camelCase
+ * payload passes through untouched, and the snake_case keys are kept for
+ * any consumer that still reads them.
+ */
+export function normalizeAuthUser(user) {
+  if (!user || typeof user !== "object") return user;
+  const normalized = { ...user };
+  if (normalized.permissionDetails === undefined && normalized.permission_details !== undefined) {
+    normalized.permissionDetails = normalized.permission_details;
+  }
+  if (normalized.entityOverrides === undefined && normalized.entity_overrides !== undefined) {
+    normalized.entityOverrides = normalized.entity_overrides;
+  }
+  return normalized;
+}
+
+/** Shape of every auth response that carries the user + permission payload. */
+function normalizeAuthResponse(data) {
+  if (!data || typeof data !== "object" || !data.user) return data;
+  return { ...data, user: normalizeAuthUser(data.user) };
+}
+
 const authApi = {
   /**
    * Login with username + password.
@@ -50,7 +84,7 @@ const authApi = {
     if (!res.ok) throw new Error(data.error || "Login failed");
     // Clear cached CSRF token so it's fetched fresh after login
     resetCsrfToken();
-    return data;
+    return normalizeAuthResponse(data);
   },
 
   /**
@@ -83,7 +117,7 @@ const authApi = {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Not authenticated");
-    return data;
+    return normalizeAuthResponse(data);
   },
 
   /**
@@ -119,7 +153,7 @@ const authApi = {
 
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to update profile");
-    return data; // { success, user, message }
+    return normalizeAuthResponse(data); // { success, user, message }
   },
 
   // Export for testing/debugging if needed

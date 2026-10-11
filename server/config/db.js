@@ -32,6 +32,34 @@ const createDatabase = process.env.DB_CREATE_DATABASE === "true" ||
   (process.env.DB_CREATE_DATABASE !== "false" && process.env.NODE_ENV !== "production");
 const pool = mysql.createPool(dbConfig);
 
+/**
+ * One-time repair for rows that predate the roles table, when the only
+ * role value was '' (blank = no grants at all, so the user could not use
+ * the app). Those rows are promoted to super_admin, matching what this
+ * migration always intended.
+ *
+ * 'admin' MUST NOT be rewritten here. It used to mean the single top role,
+ * so this upgrade once promoted it on every boot. Now 'admin' is a real,
+ * seeded role with its own grant set, while super_admin short-circuits
+ * every permission check — re-promoting 'admin' silently undid every
+ * demotion a Super Admin made: the demotion never survived a restart, and
+ * with the user back at super_admin their permission restrictions stopped
+ * applying as well.
+ *
+ * The repair is naturally idempotent (once no blank-role rows remain it is
+ * a no-op), so unlike the permission seed it needs no batch marker.
+ *
+ * @returns {Promise<number>} rows promoted
+ */
+async function repairLegacyUserRoles(conn) {
+  const [unroled] = await conn.query("SELECT id FROM users WHERE role = ''");
+  if (unroled.length === 0) return 0;
+
+  await conn.query("UPDATE users SET role = 'super_admin' WHERE role = ''");
+  console.log(`✅ Promoted ${unroled.length} legacy unroled user(s) to super_admin`);
+  return unroled.length;
+}
+
 async function initDatabase() {
   try {
     const connectionConfig = {
@@ -128,14 +156,7 @@ async function initDatabase() {
         console.log("✅ Default seeded users created (dev only) → username: superadmin/admin/librarian/staff/student / password: password123");
       }
     } else {
-      // Upgrade existing users: empty role or 'admin' role → super_admin
-      const [toUpgrade] = await conn.query(
-        "SELECT id FROM users WHERE role = '' OR role = 'admin'"
-      );
-      if (toUpgrade.length > 0) {
-        await conn.query("UPDATE users SET role = 'super_admin' WHERE role = '' OR role = 'admin'");
-        console.log(`✅ Upgraded ${toUpgrade.length} existing user(s) to super_admin`);
-      }
+      await repairLegacyUserRoles(conn);
     }
 
     // ── books ──────────────────────────────────────────
@@ -961,4 +982,4 @@ async function testConnection() {
   }
 }
 
-module.exports = { pool, initDatabase, testConnection };
+module.exports = { pool, initDatabase, testConnection, repairLegacyUserRoles };

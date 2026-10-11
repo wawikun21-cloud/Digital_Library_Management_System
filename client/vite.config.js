@@ -5,6 +5,30 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
 
+  test: {
+    // Default node environment. The five files that need a DOM opt in with a
+    // `@vitest-environment jsdom` docblock, so the DOM suite stays small.
+    environment: 'node',
+
+    // The default, stated explicitly: it is a budget, not a knob. Tests that
+    // need more than 5s are slow and must be fixed, not granted a longer
+    // timeout. See features/roles/hooks/*.test.jsx — the fix there was to stop
+    // `await import()`-ing the module graph inside a test body, which had been
+    // charging ~4s of cold transform to the first test's timeout.
+    testTimeout: 5000,
+
+    // Restore every spy after each test so a mock cannot leak between tests.
+    // This makes the per-file `vi.restoreAllMocks()` calls unnecessary.
+    restoreMocks: true,
+
+    // Each file still gets its own module registry and environment. Turning
+    // this off would make the suite meaningfully faster and would also let one
+    // file's state bleed into the next, so it stays on.
+    isolate: true,
+
+    fileParallelism: true,
+  },
+
   build: {
     // Raise the warning threshold slightly — individual vendor chunks
     // like xlsx are expected to be large, but they load on-demand only.

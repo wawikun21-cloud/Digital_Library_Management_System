@@ -9,158 +9,27 @@
 //  items without `permission` → visible to everyone
 //  items with `permission`   → visible only when the resolved
 //                              permissions include it
+//
+//  The catalog and the visibility rules live in ./navItems.js so the
+//  BottomNav answers the same question the same way.
 // ─────────────────────────────────────────────────────────
-import { ShieldCheck, KeyRound } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import {
-  BarChart3, BookOpen, ClipboardList, Trash2, Sun, Moon, X,
-  ChevronDown, Library, Users, User, Globe, UserCheck,
-  LayoutDashboard, GraduationCap, Settings, Package,
-} from "lucide-react";
+import { Sun, Moon, X, ChevronDown } from "lucide-react";
 import Logo from "./Logo.jsx";
 import { STORAGE_KEYS } from "../../constants/index.js";
 import { ROLES } from "../../constants/roles.js";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
-import { hasPermission } from "../../utils/permissionUtils";
+import {
+  NAV_ITEMS,
+  buildVisibleItems,
+  groupBySection,
+  isChildActive,
+  isGroupLinkVisible,
+} from "./navItems.js";
 
 const SIDEBAR_WIDTHS = { COLLAPSED: 58, EXPANDED: 220 };
 const BRAND_HEIGHT   = 66;
-
-// ─────────────────────────────────────────────────────────
-//  Section map
-//  Controls the order sections render in. Items without a
-//  matching section fall back to "MORE".
-// ─────────────────────────────────────────────────────────
-const SECTIONS = [
-  { id: "OVERVIEW",     label: "Overview" },
-  { id: "CATALOG",      label: "Catalog" },
-  { id: "TRANSACTIONS", label: "Transactions" },
-  { id: "ATTENDANCE",   label: "Attendance" },
-  { id: "PEOPLE",       label: "People" },
-  { id: "SYSTEM",       label: "System" },
-  { id: "MORE",         label: "More" },
-];
-
-// ─────────────────────────────────────────────────────────
-//  NAV_ITEMS
-// ─────────────────────────────────────────────────────────
-const NAV_ITEMS = [
-  // ── Overview ──────────────────────────────────────────
-  // Student Portal / student Tools stay role-gated: they are audience pages
-  // and the portal is the student's landing route, so no permission applies.
-  { section: "OVERVIEW", to: "/dashboard/student", label: "Student Portal", Icon: GraduationCap, roles: [ROLES.STUDENT] },
-  { section: "OVERVIEW", to: "/dashboard/student-tools", label: "Tools", Icon: Package, roles: [ROLES.STUDENT] },
-
-  {
-    section: "OVERVIEW",
-    label: "Dashboard Analytics",
-    to: "/dashboard",
-    Icon: BarChart3,
-    isGroup: true,
-    permission: "view_dashboard",
-    children: [
-      { to: "/dashboard/attendance/dashboard", label: "Attendance", Icon: LayoutDashboard },
-      { to: "/dashboard/books/dashboard",      label: "Book",       Icon: BookOpen },
-    ],
-  },
-
-  // ── Catalog ───────────────────────────────────────────
-  { section: "CATALOG", to: "/dashboard/books",        label: "Books",            Icon: BookOpen, permission: "manage_books", end: true },
-  { section: "CATALOG", to: "/lexora-books",           label: "Lexora E-Books",    Icon: Globe, permission: "view_lexora_books" },
-  { section: "CATALOG", to: "/dashboard/lexora-books", label: "Manage Lexora Books", Icon: Globe, permission: "manage_lexora_books" },
-  { section: "CATALOG", to: "/dashboard/courses",      label: "Courses",            Icon: Library, permission: "manage_courses", end: true },
-  { section: "CATALOG", to: "/dashboard/course-library", label: "Course Library",  Icon: BookOpen, permission: "view_course_library" },
-  { section: "CATALOG", to: "/dashboard/tools", label: "Tools", Icon: Package, permission: "manage_tools" },
-
-
-  // ── Transactions ──────────────────────────────────────
-  { section: "TRANSACTIONS", to: "/dashboard/borrowed", label: "Borrowed", Icon: ClipboardList, permission: "manage_transactions" },
-
-  // ── Attendance ────────────────────────────────────────
-  {
-    section: "ATTENDANCE",
-    label: "Attendance",
-    to: "/dashboard/attendance",
-    Icon: Users,
-    isGroup: true,
-    anyPermission: ["manage_attendance", "use_kiosk"],
-    children: [
-      { to: "/dashboard/students",          label: "Students",          Icon: User, permission: "manage_students" },
-      { to: "/dashboard/faculty",           label: "Faculty",           Icon: UserCheck, permission: "manage_faculty" },
-      { to: "/dashboard/attendance/kiosk",  label: "Kiosk Attendance",  Icon: UserCheck, permission: "use_kiosk" },
-    ],
-  },
-
-
-  // ── System ────────────────────────────────────────────
-  { section: "SYSTEM", to: "/dashboard/audit-log", label: "Audit Trail",      Icon: ShieldCheck, permission: "view_audit_logs" },
-
-  // ── More ──────────────────────────────────────────────
-  {
-    section: "MORE",
-    label: "Settings",
-    to: "/dashboard/settings",
-    Icon: Settings,
-    isGroup: true,
-    anyPermission: ["manage_settings", "manage_users", "manage_permissions"],
-    children: [
-      { to: "/dashboard/settings/student-portal", label: "Student Portal",     Icon: GraduationCap, permission: "manage_settings" },
-      { to: "/dashboard/users",                   label: "Users",              Icon: Users,         permission: "manage_users" },
-      { to: "/dashboard/roles",                   label: "Roles & Permissions", Icon: KeyRound,      permission: "manage_permissions" },
-      { to: "/dashboard/deleted",   label: "Recently Deleted", Icon: Trash2,      permission: "manage_trash" },
-
-    ],
-  },
-];
-
-// ─────────────────────────────────────────────────────────
-//  Helpers
-// ─────────────────────────────────────────────────────────
-/**
- * Visibility follows resolved permissions.
- *
- * `anyPermission` matches when the user holds at least one of the listed
- * permissions (used by groups that stay open when any child is reachable).
- *
- * `roles` is the one role-based exception left: the Student Portal is an
- * audience page, not a capability, and it is the student's landing route —
- * no permission expresses "is a student". It is never granted by the seed
- * as a capability, so gating it on a permission would loop students back
- * to their own redirect target.
- *
- * A user whose cached entry predates the permission fields falls back to a
- * conservative role check, so a stale localStorage cannot reveal an item —
- * ProtectedRoute refreshes the entry from /api/auth/me right after.
- */
-function isItemVisibleForUser(item, user) {
-  if (item.anyPermission) {
-    return item.anyPermission.some((name) => hasPermission(user, name));
-  }
-  if (item.permission) {
-    return hasPermission(user, item.permission);
-  }
-  if (item.roles) {
-    const role = user?.role;
-    return role ? item.roles.includes(role) : item.roles.includes(ROLES.ADMIN);
-  }
-  return true;
-}
-
-function isChildActive(children, pathname) {
-  return children.some((c) => pathname === c.to || pathname.startsWith(c.to + "/"));
-}
-
-/** Collapse a flat item list into ordered sections (role already filtered). */
-function groupBySection(items) {
-  const buckets = {};
-  items.forEach((item) => {
-    const key = item.section ?? "MORE";
-    (buckets[key] = buckets[key] || []).push(item);
-  });
-  return SECTIONS.filter((s) => buckets[s.id]?.length)
-    .map((s) => ({ id: s.id, label: s.label, items: buckets[s.id] }));
-}
 
 // ─────────────────────────────────────────────────────────
 //  Sidebar — desktop + mobile asides
@@ -173,7 +42,12 @@ export default function Sidebar({
   const desktopWidth = effectiveCollapsed ? SIDEBAR_WIDTHS.COLLAPSED : SIDEBAR_WIDTHS.EXPANDED;
   const [cachedUser] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
   // Fall back to the prop's role so the nav still renders before /me resolves.
-  const user = cachedUser ?? (userRole ? { role: userRole } : null);
+  // Memoized: a fresh object every render would rebuild the visible-item list
+  // (and re-run the group-open effect) on every keystroke anywhere in the app.
+  const user = useMemo(
+    () => cachedUser ?? (userRole ? { role: userRole } : null),
+    [cachedUser, userRole]
+  );
 
   return (
     <>
@@ -233,17 +107,17 @@ function Inner({ collapsed, darkMode, onToggleTheme, user }) {
   // is safe to default to admin when the cache is still empty.
   const role = user?.role ?? ROLES.ADMIN;
 
-  // Visible nav items for the current user's resolved permissions
-  const visibleItems = useMemo(
-    () => NAV_ITEMS.filter((item) => isItemVisibleForUser(item, user)),
-    [user]
-  );
+  // Visible nav items for the current user's resolved permissions. Groups
+  // arrive with their unreachable children already removed, and a group the
+  // user cannot reach at all (no route permission, no visible child) is gone.
+  const visibleItems = useMemo(() => buildVisibleItems(NAV_ITEMS, user), [user]);
+  const sections = useMemo(() => groupBySection(visibleItems), [visibleItems]);
 
-  // Groups keyed by label, open state auto-tracked on route change
-  const groupLabels = NAV_ITEMS.filter((i) => i.isGroup).map((i) => i.label);
+  // Groups keyed by label, open state auto-tracked on route change. Only
+  // visible children count, so a hidden active route cannot open an empty group.
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {};
-    NAV_ITEMS.forEach((item) => {
+    visibleItems.forEach((item) => {
       if (item.isGroup && item.children && isChildActive(item.children, location.pathname)) {
         initial[item.label] = true;
       }
@@ -252,17 +126,14 @@ function Inner({ collapsed, darkMode, onToggleTheme, user }) {
   });
 
   useEffect(() => {
-    groupLabels.forEach((label) => {
-      const item = NAV_ITEMS.find((i) => i.isGroup && i.label === label);
-      if (item?.children && isChildActive(item.children, location.pathname)) {
-        setOpenGroups((g) => (g[label] ? g : { ...g, [label]: true }));
+    visibleItems.forEach((item) => {
+      if (item.isGroup && item.children && isChildActive(item.children, location.pathname)) {
+        setOpenGroups((g) => (g[item.label] ? g : { ...g, [item.label]: true }));
       }
     });
-  }, [location.pathname]);
+  }, [location.pathname, visibleItems]);
 
   const toggleGroup = (label) => setOpenGroups((g) => ({ ...g, [label]: !g[label] }));
-
-  const sections = useMemo(() => groupBySection(visibleItems), [visibleItems]);
 
   return (
     <div className="flex flex-col h-full">
@@ -283,6 +154,7 @@ function Inner({ collapsed, darkMode, onToggleTheme, user }) {
             key={sec.id}
             section={sec}
             collapsed={collapsed}
+            user={user}
             openGroups={openGroups}
             onToggleGroup={toggleGroup}
           />
@@ -341,7 +213,7 @@ function Inner({ collapsed, darkMode, onToggleTheme, user }) {
 // ─────────────────────────────────────────────────────────
 //  NavSection — a labelled, divided group of nav items
 // ─────────────────────────────────────────────────────────
-function NavSection({ section, collapsed, openGroups, onToggleGroup }) {
+function NavSection({ section, collapsed, user, openGroups, onToggleGroup }) {
   const { label, items } = section;
 
   return (
@@ -366,6 +238,7 @@ function NavSection({ section, collapsed, openGroups, onToggleGroup }) {
               item={item}
               collapsed={collapsed}
               open={openGroups[item.label] ?? false}
+              canLink={isGroupLinkVisible(item, user)}
               onToggle={() => onToggleGroup(item.label)}
             />
           ) : (
@@ -411,15 +284,29 @@ function NavItem({ item, collapsed }) {
 
 // ─────────────────────────────────────────────────────────
 //  GroupMenu — expandable group with a toggle chevron
+//
+//  `canLink` false renders the header without the parent link
+//  (the group's own route is guarded and unreachable), so the group
+//  acts as a labelled container for its reachable children instead of
+//  a link that PermissionRoute would bounce back to the dashboard.
 // ─────────────────────────────────────────────────────────
-function GroupMenu({ item, collapsed, open, onToggle }) {
+function GroupMenu({ item, collapsed, open, canLink, onToggle }) {
   const { label, to, Icon, children } = item;
   const location = useLocation();
   const anyChildActive = children.some(
     (c) => location.pathname === c.to || location.pathname.startsWith(c.to + "/")
   );
-  const isSelfActive = location.pathname === to;
+  const isSelfActive = canLink && location.pathname === to;
   const isHighlighted = isSelfActive || anyChildActive;
+
+  const header = (
+    <>
+      <span className="shrink-0 flex items-center justify-center" style={{ width: 18, minWidth: 18 }}>
+        <Icon size={18} style={{ color: isHighlighted ? "#f0d807" : undefined }} />
+      </span>
+      {!collapsed && <span className="ml-3 truncate" style={{ fontSize: 11.5 }}>{label}</span>}
+    </>
+  );
 
   return (
     <div>
@@ -427,24 +314,34 @@ function GroupMenu({ item, collapsed, open, onToggle }) {
         className="flex items-center rounded-lg overflow-hidden"
         style={{ background: isHighlighted ? "rgba(238,162,58,0.18)" : "transparent" }}
       >
-        <NavLink
-          to={to}
-          end
-          title={collapsed ? label : undefined}
-          className="flex items-center flex-1 overflow-hidden whitespace-nowrap select-none transition-colors duration-150 px-3 py-2 text-sm font-medium"
-          style={({ isActive }) => ({
-            color: isActive || anyChildActive ? "#fff" : "var(--text-on-sidebar)",
-          })}
-        >
-          {({ isActive }) => (
-            <>
-              <span className="shrink-0 flex items-center justify-center" style={{ width: 18, minWidth: 18 }}>
-                <Icon size={18} style={{ color: isActive || anyChildActive ? "#f0d807" : undefined }} />
-              </span>
-              {!collapsed && <span className="ml-3 truncate" style={{ fontSize: 11.5 }}>{label}</span>}
-            </>
-          )}
-        </NavLink>
+        {canLink ? (
+          <NavLink
+            to={to}
+            end
+            title={collapsed ? label : undefined}
+            className="flex items-center flex-1 overflow-hidden whitespace-nowrap select-none transition-colors duration-150 px-3 py-2 text-sm font-medium"
+            style={({ isActive }) => ({
+              color: isActive || anyChildActive ? "#fff" : "var(--text-on-sidebar)",
+            })}
+          >
+            {({ isActive }) => (
+              <>
+                <span className="shrink-0 flex items-center justify-center" style={{ width: 18, minWidth: 18 }}>
+                  <Icon size={18} style={{ color: isActive || anyChildActive ? "#f0d807" : undefined }} />
+                </span>
+                {!collapsed && <span className="ml-3 truncate" style={{ fontSize: 11.5 }}>{label}</span>}
+              </>
+            )}
+          </NavLink>
+        ) : (
+          <div
+            title={collapsed ? label : undefined}
+            className="flex items-center flex-1 overflow-hidden whitespace-nowrap select-none px-3 py-2 text-sm font-medium"
+            style={{ color: isHighlighted ? "#fff" : "var(--text-on-sidebar)" }}
+          >
+            {header}
+          </div>
+        )}
 
         {!collapsed && (
           <button

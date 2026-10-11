@@ -45,8 +45,8 @@ const baseProps = {
   onRoleChange: () => {},
   onRoleActionToggle: () => {},
   onUserActionToggle: () => {},
-  onGrantAll: () => {},
-  onResetDefaults: () => {},
+  onResetRoleDefaults: () => {},
+  onResetUserDefaults: () => {},
   onManageAccessRestrictions: () => {},
   onScopeToggle: () => {},
   onRecordToggle: () => {},
@@ -73,7 +73,7 @@ describe("PermissionsDrawer — editRole", () => {
     expect(html).toContain("Manage Books");
     expect(html).toContain("restore");          // an action toggle label
     expect(html).toContain("Ana Reyes");
-    expect(html).toContain("Reset to role defaults");
+    expect(html).toContain("Reset changes");     // the role editor's own reset
   });
 });
 
@@ -94,8 +94,11 @@ describe("PermissionsDrawer — editUser", () => {
     })));
 
     expect(html).toContain("Edit User: Ana Reyes");
-    expect(html).toContain("Grant all");
+    // One bulk action, named for what it does. "Grant all" was removed: a
+    // user's permissions are bounded by their role, so granting every action
+    // is indistinguishable from having no override. See resetUserDefaults.
     expect(html).toContain("Reset to role defaults");
+    expect(html).not.toContain("Grant all");
     expect(html).toContain("Manage Access Restrictions");
     expect(html).toContain("Manage Books");
   });
@@ -169,7 +172,8 @@ describe("RolesTable", () => {
     })));
     expect(html).toContain("Staff");
     expect(html).toContain("Librarian");
-    expect(html).toContain("Showing 2 roles");
+    // The count now sits inline in the toolbar row, as on the sibling pages.
+    expect(html).toContain("2 roles");
   });
 
   it("renders an empty message when nothing matches", () => {

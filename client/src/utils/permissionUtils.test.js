@@ -41,8 +41,19 @@ describe("hasPermissionAction", () => {
     expect(hasPermissionAction(u, "manage_books", "delete")).toBe(false);
   });
 
-  it("treats a present permission without details as fully granted (legacy fallback)", () => {
-    const u = user({ permissions: ["manage_books"] });
+  it("falls back conservatively when details are missing entirely (pre-details cache)", () => {
+    // A cached user from before per-action details shipped must not be
+    // treated as holding every action — that is what kept restricted
+    // buttons visible until the server refused them with a 403.
+    expect(hasPermissionAction(user({ role: "admin", permissions: ["manage_books"] }), "manage_books", "delete")).toBe(true);
+    expect(hasPermissionAction(user({ role: "librarian", permissions: ["manage_books"] }), "manage_books", "delete")).toBe(false);
+  });
+
+  it("treats a permission missing from an existing details map as granted (old-client compat)", () => {
+    const u = user({
+      permissions: ["manage_books"],
+      permissionDetails: { manage_trash: { granted: true, actions: ["view"] } },
+    });
     expect(hasPermissionAction(u, "manage_books", "delete")).toBe(true);
   });
 

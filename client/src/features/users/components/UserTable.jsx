@@ -157,13 +157,18 @@ export default function UserTable({
                 </td>
                 <td className="px-4 py-3.5 whitespace-nowrap">
                   <div className="flex items-center justify-center space-x-1.5">
-                    <button
-                      onClick={() => onEdit(user)}
-                      title="Edit user"
-                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all duration-150"
-                    >
-                      <Edit size={14} />
-                    </button>
+                    {/* The handler is passed as undefined when the user lacks
+                        manage_users:edit — render nothing rather than a button
+                        whose onClick throws. Same pattern as RolesTable. */}
+                    {onEdit && (
+                      <button
+                        onClick={() => onEdit(user)}
+                        title="Edit user"
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all duration-150"
+                      >
+                        <Edit size={14} />
+                      </button>
+                    )}
 
                     {!isSelf && onPermissions && (
                       <button

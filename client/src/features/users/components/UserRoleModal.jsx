@@ -1,15 +1,19 @@
 import UserRoleBadge from "../components/UserRoleBadge";
 import { ROLE_LABELS } from "../../../constants/roles";
 
-export default function UserRoleModal({ open, user, currentUserRole, availableRoles, onClose, onSubmit }) {
+export default function UserRoleModal({ open, user, currentUserRole, availableRoles, error, onClose, onSubmit }) {
   if (!open || !user) return null;
 
   const handleRoleSubmit = async (e) => {
     e.preventDefault();
     const newRole = e.target.elements.role.value;
     if (!newRole) return;
-    await onSubmit(user.id, newRole, `Role changed from ${user.role} to ${newRole}`);
-    onClose();
+    // The page owns the result: on a refused change (the server answers
+    // 403 with the missing permission named) it keeps the modal open and
+    // passes the message back through `error`. Closing unconditionally is
+    // what made a failed role change look like it had succeeded.
+    const result = await onSubmit(user.id, newRole, `Role changed from ${user.role} to ${newRole}`);
+    if (result?.success) onClose();
   };
 
   return (
@@ -33,6 +37,14 @@ export default function UserRoleModal({ open, user, currentUserRole, availableRo
               </button>
             </div>
             <form onSubmit={handleRoleSubmit} className="space-y-4">
+              {error && (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300"
+                >
+                  {error}
+                </p>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Current Role

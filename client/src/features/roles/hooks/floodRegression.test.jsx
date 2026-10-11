@@ -15,9 +15,17 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { act } from "react-dom/test-utils";
 import * as api from "../api/rolesApi";
+import { useRolesManager } from "./useRolesManager";
 
 // React 18 requires this flag to treat the test as an act() environment.
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+// Static import above rather than an `await import()` inside each test: a
+// dynamic import pulls the whole module graph in inside the test body, which
+// vitest charges to that test's 5s timeout. Importing at module scope moves it
+// into the collect phase, where the mount itself costs ~10-50ms.
+
+const teardowns = [];
 
 beforeEach(() => {
   globalThis.localStorage = {
@@ -28,13 +36,35 @@ beforeEach(() => {
   };
 });
 
-afterEach(() => {
-  vi.restoreAllMocks();
+// Spies are restored by `restoreMocks: true` in vite.config.js.
+afterEach(async () => {
+  while (teardowns.length) await teardowns.pop()();
+  // Guards isolation instead of trusting it: a leaked container would
+  // otherwise accumulate silently across the file.
+  expect(document.body.childElementCount).toBe(0);
 });
 
 const ok = (payload) => async () => ({
   ok: true, status: 200, json: async () => ({ success: true, data: payload }),
 });
+
+/**
+ * Mount the hook the way the page does, registering its own unmount.
+ * `act()` must be awaited directly — its return value is a React thenable
+ * rather than a Promise, so chaining .then() off it never resolves.
+ */
+async function mount(Probe, props) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(async () => { root.render(React.createElement(Probe, props)); });
+
+  teardowns.push(async () => {
+    await act(async () => { root.unmount(); });
+    container.remove();
+  });
+  return { root, container };
+}
 
 describe("useRolesManager — load effect must not loop", () => {
   it("fetches roles and permissions exactly once per mount", async () => {
@@ -45,19 +75,13 @@ describe("useRolesManager — load effect must not loop", () => {
       ok([{ name: "manage_books", display_name: "Manage Books", category: "books", actions: ["view"] }])
     );
 
-    const { useRolesManager } = await import("../hooks/useRolesManager");
-
     // An unstable inline arrow, exactly what RolesPage and the drawer pass.
     function Probe() {
       useRolesManager({ onFeedback: () => {} });
       return null;
     }
 
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    await act(async () => { root.render(React.createElement(Probe)); });
+    await mount(Probe);
 
     // Let a loop spin: each iteration is a fetch + a state update.
     for (let i = 0; i < 25; i++) {
@@ -66,15 +90,11 @@ describe("useRolesManager — load effect must not loop", () => {
 
     expect(getRoles).toHaveBeenCalledTimes(1);
     expect(getPermissions).toHaveBeenCalledTimes(1);
-
-    await act(async () => { root.unmount(); });
-    container.remove();
   });
 
   it("does not refetch when the caller's callback identity changes", async () => {
     const getRoles = vi.spyOn(api, "getRoles").mockImplementation(ok([]));
     vi.spyOn(api, "getPermissions").mockImplementation(ok([]));
-    const { useRolesManager } = await import("../hooks/useRolesManager");
 
     let rerender;
     function Probe({ onFeedback }) {
@@ -82,13 +102,9 @@ describe("useRolesManager — load effect must not loop", () => {
       return null;
     }
 
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
+    const { root } = await mount(Probe, { onFeedback: () => {} });
     await act(async () => {
       rerender = (cb) => root.render(React.createElement(Probe, { onFeedback: cb }));
-      rerender(() => {});
     });
 
     // Force several re-renders with a fresh callback each time.
@@ -97,15 +113,11 @@ describe("useRolesManager — load effect must not loop", () => {
     }
 
     expect(getRoles).toHaveBeenCalledTimes(1);
-
-    await act(async () => { root.unmount(); });
-    container.remove();
   });
 
   it("still calls the caller's latest callback on error", async () => {
     vi.spyOn(api, "getRoles").mockImplementation(async () => ({ ok: false, status: 500, message: "boom" }));
     vi.spyOn(api, "getPermissions").mockImplementation(ok([]));
-    const { useRolesManager } = await import("../hooks/useRolesManager");
 
     const seen = [];
     function Probe() {
@@ -113,17 +125,10 @@ describe("useRolesManager — load effect must not loop", () => {
       return null;
     }
 
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    await act(async () => { root.render(React.createElement(Probe)); });
+    await mount(Probe);
     for (let i = 0; i < 5; i++) await act(async () => { await Promise.resolve(); });
 
     // The ref keeps the latest closure callable even though it is not a dep.
     expect(seen).toContainEqual(["error", "boom"]);
-
-    await act(async () => { root.unmount(); });
-    container.remove();
   });
 });

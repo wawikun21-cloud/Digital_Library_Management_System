@@ -11,8 +11,71 @@ import {
   hasRestrictablePermission,
   ENTITY_TYPES,
   getDefinedActions,
-  parseActions,
+
 } from "../utils/rolesPermissionHelpers";
+
+/**
+ * The action set a role is saved with, keyed by permission name.
+ *
+ * Built from the role's stored grants, so re-running it discards any unsaved
+ * edits the drawer has made. Used both when the role editor opens and by
+ * "Reset changes", which is why it lives here rather than inside a handler.
+ *
+ * The input must be a *normalized* role (see openRoleEditor): GET
+ * /api/roles/:name returns the whole permission catalog under `permissions`
+ * and the role's actual grants under `role_actions` as a
+ * { permission_name: actions } map. Reading `permissions` instead seeds every
+ * permission as granted, which is what this drawer used to do.
+ *
+ * `role_actions[name] === null` means "every action this permission defines"
+ * — role_permissions.actions is NULL for seeded grants.
+ */
+function rolePermActionsFrom(role) {
+  const permActions = {};
+  const definedByName = new Map((role?.permissions || []).map((p) => [p.name, p]));
+
+  for (const [permName, actions] of Object.entries(role?.role_actions || {})) {
+    const defined = definedByName.has(permName) ? getDefinedActions(definedByName.get(permName)) : [];
+    permActions[permName] = new Set(actions || defined);
+  }
+  return permActions;
+}
+
+/**
+ * Flatten GET /api/roles/:name into the shape the drawer needs.
+ *
+ * The endpoint answers with { role, grants, permissions, role_actions,
+ * entity_overrides }. Storing that envelope directly is what put `undefined`
+ * in the save URL (`PUT /api/roles/permissions/undefined` → 400 "Role not
+ * found") and left the drawer title blank, because `name` and `display_name`
+ * live one level down under `role`.
+ */
+function normalizeRoleDetail(detail, fallbackName) {
+  if (!detail?.role) return null;
+  return {
+    name: detail.role.name || fallbackName,
+    display_name: detail.role.display_name || detail.role.name || fallbackName,
+    description: detail.role.description || "",
+    // Kept so rolePermActionsFrom can resolve "every defined action".
+    role_actions: detail.role_actions || {},
+    permissions: detail.permissions || [],
+  };
+}
+
+/**
+ * The permissions the user's *role* grants, as full catalog entries.
+ *
+ * GET /api/roles/users/:id/permissions returns the whole catalog under
+ * `permissions` and the granted subset under `role_grants` (names only).
+ * Handing the catalog to the editor made every permission look granted, and
+ * let a save write overrides for permissions the role does not have at all.
+ */
+function rolePermissionsForUser(context) {
+  const granted = context?.role_grants || [];
+  if (!granted.length) return [];
+  const byName = new Map((context?.permissions || []).map((p) => [p.name, p]));
+  return granted.map((name) => byName.get(name)).filter(Boolean);
+}
 
 /**
  * State and transitions for the roles & permissions editor.
@@ -27,6 +90,9 @@ export function useRolesManager({ onFeedback } = {}) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [error, setError] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -89,17 +155,26 @@ export function useRolesManager({ onFeedback } = {}) {
     let cancelled = false;
     const load = async () => {
       setLoading(true);
+      setError("");
       try {
         await Promise.all([fetchRoles(), fetchPermissions()]);
       } catch (err) {
-        if (!cancelled) notify("error", err.message);
+        if (!cancelled) {
+          // Kept in state as well as the toast so the page can render the
+          // retryable error panel every other management page has.
+          setError(err.message || "Could not load roles.");
+          notify("error", err.message);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     load();
     return () => { cancelled = true; };
-  }, [fetchRoles, fetchPermissions, notify]);
+  }, [fetchRoles, fetchPermissions, notify, reloadToken]);
+
+  /** Retry the initial load from the page's error panel. */
+  const reload = useCallback(() => setReloadToken((n) => n + 1), []);
 
   /* ── drawer: open roles ──────────────────────────────── */
 
@@ -113,16 +188,14 @@ export function useRolesManager({ onFeedback } = {}) {
         // rejects anything above it with a 400).
         fetchUsers({ role: role.name, limit: 100 }),
       ]);
-      const roleData = roleRes.data;
+      const roleData = normalizeRoleDetail(roleRes.data, role.name);
+      if (!roleData) {
+        throw new Error(`Role "${role.display_name || role.name}" could not be loaded`);
+      }
       setEditRole(roleData);
 
       // Each granted permission starts at the role's current action set.
-      const permActions = {};
-      (roleData?.permissions || []).forEach((p) => {
-        const actions = p.role_actions ? parseActions(p.role_actions) : getDefinedActions(p);
-        permActions[p.name] = new Set(actions);
-      });
-      setEditRolePermActions(permActions);
+      setEditRolePermActions(rolePermActionsFrom(roleData));
       setEditRoleUsers(usersRes.data || []);
     } catch (err) {
       notify("error", err.message || "Failed to load role details");
@@ -141,14 +214,13 @@ export function useRolesManager({ onFeedback } = {}) {
         rolesApi.getUserEntityOverrides(user.id),
       ]);
 
-      const rolePerms = permRes.data?.permissions || [];
       const overrides = Object.entries(permRes.data?.overrides || {}).map(([permission_name, o]) => ({
         permission_name,
         ...o,
       }));
 
       setEditUser(user);
-      setEditUserRolePerms(rolePerms);
+      setEditUserRolePerms(rolePermissionsForUser(permRes.data));
       setEditUserOverrides(overrides);
       setEditUserNewRoleName(user.role || editRole?.name || "");
       setEditUserOriginalRole(user.role || editRole?.name || "");
@@ -189,7 +261,7 @@ export function useRolesManager({ onFeedback } = {}) {
       }));
 
       setEditUser(target);
-      setEditUserRolePerms(permRes.data?.permissions || []);
+      setEditUserRolePerms(rolePermissionsForUser(permRes.data));
       setEditUserOverrides(overrides);
       setEditUserNewRoleName(target.role || "");
       setEditUserOriginalRole(target.role || "");
@@ -317,22 +389,30 @@ export function useRolesManager({ onFeedback } = {}) {
   );
 
   const filteredRoles = useMemo(() => {
-    if (!search) return roles;
+    const byStatus = statusFilter
+      ? roles.filter((r) => (r.is_active !== false) === (statusFilter === "active"))
+      : roles;
+    if (!search) return byStatus;
     const s = search.toLowerCase();
-    return roles.filter((r) =>
+    return byStatus.filter((r) =>
       String(r.display_name || "").toLowerCase().includes(s) ||
       String(r.name || "").toLowerCase().includes(s)
     );
-  }, [roles, search]);
+  }, [roles, search, statusFilter]);
 
   /* ── save ────────────────────────────────────────────── */
 
   const handleSaveRole = useCallback(async () => {
-    if (!editRole) return;
+    if (!editRole?.name) {
+      notify("error", "This role is missing its name, so it cannot be saved. Close and reopen it.");
+      return;
+    }
     setSaving(true);
     try {
-      const grants = Object.entries(editRolePermActions).map(([name, actions]) => ({
-        name,
+      // `permission_name` is the field the server validates — this used to send
+      // `name`, which failed every grant with "permission_name is required".
+      const grants = Object.entries(editRolePermActions).map(([permissionName, actions]) => ({
+        permission_name: permissionName,
         actions: Array.from(actions),
       }));
       const res = await rolesApi.updateRolePermissions(editRole.name, grants);
@@ -408,6 +488,23 @@ export function useRolesManager({ onFeedback } = {}) {
     }
   }, [editingRole, formData, fetchRoles, notify]);
 
+  const openAdd = useCallback(() => {
+    setEditingRole(null);
+    setFormData({});
+    setShowAddModal(true);
+  }, []);
+
+  const closeAdd = useCallback(() => {
+    setShowAddModal(false);
+    setFormData({});
+  }, []);
+
+  const closeEdit = useCallback(() => {
+    setShowEditModal(false);
+    setEditingRole(null);
+    setFormData({});
+  }, []);
+
   const openEdit = useCallback((role) => {
     setEditingRole(role);
     setFormData({
@@ -437,26 +534,53 @@ export function useRolesManager({ onFeedback } = {}) {
     }
   }, [deleteTarget, fetchRoles, notify]);
 
-  /** Grant-all / reset for the user editor both clear every override. */
-  const grantAll = useCallback(() => setEditUserOverrides([]), []);
+  /*
+   * Bulk actions, one per editor.
+   *
+   * These used to be a single `grantAll` wired to both the "Grant all" and
+   * "Reset to role defaults" buttons, and to the role editor's "Reset to role
+   * defaults" link. Clearing overrides does reset a *user* to the role's
+   * grants, but it does nothing at all to a *role*, and it certainly does not
+   * "grant all" anything — a user's permissions are bounded by their role
+   * (computeUserOverridesToSave drops any row for a permission the role does
+   * not grant), so an override granting everything is indistinguishable from
+   * having no override. Both buttons therefore did the same, and one of them
+   * was a silent no-op where it was shown.
+   *
+   * So: two actions, each named for what it actually does to its own editor.
+   */
+
+  /** Role editor — drop unsaved edits, return to the role's saved grants. */
+  const resetRoleDefaults = useCallback(() => {
+    if (!editRole) return;
+    setEditRolePermActions(rolePermActionsFrom(editRole));
+  }, [editRole]);
+
+  /** User editor — drop overrides, return to whatever the role grants. */
+  const resetUserDefaults = useCallback(() => setEditUserOverrides([]), []);
 
   return {
     roles,
     permissions,
     loading,
+    error,
+    reload,
     saving,
     search,
     setSearch,
+    statusFilter,
+    setStatusFilter,
     filteredRoles,
 
     showAddModal,
+    openAdd,
+    closeAdd,
     showEditModal,
     editingRole,
     deleteTarget,
     formData,
     setFormData,
-    setShowAddModal,
-    setShowEditModal,
+    closeEdit,
     setDeleteTarget,
 
     drawerMode,
@@ -484,7 +608,8 @@ export function useRolesManager({ onFeedback } = {}) {
     handleRecordToggle,
     handleEntitySearch,
     setEditUserNewRoleName,
-    grantAll,
+    resetRoleDefaults,
+    resetUserDefaults,
     handleSave,
     handleCreate,
     handleEdit,

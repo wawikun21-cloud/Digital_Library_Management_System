@@ -16,7 +16,7 @@ export default function RoleForm({
 }) {
   const set = (field) => (e) => setFormData({ ...formData, [field]: e.target.value });
 
-  const labelClass = "mb-1.5 block text-xs font-semibold";
+  const labelClass = "mb-1.5 block text-[13px] font-semibold";
   const hintClass = "mt-1.5 text-[11px] leading-snug";
 
   return (

@@ -8,9 +8,12 @@ import UserTable from "../components/UserTable";
 import UserCard from "../components/UserCard";
 import UserFormModal from "../components/UserFormModal";
 import UserRoleModal from "../components/UserRoleModal";
+import Toast from "../../../components/Toast";
+import { useToast } from "../../../hooks/useToast";
 
 export default function UsersPage() {
   const { user: currentUser, hasPermissionAction } = useAuth();
+  const { toast, success, error: showError, hideToast } = useToast();
   const {
     users,
     loading,
@@ -31,6 +34,7 @@ export default function UsersPage() {
 
   const [roleModalOpen, setRoleModalOpen] = useState(false);
   const [roleModalUser, setRoleModalUser] = useState(null);
+  const [roleModalError, setRoleModalError] = useState("");
 
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -74,16 +78,32 @@ export default function UsersPage() {
   };
 
   const handleDeactivate = async (user) => {
-    await removeUser(user.id);
+    const result = await removeUser(user.id);
+    if (!result.success) showError(result.error || "Failed to deactivate user");
   };
 
   const handleReactivate = async (user) => {
-    await restoreUser(user.id);
+    const result = await restoreUser(user.id);
+    if (!result.success) showError(result.error || "Failed to reactivate user");
   };
 
   const handleRoleChange = (user) => {
+    setRoleModalError("");
     setRoleModalUser(user);
     setRoleModalOpen(true);
+  };
+
+  /** Submit returns the API result so the modal can stay open on refusal. */
+  const handleRoleSubmit = async (userId, newRole, reason) => {
+    setRoleModalError("");
+    const result = await assignRole(userId, newRole, reason);
+    if (result.success) {
+      setRoleModalOpen(false);
+      setRoleModalUser(null);
+    } else {
+      setRoleModalError(result.error || "Failed to change role");
+    }
+    return result;
   };
 
   /** Deep-linkable entry point for the specific-user permissions drawer. */
@@ -192,18 +212,17 @@ export default function UsersPage() {
         user={roleModalUser}
         currentUserRole={currentUser?.role}
         availableRoles={availableRoles}
-        onClose={() => { setRoleModalOpen(false); setRoleModalUser(null); }}
-        onSubmit={async (userId, newRole, reason) => {
-          await assignRole(userId, newRole, reason);
-          setRoleModalOpen(false);
-          setRoleModalUser(null);
-        }}
+        error={roleModalError}
+        onClose={() => { setRoleModalOpen(false); setRoleModalUser(null); setRoleModalError(""); }}
+        onSubmit={handleRoleSubmit}
       />
 
       <UserPermissionsDrawer
         userId={drawerUserId}
         onClose={handleClosePermissions}
       />
+
+      <Toast message={toast.message} type={toast.type} isVisible={toast.visible} onClose={hideToast} />
     </div>
   );
 }

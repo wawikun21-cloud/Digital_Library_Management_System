@@ -187,9 +187,14 @@ async function updateProfile(req, res) {
       is_active:  updated.is_active !== undefined ? updated.is_active : 1,
     };
 
+    // Same payload login and /me return: without it the client's cached user
+    // loses its resolved permissions after a profile save, and every
+    // permission-gated nav item and button falls back to the role allowlist.
+    const permissions = await rolesFeature.getAuthPermissionPayload(req.session.user);
+
     return res.json({
       success: true,
-      user:    req.session.user,
+      user:    { ...req.session.user, ...permissions },
       message: "Profile updated successfully",
     });
   } catch (err) {

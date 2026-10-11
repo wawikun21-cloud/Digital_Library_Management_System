@@ -2,20 +2,32 @@
    Roles & Permissions — shared UI primitives.
 
    Inline styles can't express hover / focus / active states, so those live
-   here. Everything reads the app's existing tokens (--bg-*, --text-*,
-   --border*); only the brand accent is defined locally, so changing it is
-   a one-line edit.
+   here. Everything reads the app's tokens from src/styles/index.css
+   (--accent-*, --bg-*, --text-*, --border*, --shadow-*).
+
+   This file used to declare its own accent palette (--rp-accent #26446b,
+   --rp-danger #dc2626, ~10 hardcoded rgba() washes). It had already drifted:
+   --accent-amber is #1D3067 (navy) and --accent-danger is #cc1f1f, so the
+   roles surface was navy, amber and three blues at once, and the
+   "--rp-on-accent: navy on amber, ~7:1" comment described a theme that no
+   longer existed. Everything below now derives from the shared tokens.
+
+   colour-mix lines carry a literal fallback on the preceding line so the
+   value still resolves in a browser without colour-mix support.
 
    Lives next to the roles components it styles — it is feature-specific,
    so it is not a global stylesheet in src/styles/.
    ───────────────────────────────────────────────────────── */
 
 :root {
-  --rp-accent: #26446b;
-  --rp-accent-strong: #327cd1;
-  --rp-on-accent: #ffffff;          /* navy on amber: ~7:1, white on amber is ~2:1 */
-  --rp-focus: rgba(58, 85, 238, 0.38);
-  --rp-danger: #dc2626;
+  /* Tints of the shared accent. Fallbacks are the current #1D3067 at 10%/22%. */
+  --rp-accent-soft: rgba(29, 48, 103, 0.10);
+  --rp-accent-soft: color-mix(in srgb, var(--accent-amber) 10%, transparent);
+
+  --rp-focus: rgba(29, 48, 103, 0.22);
+  --rp-focus: color-mix(in srgb, var(--accent-amber) 22%, transparent);
+
+  --rp-danger: var(--accent-danger);
   --rp-success: #16a34a;
 }
 
@@ -25,10 +37,10 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border-radius: 8px;
+  border-radius: 12px;              /* rounded-xl — matches the app CTAs */
   border: 1px solid transparent;
-  padding: 8px 14px;
-  font-size: 12px;
+  padding: 9px 16px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
@@ -40,19 +52,23 @@
 .rp-icon-btn:focus-visible,
 .rp-link-btn:focus-visible,
 .rp-tr:focus-visible,
-.rp-nav-row:focus-visible {
-  outline: 2px solid var(--rp-accent);
+.rp-nav-row:focus-visible,
+.rp-filter-select:focus-visible {
+  outline: 2px solid var(--accent-amber);
   outline-offset: 2px;
 }
 .rp-btn:active:not(:disabled) { transform: translateY(1px); }
 .rp-btn:disabled { cursor: not-allowed; opacity: 0.5; }
 
+/* Matches .btn--amber in styles/buttons.css: accent fill, white label. */
 .rp-btn--primary {
-  background: var(--rp-accent);
-  color: var(--rp-on-accent);
-  box-shadow: 0 1px 2px rgba(19, 47, 69, 0.18);
+  background: var(--accent-amber);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
 }
-.rp-btn--primary:hover:not(:disabled) { background: var(--rp-accent-strong); }
+.rp-btn--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-amber) 88%, #000);
+}
 
 .rp-btn--secondary {
   background: var(--bg-surface);
@@ -70,15 +86,16 @@
   color: var(--text-primary);
 }
 
-.rp-btn--sm { padding: 6px 10px; font-size: 11.5px; }
+.rp-btn--sm { padding: 6px 12px; font-size: 12px; border-radius: 10px; }
 
 .rp-icon-btn {
   display: inline-flex;
-  height: 30px;
-  width: 30px;
+  height: 32px;                    /* h-8 — matches ActionButton and the
+                                      lexora / courses table row actions */
+  width: 32px;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 8px;              /* rounded-lg */
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -86,7 +103,10 @@
   transition: background-color 0.15s, color 0.15s;
 }
 .rp-icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-.rp-icon-btn--danger:hover { background: rgba(220, 38, 38, 0.1); color: var(--rp-danger); }
+.rp-icon-btn--danger:hover {
+  background: color-mix(in srgb, var(--accent-danger) 12%, transparent);
+  color: var(--rp-danger);
+}
 
 .rp-link-btn {
   border: none;
@@ -99,29 +119,43 @@
   border-radius: 4px;
   transition: color 0.15s;
 }
-.rp-link-btn:hover { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
+.rp-link-btn:hover { color: var(--accent-amber); text-decoration: underline; text-underline-offset: 3px; }
 
 /* ── Form fields ─────────────────────────────────────── */
 .rp-field {
   width: 100%;
-  border-radius: 8px;
+  border-radius: 8px;              /* rounded-lg */
   border: 1px solid var(--border);
-  background: var(--bg-surface);
+  background: var(--bg-input, var(--bg-surface));
   color: var(--text-primary);
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-.rp-field::placeholder { color: var(--text-muted, var(--text-secondary)); opacity: 0.8; }
-.rp-field:hover { border-color: var(--text-muted, var(--text-secondary)); }
+.rp-field::placeholder { color: var(--text-muted); opacity: 0.85; }
+.rp-field:hover { border-color: var(--text-muted); }
 .rp-field:focus {
-  border-color: var(--rp-accent);
+  border-color: var(--accent-amber);
   box-shadow: 0 0 0 3px var(--rp-focus);
 }
 
+/* Toolbar filter — the select every sibling management page uses. */
+.rp-filter-select {
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-input, var(--bg-surface));
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s, color 0.15s;
+}
+.rp-filter-select:hover { border-color: var(--text-muted); color: var(--text-primary); }
+
 /* ── Surfaces ────────────────────────────────────────── */
 .rp-card {
-  border: 1px solid var(--border-light);
-  border-radius: 10px;
+  border: 1px solid var(--border);   /* was --border-light + 10px radius */
+  border-radius: 12px;               /* rounded-xl */
   background: var(--bg-surface);
 }
 
@@ -134,19 +168,32 @@
   padding: 8px 10px;
   font-size: 11.5px;
   line-height: 1.45;
-  color: var(--text-secondary);
-  background: var(--bg-hover);
+  color: var(--text-primary);        /* was a fixed blue that lost contrast */
+  background: var(--bg-subtle, var(--bg-hover));
 }
 .rp-callout svg { flex-shrink: 0; margin-top: 1px; }
 .rp-callout--warn {
-  background: rgba(238, 162, 58, 0.12);
-  border-color: rgba(61, 58, 238, 0.4);
-  color: #0f349a;
+  background: color-mix(in srgb, var(--accent-gold) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 40%, transparent);
 }
+.rp-callout--warn svg { color: var(--accent-gold); }
 .rp-callout--danger {
-  background: rgba(220, 38, 38, 0.07);
-  border-color: rgba(220, 38, 38, 0.25);
-  color: #b91c1c;
+  background: color-mix(in srgb, var(--accent-danger) 8%, transparent);
+  border-color: color-mix(in srgb, var(--accent-danger) 30%, transparent);
+}
+.rp-callout--danger svg { color: var(--rp-danger); }
+
+/* Dashed empty-state panel, matching the other pages' empty states. */
+.rp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+  background: var(--bg-surface);
+  padding: 48px 24px;
+  text-align: center;
 }
 
 /* ── Badges ──────────────────────────────────────────── */
@@ -155,8 +202,9 @@
   align-items: center;
   gap: 5px;
   border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 10.5px;
+  border: 1px solid transparent;
+  padding: 2px 9px;
+  font-size: 11px;                  /* was 10.5px */
   font-weight: 600;
   line-height: 1.5;
   white-space: nowrap;
@@ -169,10 +217,10 @@
   background: currentColor;
 }
 .rp-badge--plain::before { display: none; }
-.rp-badge--ok     { background: rgba(34, 197, 94, 0.14);  color: var(--rp-success); }
-.rp-badge--off    { background: rgba(220, 38, 38, 0.12);  color: var(--rp-danger); }
-.rp-badge--accent { background: rgba(238, 162, 58, 0.18); color: #0f249a; }
-.rp-badge--muted  { background: var(--bg-hover);          color: var(--text-secondary); }
+.rp-badge--ok     { background: rgba(34, 197, 94, 0.14);  border-color: rgba(34, 197, 94, 0.30);  color: var(--rp-success); }
+.rp-badge--off    { background: color-mix(in srgb, var(--accent-danger) 12%, transparent); border-color: color-mix(in srgb, var(--accent-danger) 26%, transparent); color: var(--rp-danger); }
+.rp-badge--accent { background: var(--rp-accent-soft); border-color: var(--rp-focus); color: var(--accent-amber); }
+.rp-badge--muted  { background: var(--bg-hover);        border-color: var(--border-light);        color: var(--text-secondary); }
 
 /* ── Roles table ─────────────────────────────────────── */
 .rp-tr {
@@ -195,8 +243,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  background: rgba(58, 91, 238, 0.16);
-  color: #172fb8;
+  background: var(--rp-accent-soft);
+  color: var(--accent-amber);
 }
 
 /* ── Permission grid ─────────────────────────────────── */
@@ -207,7 +255,7 @@
   transition: box-shadow 0.15s, background-color 0.15s;
 }
 .rp-perm-row:first-child { border-top: none; }
-.rp-perm-row[data-granted="true"] { box-shadow: inset 3px 0 0 var(--rp-accent); }
+.rp-perm-row[data-granted="true"] { box-shadow: inset 3px 0 0 var(--accent-amber); }
 
 .rp-actions-grid {
   display: grid;
@@ -220,12 +268,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 5px 8px;
   background: var(--bg-hover);
   transition: background-color 0.15s;
 }
-.rp-action-cell[data-on="true"] { background: rgba(90, 92, 250, 0.14); }
+.rp-action-cell[data-on="true"] { background: var(--rp-accent-soft); }
 
 /* ── Navigation rows (drawer lists) ──────────────────── */
 .rp-nav-row {
