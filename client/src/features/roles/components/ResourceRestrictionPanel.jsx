@@ -1,6 +1,7 @@
-import { Search } from "lucide-react";
+import { Search, Ban, Globe2 } from "lucide-react";
 import Toggle from "../../../components/ui/Toggle";
 import { ENTITY_TYPE_CONFIG, ENTITY_TYPES } from "../utils/rolesPermissionHelpers";
+import "./rolesUi.css";
 
 /**
  * Access Restrictions panel — per-entity-type scope control.
@@ -16,13 +17,29 @@ export default function ResourceRestrictionPanel({
   onRecordToggle,
   onSearch,
 }) {
+  const shownTypes = ENTITY_TYPES.filter((t) => visibleTypes.includes(t) && entityStates?.[t]);
+
   return (
-    <div className="space-y-6">
-      {ENTITY_TYPES.map((entityType) => {
-        if (!visibleTypes.includes(entityType)) return null;
+    <div className="space-y-4">
+      <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+        By default a user can reach every record their permissions allow. Turn a type off to block it, or
+        narrow it to specific records.
+      </p>
+
+      {shownTypes.length === 0 && (
+        <div className="rp-card px-4 py-10 text-center">
+          <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+            Nothing to restrict
+          </p>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+            Grant this user a permission first, and its records will appear here.
+          </p>
+        </div>
+      )}
+
+      {shownTypes.map((entityType) => {
         const config = ENTITY_TYPE_CONFIG[entityType];
-        const state = entityStates?.[entityType];
-        if (!state) return null;
+        const state = entityStates[entityType];
 
         const isDenied = state.scope === "denied";
         const isSelected = state.scope === "selected";
@@ -34,94 +51,101 @@ export default function ResourceRestrictionPanel({
         });
 
         return (
-          <div key={entityType} className="space-y-2">
+          <section key={entityType} className="rp-card overflow-hidden">
             <div
-              className="flex items-center justify-between pb-2"
-              style={{ borderBottom: "1px solid var(--border-light)" }}
+              className="flex items-center justify-between gap-3 px-3 py-2.5"
+              style={{ background: "var(--bg-hover)" }}
             >
-              <h4 className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                {config.label}
-              </h4>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px]" style={{ color: "var(--text-secondary)" }}>
+              <div className="flex min-w-0 items-center gap-2">
+                <h4 className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {config.label}
+                </h4>
+                <span
+                  className={`rp-badge ${isDenied ? "rp-badge--off" : isSelected ? "rp-badge--accent" : "rp-badge--ok"}`}
+                >
                   {isDenied ? "Denied" : isSelected ? "Only selected" : "All"}
                 </span>
-                <Toggle
-                  checked={!isDenied}
-                  onCheckedChange={() => onScopeToggle(entityType)}
-                  size="sm"
-                  aria-label={`Toggle access to all ${config.label}`}
-                />
               </div>
+              <Toggle
+                checked={!isDenied}
+                onCheckedChange={() => onScopeToggle(entityType)}
+                size="sm"
+                aria-label={`Toggle access to all ${config.label}`}
+              />
             </div>
 
-            {isDenied ? (
-              <p className="py-2 text-xs" style={{ color: "#dc2626" }}>
-                Access to all {config.label.toLowerCase()} is denied for this user.
-              </p>
-            ) : isSelected ? (
-              <>
-                <div className="relative">
-                  <Search
-                    size={13}
-                    className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2"
-                    style={{ color: "var(--text-secondary)" }}
-                    aria-hidden="true"
-                  />
-                  <input
-                    type="text"
-                    placeholder={`Search ${config.label.toLowerCase()}…`}
-                    value={state.search}
-                    onChange={(e) => onSearch(entityType, e.target.value)}
-                    aria-label={`Search ${config.label}`}
-                    className="w-full rounded-lg py-1.5 pl-8 pr-2 text-xs outline-none"
-                    style={{
-                      background: "var(--bg-surface)",
-                      border: "1px solid var(--border)",
-                      color: "var(--text-primary)",
-                    }}
-                  />
+            <div className="space-y-2 p-3">
+              {isDenied ? (
+                <div className="rp-callout rp-callout--danger" role="status">
+                  <Ban size={14} aria-hidden="true" />
+                  <span>Access to all {config.label.toLowerCase()} is denied for this user.</span>
                 </div>
+              ) : isSelected ? (
+                <>
+                  <div className="relative">
+                    <Search
+                      size={13}
+                      className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2"
+                      style={{ color: "var(--text-secondary)" }}
+                      aria-hidden="true"
+                    />
+                    <input
+                      type="text"
+                      placeholder={`Search ${config.label.toLowerCase()}…`}
+                      value={state.search}
+                      onChange={(e) => onSearch(entityType, e.target.value)}
+                      aria-label={`Search ${config.label}`}
+                      className="rp-field py-2 pl-8 pr-2 text-xs"
+                    />
+                  </div>
 
-                <div className="max-h-60 space-y-0.5 overflow-y-auto">
-                  {filteredEntities.map((entity) => (
-                    <div
-                      key={entity.id}
-                      className="flex items-center justify-between py-1"
-                      style={{ borderBottom: "1px solid var(--border-light)" }}
-                    >
-                      <span
-                        className="max-w-[220px] truncate text-xs"
-                        style={{ color: "var(--text-primary)" }}
-                        title={entity.label}
-                      >
-                        {entity.label || `#${entity.id}`}
-                      </span>
-                      <Toggle
-                        checked={state.selectedIds.has(entity.id)}
-                        onCheckedChange={() => onRecordToggle(entityType, entity.id)}
-                        size="sm"
-                        aria-label={`Access to ${entity.label || entity.id}`}
-                      />
-                    </div>
-                  ))}
-                  {filteredEntities.length === 0 && (
-                    <p className="py-2 text-xs" style={{ color: "var(--text-secondary)" }}>
-                      No {config.label.toLowerCase()} found
-                    </p>
-                  )}
+                  <div className="max-h-60 overflow-y-auto rounded-lg" style={{ border: "1px solid var(--border-light)" }}>
+                    {filteredEntities.map((entity) => {
+                      const checked = state.selectedIds.has(entity.id);
+                      return (
+                        <div
+                          key={entity.id}
+                          className="flex items-center justify-between gap-3 px-3 py-2"
+                          style={{
+                            borderTop: "1px solid var(--border-light)",
+                            background: checked ? "rgba(238, 162, 58, 0.1)" : "transparent",
+                          }}
+                        >
+                          <span
+                            className="min-w-0 truncate text-xs"
+                            style={{ color: "var(--text-primary)" }}
+                            title={entity.label}
+                          >
+                            {entity.label || `#${entity.id}`}
+                          </span>
+                          <Toggle
+                            checked={checked}
+                            onCheckedChange={() => onRecordToggle(entityType, entity.id)}
+                            size="sm"
+                            aria-label={`Access to ${entity.label || entity.id}`}
+                          />
+                        </div>
+                      );
+                    })}
+                    {filteredEntities.length === 0 && (
+                      <p className="px-3 py-5 text-center text-xs" style={{ color: "var(--text-secondary)" }}>
+                        No {config.label.toLowerCase()} found
+                      </p>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] tabular-nums" style={{ color: "var(--text-secondary)" }} aria-live="polite">
+                    {state.selectedIds.size} of {state.entities.length} selected
+                  </p>
+                </>
+              ) : (
+                <div className="rp-callout" role="status">
+                  <Globe2 size={14} aria-hidden="true" />
+                  <span>This user has access to all {config.label.toLowerCase()}.</span>
                 </div>
-
-                <p className="text-[11px]" style={{ color: "var(--text-secondary)" }}>
-                  {state.selectedIds.size} of {state.entities.length} selected
-                </p>
-              </>
-            ) : (
-              <p className="py-2 text-xs" style={{ color: "var(--text-secondary)" }}>
-                This user has access to all {config.label.toLowerCase()}.
-              </p>
-            )}
-          </div>
+              )}
+            </div>
+          </section>
         );
       })}
     </div>

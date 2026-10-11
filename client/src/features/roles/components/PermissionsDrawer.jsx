@@ -1,14 +1,20 @@
-import { Loader2, ChevronLeft } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, X, CheckCheck, RotateCcw, ShieldCheck, Info } from "lucide-react";
 import PermissionGrid from "./PermissionGrid";
 import ResourceRestrictionPanel from "./ResourceRestrictionPanel";
 import { getInitials, getAvatarColor } from "../utils/roleUtils";
-
-const linkClass = "text-xs font-medium transition-colors";
+import "./rolesUi.css";
 
 function headerTitle(drawerMode, editRole, editUser) {
   if (drawerMode === "editRole") return `Edit: ${editRole?.display_name || editRole?.name || ""}`;
   if (drawerMode === "editUser") return `Edit User: ${editUser?.full_name || editUser?.email || ""}`;
   if (drawerMode === "accessRestrictions") return `Access Restrictions for ${editUser?.full_name || editUser?.email || ""}`;
+  return "";
+}
+
+function headerSubtitle(drawerMode, editRole, editUser) {
+  if (drawerMode === "editRole") return editRole?.name ? `Role · ${editRole.name}` : "Role permissions";
+  if (drawerMode === "editUser") return editUser?.email || "User permissions";
+  if (drawerMode === "accessRestrictions") return "Limit which records this user can reach";
   return "";
 }
 
@@ -19,6 +25,9 @@ function headerTitle(drawerMode, editRole, editUser) {
  *  editUser            → role picker, Grant all / Reset to role defaults,
  *                        action grid, and a link into Access Restrictions
  *  accessRestrictions  → per-entity-type scope control
+ *
+ * Layout: fixed header, one scrolling body, fixed footer with the actions,
+ * so Save is always in reach however long the permission list gets.
  */
 export default function PermissionsDrawer({
   drawerMode,
@@ -49,65 +58,62 @@ export default function PermissionsDrawer({
   onOpenUserEditor,
   onBackToEditUser,
 }) {
-  const links = [{ label: "Manage Access Restrictions →", onClick: onManageAccessRestrictions }];
+  const isRestrictions = drawerMode === "accessRestrictions";
+  const subtitle = headerSubtitle(drawerMode, editRole, editUser);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* ── Header ─────────────────────────────────────────── */}
       <header
-        className="flex shrink-0 items-center justify-between px-4 py-3"
+        className="flex shrink-0 items-center justify-between gap-3 px-4 py-3"
         style={{ borderBottom: "1px solid var(--border-light)" }}
       >
         <div className="flex min-w-0 items-center gap-2">
-          {drawerMode === "accessRestrictions" && (
+          {isRestrictions && (
             <button
+              type="button"
               onClick={onBackToEditUser}
               aria-label="Back to user permissions"
-              className="shrink-0 rounded-lg p-1"
-              style={{ color: "var(--text-secondary)" }}
+              className="rp-icon-btn shrink-0"
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={18} aria-hidden="true" />
             </button>
           )}
-          <h3 className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-            {headerTitle(drawerMode, editRole, editUser)}
-          </h3>
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              {headerTitle(drawerMode, editRole, editUser)}
+            </h3>
+            {subtitle && (
+              <p className="truncate text-[11px]" style={{ color: "var(--text-secondary)" }}>
+                {subtitle}
+              </p>
+            )}
+          </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-3 text-xs">
-          {drawerMode === "accessRestrictions" ? (
-            <button onClick={onBackToEditUser} className={linkClass} style={{ color: "var(--text-secondary)" }}>
-              Done
-            </button>
-          ) : (
-            <>
-              <button onClick={onCancel} className={linkClass} style={{ color: "var(--text-secondary)" }}>
-                Cancel
-              </button>
-              <button
-                onClick={onSave}
-                disabled={saving}
-                className="rounded-lg px-3 py-1.5 font-semibold text-white transition-opacity duration-150 disabled:cursor-not-allowed disabled:opacity-40"
-                style={{ background: "#EEA23A" }}
-              >
-                {saving ? "Saving…" : "Save"}
-              </button>
-            </>
-          )}
-        </div>
+        {!isRestrictions && (
+          <button type="button" onClick={onCancel} aria-label="Close without saving" className="rp-icon-btn shrink-0">
+            <X size={16} aria-hidden="true" />
+          </button>
+        )}
       </header>
 
       {/* ── Body ───────────────────────────────────────────── */}
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+      <main className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {drawerLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin" style={{ color: "var(--text-secondary)" }} />
+          <div
+            className="flex flex-col items-center justify-center gap-2 py-16"
+            role="status"
+            style={{ color: "var(--text-secondary)" }}
+          >
+            <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
+            <span className="text-xs">Loading permissions…</span>
           </div>
         ) : (
           <>
             {/* ── Role editor ────────────────────────────────── */}
             {drawerMode === "editRole" && (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <PermissionGrid
                   permStates={rolePermStates}
                   onToggleAction={onRoleActionToggle}
@@ -116,49 +122,54 @@ export default function PermissionsDrawer({
                   ]}
                 />
 
-                <div className="pt-4" style={{ borderTop: "1px solid var(--border-light)" }}>
-                  <h4 className="mb-2 text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
-                    Users with this Role ({editRoleUsers.length})
-                  </h4>
+                <section aria-labelledby="role-users-heading">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h4 id="role-users-heading" className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+                      Users with this role
+                    </h4>
+                    <span className="rp-badge rp-badge--plain rp-badge--muted tabular-nums">{editRoleUsers.length}</span>
+                  </div>
 
                   {editRoleUsers.length === 0 ? (
-                    <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                      No users assigned to this role
-                    </p>
+                    <div className="rp-card px-4 py-6 text-center">
+                      <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                        No users assigned to this role
+                      </p>
+                    </div>
                   ) : (
-                    <div className="space-y-1">
+                    <div className="rp-card space-y-0.5 p-1">
                       {editRoleUsers.map((u) => (
-                        <button
-                          key={u.id}
-                          onClick={() => onOpenUserEditor(u)}
-                          className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors"
-                          style={{ color: "var(--text-primary)" }}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                        >
+                        <button key={u.id} type="button" onClick={() => onOpenUserEditor(u)} className="rp-nav-row">
                           <span
-                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
                             style={{ background: getAvatarColor(u.full_name || u.email) }}
+                            aria-hidden="true"
                           >
                             {getInitials(u.full_name || u.email)}
                           </span>
-                          <span className="min-w-0">
+                          <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-medium">{u.full_name || "—"}</span>
                             <span className="block truncate text-[11px]" style={{ color: "var(--text-secondary)" }}>
                               {u.email || "—"}
                             </span>
                           </span>
+                          <ChevronRight
+                            size={15}
+                            className="rp-chev shrink-0"
+                            aria-hidden="true"
+                            style={{ color: "var(--text-secondary)" }}
+                          />
                         </button>
                       ))}
                     </div>
                   )}
-                </div>
+                </section>
               </div>
             )}
 
             {/* ── User editor ────────────────────────────────── */}
             {drawerMode === "editUser" && (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div>
                   <label
                     htmlFor="drawer-role-select"
@@ -171,12 +182,7 @@ export default function PermissionsDrawer({
                     id="drawer-role-select"
                     value={editUserNewRoleName || ""}
                     onChange={(e) => onRoleChange(e.target.value)}
-                    className="w-full rounded-lg px-3 py-2 text-xs outline-none"
-                    style={{
-                      background: "var(--bg-surface)",
-                      border: "1px solid var(--border)",
-                      color: "var(--text-primary)",
-                    }}
+                    className="rp-field px-3 py-2.5 text-sm"
                   >
                     {(roles || []).filter((r) => r.is_active !== false).map((r) => (
                       <option key={r.name} value={r.name}>
@@ -185,35 +191,41 @@ export default function PermissionsDrawer({
                     ))}
                   </select>
                   {editUserNewRoleName !== editUserOriginalRole && (
-                    <p className="mt-1 text-[11px]" style={{ color: "#b87a1a" }}>
-                      Role will change on save. Existing overrides are kept only where the new role grants them.
-                    </p>
+                    <div className="rp-callout rp-callout--warn mt-2" role="status">
+                      <Info size={14} aria-hidden="true" />
+                      <span>Role will change on save. Existing overrides are kept only where the new role grants them.</span>
+                    </div>
                   )}
                 </div>
 
-                <div className="flex gap-4 text-xs">
-                  <button onClick={onGrantAll} className={linkClass} style={{ color: "var(--text-secondary)" }}>
-                    Grant all
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={onGrantAll} className="rp-btn rp-btn--secondary rp-btn--sm">
+                    <CheckCheck size={14} aria-hidden="true" /> Grant all
                   </button>
-                  <button onClick={onResetDefaults} className={linkClass} style={{ color: "var(--text-secondary)" }}>
-                    Reset to role defaults
+                  <button type="button" onClick={onResetDefaults} className="rp-btn rp-btn--secondary rp-btn--sm">
+                    <RotateCcw size={13} aria-hidden="true" /> Reset to role defaults
                   </button>
                 </div>
 
                 <PermissionGrid permStates={userPermStates} onToggleAction={onUserActionToggle} />
 
-                <button
-                  onClick={onManageAccessRestrictions}
-                  className="pt-2 text-xs font-medium"
-                  style={{ color: "var(--text-secondary)", borderTop: "1px solid var(--border-light)", width: "100%", textAlign: "left" }}
-                >
-                  Manage Access Restrictions →
+                <button type="button" onClick={onManageAccessRestrictions} className="rp-card rp-nav-row" style={{ padding: 12 }}>
+                  <span className="rp-role-tile" aria-hidden="true">
+                    <ShieldCheck size={16} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">Manage Access Restrictions</span>
+                    <span className="block text-[11px]" style={{ color: "var(--text-secondary)" }}>
+                      Limit this user to specific records
+                    </span>
+                  </span>
+                  <ChevronRight size={16} className="rp-chev shrink-0" aria-hidden="true" style={{ color: "var(--text-secondary)" }} />
                 </button>
               </div>
             )}
 
             {/* ── Access restrictions ─────────────────────────── */}
-            {drawerMode === "accessRestrictions" && (
+            {isRestrictions && (
               <ResourceRestrictionPanel
                 entityStates={entityStates}
                 visibleTypes={visibleEntityTypes}
@@ -225,6 +237,39 @@ export default function PermissionsDrawer({
           </>
         )}
       </main>
+
+      {/* ── Footer actions ─────────────────────────────────── */}
+      <footer
+        className="flex shrink-0 items-center justify-end gap-2 px-4 py-3"
+        style={{ borderTop: "1px solid var(--border-light)", background: "var(--bg-surface)" }}
+      >
+        {isRestrictions ? (
+          <button type="button" onClick={onBackToEditUser} className="rp-btn rp-btn--primary" style={{ minWidth: 88 }}>
+            Done
+          </button>
+        ) : (
+          <>
+            <button type="button" onClick={onCancel} className="rp-btn rp-btn--ghost">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving}
+              className="rp-btn rp-btn--primary"
+              style={{ minWidth: 88 }}
+            >
+              {saving ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Saving…
+                </>
+              ) : (
+                "Save"
+              )}
+            </button>
+          </>
+        )}
+      </footer>
     </div>
   );
 }

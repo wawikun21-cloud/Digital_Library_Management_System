@@ -1,0 +1,263 @@
+/* ─────────────────────────────────────────────────────────
+   Roles & Permissions — shared UI primitives.
+
+   Inline styles can't express hover / focus / active states, so those live
+   here. Everything reads the app's existing tokens (--bg-*, --text-*,
+   --border*); only the brand accent is defined locally, so changing it is
+   a one-line edit.
+
+   Lives next to the roles components it styles — it is feature-specific,
+   so it is not a global stylesheet in src/styles/.
+   ───────────────────────────────────────────────────────── */
+
+:root {
+  --rp-accent: #26446b;
+  --rp-accent-strong: #327cd1;
+  --rp-on-accent: #ffffff;          /* navy on amber: ~7:1, white on amber is ~2:1 */
+  --rp-focus: rgba(58, 85, 238, 0.38);
+  --rp-danger: #dc2626;
+  --rp-success: #16a34a;
+}
+
+/* ── Buttons ─────────────────────────────────────────── */
+.rp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s,
+    box-shadow 0.15s, transform 0.1s;
+}
+.rp-btn:focus-visible,
+.rp-icon-btn:focus-visible,
+.rp-link-btn:focus-visible,
+.rp-tr:focus-visible,
+.rp-nav-row:focus-visible {
+  outline: 2px solid var(--rp-accent);
+  outline-offset: 2px;
+}
+.rp-btn:active:not(:disabled) { transform: translateY(1px); }
+.rp-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+
+.rp-btn--primary {
+  background: var(--rp-accent);
+  color: var(--rp-on-accent);
+  box-shadow: 0 1px 2px rgba(19, 47, 69, 0.18);
+}
+.rp-btn--primary:hover:not(:disabled) { background: var(--rp-accent-strong); }
+
+.rp-btn--secondary {
+  background: var(--bg-surface);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+.rp-btn--secondary:hover:not(:disabled) { background: var(--bg-hover); }
+
+.rp-btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+.rp-btn--ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.rp-btn--sm { padding: 6px 10px; font-size: 11.5px; }
+
+.rp-icon-btn {
+  display: inline-flex;
+  height: 30px;
+  width: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+.rp-icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.rp-icon-btn--danger:hover { background: rgba(220, 38, 38, 0.1); color: var(--rp-danger); }
+
+.rp-link-btn {
+  border: none;
+  background: none;
+  padding: 2px 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.rp-link-btn:hover { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── Form fields ─────────────────────────────────────── */
+.rp-field {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.rp-field::placeholder { color: var(--text-muted, var(--text-secondary)); opacity: 0.8; }
+.rp-field:hover { border-color: var(--text-muted, var(--text-secondary)); }
+.rp-field:focus {
+  border-color: var(--rp-accent);
+  box-shadow: 0 0 0 3px var(--rp-focus);
+}
+
+/* ── Surfaces ────────────────────────────────────────── */
+.rp-card {
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-surface);
+}
+
+.rp-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+  padding: 8px 10px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+.rp-callout svg { flex-shrink: 0; margin-top: 1px; }
+.rp-callout--warn {
+  background: rgba(238, 162, 58, 0.12);
+  border-color: rgba(61, 58, 238, 0.4);
+  color: #0f349a;
+}
+.rp-callout--danger {
+  background: rgba(220, 38, 38, 0.07);
+  border-color: rgba(220, 38, 38, 0.25);
+  color: #b91c1c;
+}
+
+/* ── Badges ──────────────────────────────────────────── */
+.rp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.rp-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.rp-badge--plain::before { display: none; }
+.rp-badge--ok     { background: rgba(34, 197, 94, 0.14);  color: var(--rp-success); }
+.rp-badge--off    { background: rgba(220, 38, 38, 0.12);  color: var(--rp-danger); }
+.rp-badge--accent { background: rgba(238, 162, 58, 0.18); color: #0f249a; }
+.rp-badge--muted  { background: var(--bg-hover);          color: var(--text-secondary); }
+
+/* ── Roles table ─────────────────────────────────────── */
+.rp-tr {
+  cursor: pointer;
+  border-top: 1px solid var(--border-light);
+  transition: background-color 0.12s;
+}
+.rp-tr:hover { background: var(--bg-hover); }
+.rp-tr:focus-visible { outline-offset: -2px; }
+.rp-chev { opacity: 0.45; transition: transform 0.15s, opacity 0.15s; }
+.rp-tr:hover .rp-chev,
+.rp-tr:focus-visible .rp-chev,
+.rp-nav-row:hover .rp-chev { opacity: 1; transform: translateX(2px); }
+
+.rp-role-tile {
+  display: flex;
+  height: 32px;
+  width: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(58, 91, 238, 0.16);
+  color: #172fb8;
+}
+
+/* ── Permission grid ─────────────────────────────────── */
+.rp-perm-row {
+  padding: 10px 12px 10px 14px;
+  border-top: 1px solid var(--border-light);
+  box-shadow: inset 3px 0 0 transparent;
+  transition: box-shadow 0.15s, background-color 0.15s;
+}
+.rp-perm-row:first-child { border-top: none; }
+.rp-perm-row[data-granted="true"] { box-shadow: inset 3px 0 0 var(--rp-accent); }
+
+.rp-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+.rp-action-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: var(--bg-hover);
+  transition: background-color 0.15s;
+}
+.rp-action-cell[data-on="true"] { background: rgba(90, 92, 250, 0.14); }
+
+/* ── Navigation rows (drawer lists) ──────────────────── */
+.rp-nav-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  padding: 8px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: background-color 0.12s;
+}
+.rp-nav-row:hover { background: var(--bg-hover); }
+
+/* ── Loading skeleton ────────────────────────────────── */
+.rp-skeleton {
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--bg-hover) 25%, var(--border-light) 50%, var(--bg-hover) 75%);
+  background-size: 200% 100%;
+  animation: rp-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes rp-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-skeleton { animation: none; }
+  .rp-btn, .rp-icon-btn, .rp-chev, .rp-tr, .rp-field { transition: none; }
+  .rp-btn:active:not(:disabled) { transform: none; }
+}

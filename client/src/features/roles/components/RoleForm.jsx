@@ -1,3 +1,6 @@
+import { Loader2 } from "lucide-react";
+import "./rolesUi.css";
+
 /**
  * Metadata form for Add / Edit Role. Permissions are edited in the drawer,
  * not here — this only covers name, display name and description.
@@ -13,6 +16,9 @@ export default function RoleForm({
 }) {
   const set = (field) => (e) => setFormData({ ...formData, [field]: e.target.value });
 
+  const labelClass = "mb-1.5 block text-xs font-semibold";
+  const hintClass = "mt-1.5 text-[11px] leading-snug";
+
   return (
     <form
       onSubmit={(e) => { e.preventDefault(); onSave(); }}
@@ -20,7 +26,7 @@ export default function RoleForm({
     >
       {showName && (
         <div>
-          <label htmlFor="role-name" className="mb-1.5 block text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+          <label htmlFor="role-name" className={labelClass} style={{ color: "var(--text-primary)" }}>
             Role name
           </label>
           <input
@@ -29,17 +35,20 @@ export default function RoleForm({
             onChange={set("name")}
             placeholder="e.g. research_assistant"
             autoComplete="off"
-            className="w-full rounded-lg px-3 py-2 font-mono text-xs outline-none"
-            style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+            autoCapitalize="none"
+            spellCheck={false}
+            autoFocus
+            aria-describedby="role-name-hint"
+            className="rp-field px-3 py-2.5 font-mono text-xs"
           />
-          <p className="mt-1 text-[11px]" style={{ color: "var(--text-secondary)" }}>
+          <p id="role-name-hint" className={hintClass} style={{ color: "var(--text-secondary)" }}>
             Lowercase letters, digits and underscores. Used internally — not shown to users.
           </p>
         </div>
       )}
 
       <div>
-        <label htmlFor="role-display-name" className="mb-1.5 block text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+        <label htmlFor="role-display-name" className={labelClass} style={{ color: "var(--text-primary)" }}>
           Display name
         </label>
         <input
@@ -47,14 +56,18 @@ export default function RoleForm({
           value={formData.display_name || ""}
           onChange={set("display_name")}
           placeholder="e.g. Research Assistant"
-          className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+          autoFocus={!showName}
+          aria-describedby="role-display-hint"
+          className="rp-field px-3 py-2.5 text-sm"
         />
+        <p id="role-display-hint" className={hintClass} style={{ color: "var(--text-secondary)" }}>
+          The name people see in lists and menus.
+        </p>
       </div>
 
       <div>
-        <label htmlFor="role-description" className="mb-1.5 block text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
-          Description
+        <label htmlFor="role-description" className={labelClass} style={{ color: "var(--text-primary)" }}>
+          Description <span className="font-normal" style={{ color: "var(--text-secondary)" }}>(optional)</span>
         </label>
         <textarea
           id="role-description"
@@ -62,27 +75,25 @@ export default function RoleForm({
           onChange={set("description")}
           rows={3}
           placeholder="What this role is for."
-          className="w-full resize-none rounded-lg px-3 py-2 text-sm outline-none"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+          className="rp-field resize-none px-3 py-2.5 text-sm"
         />
       </div>
 
-      <div className="flex justify-end gap-2 pt-1">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-lg px-3 py-2 text-xs font-medium transition-colors duration-150"
-          style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
-        >
+      <div
+        className="flex flex-col-reverse gap-2 pt-3 sm:flex-row sm:justify-end"
+        style={{ borderTop: "1px solid var(--border-light)" }}
+      >
+        <button type="button" onClick={onCancel} className="rp-btn rp-btn--ghost">
           Cancel
         </button>
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-lg px-4 py-2 text-xs font-semibold text-white transition-opacity duration-150 disabled:cursor-not-allowed disabled:opacity-40"
-          style={{ background: "#EEA23A" }}
-        >
-          {saving ? "Saving…" : submitLabel}
+        <button type="submit" disabled={saving} className="rp-btn rp-btn--primary" style={{ minWidth: 112 }}>
+          {saving ? (
+            <>
+              <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Saving…
+            </>
+          ) : (
+            submitLabel
+          )}
         </button>
       </div>
     </form>

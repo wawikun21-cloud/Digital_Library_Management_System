@@ -1,29 +1,40 @@
 /* ── Topbar ───────────────────────────────────── */
 .topbar {
+  --tb-navy: #132F45;
+  --tb-teal: #32667F;
+  --tb-amber: #EEA23A;
+  --tb-hover: #f0f7ff;
+
   height: 58px;
   background: #ffffff;
   border-bottom: 1px solid #e8ecf0;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 0 24px;
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: 50; /* drawer sits above at 60 */
   box-shadow: 0 1px 4px rgba(19, 47, 69, 0.07);
 }
 
 .topbar-title {
   font-size: 15px;
   font-weight: 600;
-  color: #132F45;
+  color: var(--tb-navy, #132F45);
   margin: 0;
   letter-spacing: 0.1px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Profile */
 .topbar-right {
   position: relative;
+  flex-shrink: 0;
 }
 
 .profile-wrapper {
@@ -41,18 +52,27 @@
   background: #f0f7ff;
 }
 
+.profile-wrapper:active {
+  background: #e3f0fc;
+}
+
 .profile-avatar {
   width: 32px;
   height: 32px;
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid #EEA23A;
+  flex-shrink: 0;
 }
 
 .profile-name {
   font-size: 13px;
   font-weight: 600;
   color: #132F45;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chevron {
@@ -69,12 +89,14 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
+  z-index: 1;
   background: #ffffff;
   border: 1px solid #dde8ef;
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(19, 47, 69, 0.12);
-  width: 160px;
+  width: 168px;
   padding: 6px;
+  transform-origin: top right;
   animation: fadeInDown 0.15s ease;
 }
 
@@ -88,15 +110,16 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 9px 10px;
   border: none;
   background: none;
   font-size: 13px;
+  font-weight: 500;
   color: #132F45;
   border-radius: 6px;
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s;
+  transition: background 0.12s, color 0.12s;
 }
 
 .dropdown-item:hover {
@@ -124,6 +147,7 @@
   display: flex;
   align-items: center;
   gap: 14px;
+  min-width: 0;
 }
 
 .hamburger {
@@ -143,5 +167,38 @@
 
 .hamburger:hover {
   background: rgba(238, 162, 58, 0.12);
-  color: #EEA23A;
+  color: #0f12b9; /* darker amber: the plain amber is too light for an icon on white */
+}
+
+.hamburger:active {
+  background: rgba(238, 162, 58, 0.22);
+}
+
+/* ── Keyboard focus ───────────────────────────── */
+.hamburger:focus-visible,
+.profile-wrapper:focus-visible,
+.dropdown-item:focus-visible {
+  outline: 2px solid #EEA23A;
+  outline-offset: 2px;
+}
+
+.dropdown-item:focus-visible {
+  outline-offset: -2px;
+  background: #f0f7ff;
+}
+
+/* ── Small screens ────────────────────────────── */
+@media (max-width: 640px) {
+  .topbar { padding: 0 12px; }
+  .topbar-left { gap: 8px; }
+  .profile-name { display: none; }
+  .hamburger { width: 40px; height: 40px; } /* comfortable touch target */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-menu { animation: none; }
+  .chevron,
+  .profile-wrapper,
+  .hamburger,
+  .dropdown-item { transition: none; }
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchUsers } from "../../users";
+import { fetchUsers, fetchUserById } from "../../users";
 import * as rolesApi from "../api/rolesApi";
 import {
   computeRolePermState,
@@ -109,7 +109,9 @@ export function useRolesManager({ onFeedback } = {}) {
     try {
       const [roleRes, usersRes] = await Promise.all([
         rolesApi.getRole(role.name),
-        fetchUsers({ role: role.name, limit: 200 }),
+        // 100 is the maximum the users list endpoint accepts (validateListQuery
+        // rejects anything above it with a 400).
+        fetchUsers({ role: role.name, limit: 100 }),
       ]);
       const roleData = roleRes.data;
       setEditRole(roleData);
@@ -168,12 +170,18 @@ export function useRolesManager({ onFeedback } = {}) {
     setEntityDataLoaded(false);
     try {
       const [userRes, permRes, entityRes] = await Promise.all([
-        fetchUsers({ limit: 500 }),
+        // Fetch the one target user directly — listing every user to find a
+        // single id both exceeded the list endpoint's 100-row cap and scaled
+        // with total user count.
+        fetchUserById(userId),
         rolesApi.getUserPermissions(userId),
         rolesApi.getUserEntityOverrides(userId),
       ]);
-      const target = (userRes.data || []).find((u) => Number(u.id) === Number(userId));
-      if (!target) throw new Error("User not found");
+      // A non-2xx response comes back as { success:false, error } rather than
+      // throwing, so surface the server's message instead of a misleading
+      // "User not found".
+      const target = userRes?.data;
+      if (!target) throw new Error(userRes?.error || "User not found");
 
       const overrides = Object.entries(permRes.data?.overrides || {}).map(([permission_name, o]) => ({
         permission_name,
