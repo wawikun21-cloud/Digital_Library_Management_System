@@ -648,6 +648,8 @@ async function migrateSchema(conn) {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
     // ── lexora_book_pages (image-page books) ─────────────
+    // The media-access check answers "is this image one of the book's pages?"
+    // per request, so it needs book_id + image_url to be searchable together.
     `CREATE TABLE IF NOT EXISTS lexora_book_pages (
       id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
       book_id INT NOT NULL,
@@ -658,8 +660,13 @@ async function migrateSchema(conn) {
       updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uq_lexora_book_page (book_id, page_number),
       KEY idx_lexora_pages_book (book_id),
+      KEY idx_lexora_pages_book_url (book_id, image_url),
       CONSTRAINT fk_lexora_pages_book FOREIGN KEY (book_id) REFERENCES lexora_books(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // Added after the table above first shipped: keeps the per-request page
+    // ownership lookup an index hit instead of a scan of the book's pages.
+    `ALTER TABLE lexora_book_pages ADD INDEX idx_lexora_pages_book_url (book_id, image_url)`,
 
     // ── lexora_bookmarks ─────────────────────────────────
     `CREATE TABLE IF NOT EXISTS lexora_bookmarks (

@@ -17,7 +17,7 @@ export default function LexoraBookDetails() {
   const [searchParams] = useSearchParams()
   const isPreview = searchParams.get("preview") === "1"
   const { isAuthenticated, hasPermissionAction } = useAuth()
-const canRead = hasPermissionAction("view_lexora_books", "read")
+  const canRead = hasPermissionAction("view_lexora_books", "read")
   const [book, setBook]         = useState(null)
   const [lastReadPage, setLastReadPage] = useState(null)
   const [loading, setLoading]   = useState(true)
@@ -125,7 +125,10 @@ const canRead = hasPermissionAction("view_lexora_books", "read")
   }
 
   const coverUrl = book.cover_url || book.thumbnail_url || null
-  const pubDate  = book.publish_on ? new Date(book.publish_on).toLocaleDateString() : null
+  const parsedDate = book.publish_on ? new Date(book.publish_on) : null
+  const pubDate  = parsedDate && !Number.isNaN(parsedDate.getTime())
+    ? parsedDate.toLocaleDateString()
+    : null
 
   return (
     <div className="flex flex-col gap-6">

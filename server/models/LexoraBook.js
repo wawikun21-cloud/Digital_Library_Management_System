@@ -288,12 +288,39 @@ const LexoraBookModel = {
         const term = `%${sanitize(filters.search).toLowerCase()}%`;
         conditions.push(
           `(LOWER(REPLACE(REPLACE(title, '\\n', ' '), '\\r', ' ')) LIKE ?
-            OR LOWER(COALESCE(short_description,'')) LIKE ?)`
+             OR LOWER(COALESCE(short_description,'')) LIKE ?
+             OR LOWER(COALESCE(author,'')) LIKE ?
+             OR LOWER(COALESCE(subject_course,'')) LIKE ?)`
         );
-        params.push(term, term);
+        params.push(term, term, term, term);
       }
 
       const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+      // Sorting is whitelisted — never built from raw client input.
+      const SORTS = {
+        title:  "title ASC",
+        author: "author ASC",
+        year:   "year DESC, created_at DESC",
+      };
+      const orderBy = SORTS[filters.sortBy] || "created_at DESC";
+
+      // Pagination is opt-in: without `page` the full list is returned, which
+      // keeps older callers working.
+      const usePaging = Number.isSafeInteger(Number(filters.page)) && Number(filters.page) > 0;
+      const page = usePaging ? Math.floor(Number(filters.page)) : 1;
+      const pageSize = usePaging
+        ? Math.min(100, Math.max(1, Math.floor(Number(filters.pageSize)) || 25))
+        : null;
+
+      let totalItems = null;
+      if (usePaging) {
+        const [[{ count }]] = await pool.query(
+          `SELECT COUNT(*) AS count FROM lexora_books ${where}`,
+          params
+        );
+        totalItems = Number(count) || 0;
+      }
 
       const [rows] = await pool.query(
         `SELECT lexora_books.*,
@@ -305,8 +332,9 @@ const LexoraBookModel = {
            FROM lexora_book_tag_relations ltr
            INNER JOIN lexora_book_tags lt ON lt.id = ltr.tag_id
            WHERE ltr.book_id = lexora_books.id) AS tag_names
-         FROM lexora_books ${where} ORDER BY created_at DESC`,
-        params
+         FROM lexora_books ${where} ORDER BY ${orderBy}
+         ${usePaging ? "LIMIT ? OFFSET ?" : ""}`,
+        usePaging ? [...params, pageSize, (page - 1) * pageSize] : params
       );
 
       const [programs] = await pool.query(
@@ -322,7 +350,7 @@ const LexoraBookModel = {
         "SELECT DISTINCT lt.id, lt.name, lt.slug FROM lexora_book_tags lt INNER JOIN lexora_book_tag_relations ltr ON lt.id = ltr.tag_id ORDER BY lt.name"
       );
 
-      return {
+      const payload = {
         success: true,
         data: rows,
         programs: programs.map((r) => r.program),
@@ -330,6 +358,18 @@ const LexoraBookModel = {
         categories: categoriesList,
         tags: tagsList,
       };
+
+      // Present only when the caller asked for a page: lets the client use
+      // server-side paging without breaking callers that expect the full list.
+      if (usePaging) {
+        payload.pagination = {
+          page,
+          pageSize,
+          totalItems,
+          totalPages: Math.max(1, Math.ceil(totalItems / pageSize)),
+        };
+      }
+      return payload;
     } catch (error) {
       console.error("[LexoraBookModel.getAll]", error.message);
       return { success: false, error: error.message };
@@ -607,13 +647,34 @@ const LexoraBookModel = {
   async getBookPages(bookId) {
     try {
       const [rows] = await pool.query(
-        "SELECT * FROM lexora_book_pages WHERE book_id = ? ORDER BY page_number ASC",
+        "SELECT id, book_id, page_number, image_url, file_size FROM lexora_book_pages WHERE book_id = ? ORDER BY page_number ASC",
         [bookId]
       );
       return { success: true, data: rows };
     } catch (error) {
       console.error("[LexoraBookModel.getBookPages]", error.message);
       return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * Answers "is this page image one of this book's?" with one indexed lookup.
+   *
+   * The media-access middleware used to load EVERY page row for the book and
+   * build a Set of their URLs, once per viewer per TTL window. For a large
+   * image book that is thousands of rows fetched and compared just to answer
+   * a single file request; this returns as soon as one row matches.
+   */
+  async ownsPageImage(bookId, imageUrl) {
+    try {
+      const [rows] = await pool.query(
+        "SELECT 1 FROM lexora_book_pages WHERE book_id = ? AND image_url = ? LIMIT 1",
+        [bookId, imageUrl]
+      );
+      return rows.length > 0;
+    } catch (error) {
+      console.error("[LexoraBookModel.ownsPageImage]", error.message);
+      return false;
     }
   },
 
@@ -633,6 +694,66 @@ const LexoraBookModel = {
     } catch (error) {
       console.error("[LexoraBookModel.addBookPage]", error.message);
       return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * Inserts a whole page batch atomically.
+   *
+   * Page numbers and total_pages are both decided inside the transaction:
+   * the MAX() read is locked so two concurrent uploads for the same book
+   * cannot compute the same page_number and violate
+   * uq_lexora_book_page (book_id, page_number), and total_pages is counted
+   * from the table instead of from a snapshot the caller read earlier.
+   */
+  async addBookPages(bookId, pages) {
+    if (!Array.isArray(pages) || pages.length === 0) {
+      return { success: false, error: "No pages to add" };
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      const [maxRows] = await conn.query(
+        "SELECT COALESCE(MAX(page_number), 0) AS max FROM lexora_book_pages WHERE book_id = ? FOR UPDATE",
+        [bookId]
+      );
+      let nextPage = Number(maxRows[0].max) + 1;
+
+      const values = pages.map((page) => [
+        bookId,
+        page.page_number ?? nextPage++,
+        page.image_url,
+        page.file_size ?? null,
+      ]);
+
+      await conn.query(
+        "INSERT INTO lexora_book_pages (book_id, page_number, image_url, file_size) VALUES ?",
+        [values]
+      );
+
+      await conn.query(
+        `UPDATE lexora_books
+            SET total_pages = (SELECT COUNT(*) FROM lexora_book_pages WHERE book_id = ?),
+                source_type  = 'images'
+          WHERE id = ?`,
+        [bookId, bookId]
+      );
+
+      const [rows] = await conn.query(
+        "SELECT * FROM lexora_book_pages WHERE book_id = ? AND page_number IN (?) ORDER BY page_number ASC",
+        [bookId, values.map((row) => row[1])]
+      );
+
+      await conn.commit();
+      return { success: true, data: rows };
+    } catch (error) {
+      await conn.rollback();
+      console.error("[LexoraBookModel.addBookPages]", error.message);
+      return { success: false, error: error.message };
+    } finally {
+      conn.release();
     }
   },
 

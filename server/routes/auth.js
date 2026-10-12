@@ -11,7 +11,7 @@ const express  = require("express");
 const router   = express.Router();
 const csurf    = require("csurf");
 const { login, logout, me, updateProfile } = require("../controllers/authController");
-const { upload, handleUploadError }        = require("../middleware/upload");
+const { upload } = require("../middleware/upload");
 
 // CSRF protection middleware for state-changing routes (cookie mode)
 const csrfProtection = csurf({
@@ -53,11 +53,11 @@ router.post("/login", login);
 // In production, logout and profile require CSRF; in development, optional
 if (process.env.NODE_ENV === "production") {
   router.post("/logout", csrfProtection, logout);
-  router.patch("/profile", csrfProtection, upload.single("avatar"), handleUploadError, updateProfile);
+  router.patch("/profile", csrfProtection, upload, updateProfile);
 } else {
   // Development: skip CSRF validation to avoid chicken-and-egg problem
   router.post("/logout", logout);
-  router.patch("/profile", upload.single("avatar"), handleUploadError, updateProfile);
+  router.patch("/profile", upload, updateProfile);
 }
 router.get("/me", me);
 

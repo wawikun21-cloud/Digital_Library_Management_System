@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { BookOpen, Bookmark, Search, X } from "lucide-react"
+import { useDebounce } from "../../../hooks/useDebounce"
 import { useAuth } from "../../../hooks/useAuth"
 import {
   fetchPublicLexoraBooks,
@@ -14,6 +15,7 @@ import LexoraBookCard from "../components/LexoraBookCard"
 import Pagination from "../../../components/books/Pagination"
 
 const PAGE_SIZE = 12
+const SEARCH_DEBOUNCE_MS = 400
 
 export default function LexoraBooksCatalog() {
   const navigate = useNavigate()
@@ -31,6 +33,22 @@ export default function LexoraBooksCatalog() {
   const [bookmarkedBookIds, setBookmarkedBookIds] = useState(() => new Set())
   const [bookmarkingBookIds, setBookmarkingBookIds] = useState(() => new Set())
   const [bookmarkError, setBookmarkError] = useState("")
+  const [serverPagination, setServerPagination] = useState(null)
+
+  // Keystrokes must not each trigger a full list request.
+  const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE_MS)
+
+  // Page count comes from the server when it pages for us; otherwise the
+  // list is local (older API payloads) and we slice it ourselves.
+  const totalPages = serverPagination
+    ? serverPagination.totalPages
+    : Math.max(1, Math.ceil(books.length / PAGE_SIZE))
+  const safePage   = Math.min(currentPage, totalPages)
+  const paginated  = useMemo(() => {
+    if (serverPagination) return books
+    const start = (safePage - 1) * PAGE_SIZE
+    return books.slice(start, start + PAGE_SIZE)
+  }, [books, serverPagination, safePage])
 
   useEffect(() => {
     const catParam = searchParams.get("category")
@@ -44,12 +62,21 @@ export default function LexoraBooksCatalog() {
       setError("")
       try {
         const [booksRes, catsRes, tagsRes] = await Promise.all([
-          fetchPublicLexoraBooks({ search, category: categoryFilter, tag: tagFilter }),
+          fetchPublicLexoraBooks({
+            search: debouncedSearch,
+            category: categoryFilter,
+            tag: tagFilter,
+            page: safePage,
+            pageSize: PAGE_SIZE,
+          }),
           fetchPublicCategories(),
           fetchPublicTags(),
         ])
         if (!cancelled) {
-          if (booksRes.success) setBooks(booksRes.data || [])
+          if (booksRes.success) {
+            setBooks(booksRes.data || [])
+            setServerPagination(booksRes.pagination || null)
+          }
           else setError(booksRes.error || "Could not load books")
           if (catsRes.success) setCategories(catsRes.data || [])
           else setError((current) => current || catsRes.error || "Could not load categories")
@@ -64,9 +91,9 @@ export default function LexoraBooksCatalog() {
     }
     load()
     return () => { cancelled = true }
-  }, [search, categoryFilter, tagFilter])
+  }, [debouncedSearch, categoryFilter, tagFilter, safePage])
 
-  useEffect(() => { setCurrentPage(1) }, [search, categoryFilter, tagFilter])
+  useEffect(() => { setCurrentPage(1) }, [debouncedSearch, categoryFilter, tagFilter])
 
   useEffect(() => {
     let cancelled = false
@@ -118,13 +145,6 @@ export default function LexoraBooksCatalog() {
       })
     }
   }, [bookmarkedBookIds])
-
-  const totalPages  = Math.max(1, Math.ceil(books.length / PAGE_SIZE))
-  const safePage    = Math.min(currentPage, totalPages)
-  const paginated   = useMemo(() => {
-    const start = (safePage - 1) * PAGE_SIZE
-    return books.slice(start, start + PAGE_SIZE)
-  }, [books, safePage])
 
   const clearFilters = () => {
     setSearch("")

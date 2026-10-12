@@ -198,6 +198,15 @@ export async function fetchBookPages(id) {
   }
 }
 
+/**
+ * Proposes a table of contents by analysing the book's PDF server-side.
+ * Returns { entries, total_pages, warnings } — read-only: the caller fills
+ * the form so a librarian can review before saving.
+ */
+export async function generateBookToc(id) {
+  return request(`${LEXORA_API}/${id}/toc/generate`, { method: "POST" })
+}
+
 export async function reorderBookPages(id, pageIds) {
   return request(`${LEXORA_API}/${id}/pages/reorder`, {
     method: "PUT",

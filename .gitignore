@@ -14,6 +14,16 @@ build/
 .env
 client/.env
 server/.env
+# Real production/local envs (the *.example templates stay committable).
+.env.production
+.env.production.local
+.env.*.local
+server/.env.production
+server/.env.production.local
+# Exception: the client's production build config is safe to commit because
+# every VITE_ value is inlined into the browser bundle and is public anyway.
+# *.local overrides stay ignored.
+!client/.env.production
 
 # Logs
 *.log

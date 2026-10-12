@@ -7,8 +7,42 @@ const crypto = require("crypto");
 // Roles allowed to see and manage unpublished tools.
 const MANAGE_ROLES = ["super_admin", "admin", "staff"];
 
+const TOOLS_DIR = path.join(uploadsDir, "tools");
+
 function canManage(role) {
   return MANAGE_ROLES.includes(role);
+}
+
+/**
+ * Resolves a stored reference (a `/uploads/tools/<file>` URL, as written by
+ * the create path, or a bare filename, as stored in file_path) to a path
+ * inside the tools folder. Anything that would escape it returns null.
+ */
+function toolFilePath(reference) {
+  if (typeof reference !== "string" || !reference) return null;
+  const filename = path.basename(reference);
+  if (!filename || filename === "." || filename === "..") return null;
+  return path.join(TOOLS_DIR, filename);
+}
+
+async function removeToolFile(reference) {
+  const filePath = toolFilePath(reference);
+  if (!filePath) return;
+  try {
+    await fs.unlink(filePath);
+  } catch {}
+}
+
+/**
+ * Moves a multer temp file into the tools folder under a random name.
+ * The uploader wrote it to disk, so this is a rename, not a buffer copy.
+ */
+async function storeToolAsset(file, namePrefix = "") {
+  const extension = path.extname(file.originalname).toLowerCase();
+  const filename = `${namePrefix}${crypto.randomBytes(16).toString("hex")}${extension}`;
+  await fs.mkdir(TOOLS_DIR, { recursive: true });
+  await fs.rename(file.path, path.join(TOOLS_DIR, filename));
+  return filename;
 }
 
 function listTools(req, res) {
@@ -57,38 +91,32 @@ function createTool(req, res) {
     };
 
     const files = req.files || {};
+    const stored = [];
 
-    if (files.thumbnail && files.thumbnail[0]) {
-      const thumb = files.thumbnail[0];
-      const ext = path.extname(thumb.originalname).toLowerCase() || ".webp";
-      const filename = `thumb_${crypto.randomBytes(16).toString("hex")}${ext}`;
-      const toolDir = path.join(uploadsDir, "tools");
-      const filePath = path.join(toolDir, filename);
+    try {
+      if (files.thumbnail && files.thumbnail[0]) {
+        const filename = await storeToolAsset(files.thumbnail[0], "thumb_");
+        stored.push(filename);
+        toolData.thumbnail_url = `/uploads/tools/${filename}`;
+      }
 
-      await fs.mkdir(toolDir, { recursive: true });
-      await fs.writeFile(filePath, thumb.buffer);
+      if (files.file && files.file[0]) {
+        const file = files.file[0];
+        const filename = await storeToolAsset(file);
+        stored.push(filename);
+        toolData.file_path = filename;
+        toolData.file_size = file.size;
+        toolData.file_type = file.mimetype;
+      }
 
-      toolData.thumbnail_url = `/uploads/tools/${filename}`;
+      const id = await toolsService.createTool(userId, toolData);
+      const saved = await toolsService.getTool(id);
+      res.status(201).json({ success: true, data: saved });
+    } catch (error) {
+      // Never leave an asset on disk that no row points at.
+      await Promise.all(stored.map((filename) => removeToolFile(filename)));
+      throw error;
     }
-
-    if (files.file && files.file[0]) {
-      const file = files.file[0];
-      const ext = path.extname(file.originalname).toLowerCase();
-      const filename = `${crypto.randomBytes(16).toString("hex")}${ext}`;
-      const toolDir = path.join(uploadsDir, "tools");
-      const filePath = path.join(toolDir, filename);
-
-      await fs.mkdir(toolDir, { recursive: true });
-      await fs.writeFile(filePath, file.buffer);
-
-      toolData.file_path = filename;
-      toolData.file_size = file.size;
-      toolData.file_type = file.mimetype;
-    }
-
-    const id = await toolsService.createTool(userId, toolData);
-    const saved = await toolsService.getTool(id);
-    res.status(201).json({ success: true, data: saved });
   });
 }
 
@@ -105,42 +133,37 @@ function updateTool(req, res) {
       updates.is_active = updates.is_active === "true" || updates.is_active === true;
     }
     const files = req.files || {};
+    const stored = [];
 
-    if (files.thumbnail && files.thumbnail[0]) {
-      const thumb = files.thumbnail[0];
-      if (existing.thumbnail_url) {
-        const oldThumb = path.join(uploadsDir, "tools", existing.thumbnail_url);
-        try { await fs.unlink(oldThumb); } catch {}
+    try {
+      if (files.thumbnail && files.thumbnail[0]) {
+        const thumb = files.thumbnail[0];
+        const filename = await storeToolAsset(thumb, "thumb_");
+        stored.push(filename);
+        updates.thumbnail_url = `/uploads/tools/${filename}`;
       }
 
-      const ext = path.extname(thumb.originalname).toLowerCase() || ".webp";
-      const filename = `thumb_${crypto.randomBytes(16).toString("hex")}${ext}`;
-      const toolDir = path.join(uploadsDir, "tools");
-      await fs.mkdir(toolDir, { recursive: true });
-      await fs.writeFile(path.join(toolDir, filename), thumb.buffer);
-      updates.thumbnail_url = `/uploads/tools/${filename}`;
-    }
-
-    if (files.file && files.file[0]) {
-      const file = files.file[0];
-      if (existing.file_path) {
-        const oldPath = path.join(uploadsDir, "tools", existing.file_path);
-        try { await fs.unlink(oldPath); } catch {}
+      if (files.file && files.file[0]) {
+        const file = files.file[0];
+        const filename = await storeToolAsset(file);
+        stored.push(filename);
+        updates.file_path = filename;
+        updates.file_size = file.size;
+        updates.file_type = file.mimetype;
       }
 
-      const ext = path.extname(file.originalname).toLowerCase();
-      const filename = `${crypto.randomBytes(16).toString("hex")}${ext}`;
-      const toolDir = path.join(uploadsDir, "tools");
-      await fs.mkdir(toolDir, { recursive: true });
-      await fs.writeFile(path.join(toolDir, filename), file.buffer);
-      updates.file_path = filename;
-      updates.file_size = file.size;
-      updates.file_type = file.mimetype;
-    }
+      await toolsService.updateTool(id, updates);
 
-    await toolsService.updateTool(id, updates);
-    const updated = await toolsService.getTool(id);
-    res.status(200).json({ success: true, data: updated });
+      // Only drop the previous assets once the row is known to be updated.
+      if (updates.thumbnail_url) await removeToolFile(existing.thumbnail_url);
+      if (updates.file_path) await removeToolFile(existing.file_path);
+
+      const updated = await toolsService.getTool(id);
+      res.status(200).json({ success: true, data: updated });
+    } catch (error) {
+      await Promise.all(stored.map((filename) => removeToolFile(filename)));
+      throw error;
+    }
   });
 }
 
@@ -152,10 +175,8 @@ function deleteTool(req, res) {
       return res.status(404).json({ success: false, error: "Tool not found" });
     }
 
-    if (existing.file_path) {
-      const filePath = path.join(uploadsDir, "tools", existing.file_path);
-      try { await fs.unlink(filePath); } catch {}
-    }
+    await removeToolFile(existing.file_path);
+    await removeToolFile(existing.thumbnail_url);
 
     await toolsService.deleteTool(id);
     res.status(200).json({ success: true, message: "Tool deleted" });
@@ -192,7 +213,10 @@ function downloadTool(req, res) {
 
     await toolsService.incrementDownload(id);
 
-    const filePath = path.join(uploadsDir, "tools", tool.file_path);
+    const filePath = toolFilePath(tool.file_path);
+    if (!filePath) {
+      return res.status(404).json({ success: false, error: "Tool file is missing" });
+    }
     res.download(filePath, tool.title);
   });
 }

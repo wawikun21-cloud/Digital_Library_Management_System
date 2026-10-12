@@ -50,14 +50,53 @@ deploying.
    email is disabled. `DEFAULT_ADMIN_USERNAME` and `DEFAULT_ADMIN_PASSWORD`
    are optional first-install values. Otherwise create an initial account
    through the project's established administration process.
-6. Leave `VITE_API_URL` unset/empty for this single-domain deployment. Client
-   API calls use relative `/api` paths, and Socket.IO connects to the current
-   origin at `/socket.io`. If the frontend is built for a different API
-   deployment, configure `VITE_API_URL` at build time as the API base URL,
-   including `/api`.
+6. Leave `VITE_API_URL` **completely unset** in the Hostinger application
+   environment for this single-domain deployment. Client API calls use
+   relative `/api` paths, and Socket.IO connects to the current origin at
+   `/socket.io`. The repository provides `client/.env.production` with an
+   empty `VITE_API_URL` so the build is explicit rather than accidental.
+
+   **Important:** a `VITE_`-prefixed variable set in the application
+   environment is injected into the production bundle at build time and
+   **overrides** `client/.env.production`. This was verified in this repo.
+   A stray `VITE_API_URL` therefore silently repoints every API call, upload
+   URL, and Socket.IO connection to another origin. Do not define one unless
+   you are deliberately running a split frontend/API deployment, in which case
+   set it to the API base URL including `/api`.
+
+   `VITE_ENABLE_*` flags in that file are currently inert — `FEATURES` in
+   `client/src/constants/index.js` is exported but read by no module.
 7. Configure HTTPS for the domain. Cookies are secure in production and use
    same-site `Lax`, which is appropriate for the same-domain app. Express trusts
    one reverse-proxy hop; verify this matches the Hostinger proxy arrangement.
+
+## Files in the repository
+
+| File | Committed | Purpose |
+| --- | --- | --- |
+| `client/.env.production` | Yes | Production build config (empty `VITE_API_URL` + feature flags). No secrets. |
+| `server/.env.production.example` | Yes | Checklist of every variable the production app reads. |
+| `client/.env.frontend` | Yes | Reference for frontend variables. |
+| `server/.env.example` | Yes | Development template. |
+| `server/.env` | Yes (legacy) | Local dev values only. See the rotation note below. |
+
+`server/.env.production` and `*.local` variants are gitignored, so a real
+production env can be kept locally without being committed.
+
+### Rotate the committed session secret
+
+`server/.env` is tracked in git (a `.gitignore` entry does not apply to a file
+that was already tracked) and contains a real `SESSION_SECRET`. It is harmless
+only because its other values are local dev settings, but the committed secret
+must not be reused in production:
+
+```
+git rm --cached server/.env    # untrack; keeps your working copy
+```
+
+Then set a freshly generated `SESSION_SECRET` in hPanel. Anyone with repository
+access already has the committed value, so treating it as secret would be
+wrong even for non-production use.
 
 ## Upload storage and database operations
 

@@ -11,6 +11,8 @@ import {
   deleteCategory, deleteTag,
   fetchBookPages, deleteBookPage, reorderBookPages, replaceBookPage,
 } from "../../../services/api/lexoraBooksApi"
+import BookTocEditor from "./BookTocEditor"
+import { Field, IconBtn, inputCls } from "./FormControls"
 
 const EMPTY_FORM = {
   title: "", short_description: "", author: "", source_type: "",
@@ -36,10 +38,6 @@ const SECTIONS = [
   { id: "organize", label: "Categories & tags" },
   { id: "publish", label: "Visibility" },
 ]
-
-const inputCls = (err) =>
-  `w-full rounded-lg border bg-[color:var(--bg-primary)] px-3 py-2.5 text-sm text-[color:var(--text-primary)] outline-none transition placeholder:text-[color:var(--text-muted)] focus:ring-2 focus:ring-[rgba(238,162,58,0.3)] ${
-    err ? "border-red-400" : "border-[color:var(--border)] focus:border-[color:var(--accent-amber)]"}`
 
 export default function LexoraBookFormModal({ isOpen, onClose, book, onSaved }) {
   const [form, setForm] = useState({ ...EMPTY_FORM })
@@ -151,6 +149,15 @@ export default function LexoraBookFormModal({ isOpen, onClose, book, onSaved }) 
   const updateField = useCallback((field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }))
     setErrors((prev) => ({ ...prev, [field]: undefined }))
+  }, [])
+
+  /** Applies a detected TOC proposal; the librarian still reviews and saves. */
+  const handleApplyDetectedToc = useCallback((entries, totalPages) => {
+    setForm((prev) => ({
+      ...prev,
+      table_of_contents: entries,
+      total_pages: totalPages > 0 ? totalPages : prev.total_pages,
+    }))
   }, [])
 
   const handlePdfSelection = async (file) => {
@@ -606,44 +613,15 @@ export default function LexoraBookFormModal({ isOpen, onClose, book, onSaved }) 
             </Section>
 
             <Section id="contents" title="Table of contents" desc="Add chapter names and the page each chapter starts on. Page numbers start at 1.">
-              <div className="flex flex-col gap-3 md:col-span-2">
-                {form.table_of_contents.map((entry, index) => (
-                  <div key={index} className="grid grid-cols-[minmax(0,1fr)_6rem_auto] items-end gap-2">
-                    <Field label={`Entry ${index + 1} title`} id={`bf-toc-title-${index}`}>
-                      <input id={`bf-toc-title-${index}`} value={entry.title}
-                        onChange={(event) => updateField("table_of_contents", form.table_of_contents.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, title: event.target.value } : item))}
-                        placeholder="e.g. Chapter 2: Developing a Content Marketing Strategy"
-                        className={inputCls(errors.table_of_contents)} />
-                    </Field>
-                    <Field label="Page" id={`bf-toc-page-${index}`}>
-                      <input id={`bf-toc-page-${index}`} type="number" min="1"
-                        max={Number(form.total_pages) > 0 ? form.total_pages : undefined}
-                        value={entry.page_number}
-                        onChange={(event) => updateField("table_of_contents", form.table_of_contents.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, page_number: event.target.value } : item))}
-                        placeholder="1" className={inputCls(errors.table_of_contents)} />
-                    </Field>
-                    <IconBtn label={`Remove table of contents entry ${index + 1}`}
-                      onClick={() => updateField("table_of_contents", form.table_of_contents.filter((_, itemIndex) => itemIndex !== index))}>
-                      <Trash2 size={15} />
-                    </IconBtn>
-                  </div>
-                ))}
-                {errors.table_of_contents && (
-                  <p role="alert" data-field-error className="flex items-center gap-1 text-[11px] text-red-400">
-                    <AlertCircle size={12} className="shrink-0" /> {errors.table_of_contents}
-                  </p>
-                )}
-                <button type="button"
-                  onClick={() => updateField("table_of_contents", [...form.table_of_contents, { title: "", page_number: "" }])}
-                  className="flex w-fit items-center gap-1.5 rounded-lg border border-[color:var(--border)] px-3 py-2 text-xs font-semibold text-[color:var(--accent-amber)] transition hover:bg-[rgba(238,162,58,0.08)]">
-                  <Plus size={14} /> Add TOC entry
-                </button>
-                {form.table_of_contents.length === 0 && (
-                  <p className="text-xs text-[color:var(--text-muted)]">No custom entries. The reader will use PDF bookmarks or page numbers when available.</p>
-                )}
-              </div>
+              <BookTocEditor
+                entries={form.table_of_contents}
+                totalPages={form.total_pages}
+                error={errors.table_of_contents}
+                canDetect={!!existingBook?.id && form.source_type === "pdf"}
+                bookId={existingBook?.id}
+                onChange={(entries) => updateField("table_of_contents", entries)}
+                onApply={handleApplyDetectedToc}
+              />
             </Section>
 
             <Section id="organize" title="Categories & tags" desc="Help readers find this book. Pick existing ones or type to create new.">
@@ -722,23 +700,6 @@ function parseTableOfContents(value) {
   }))
 }
 
-function Field({ label, id, required, hint, error, className = "", children }) {
-  return (
-    <div className={`flex min-w-0 flex-col gap-1.5 ${className}`}>
-      <label htmlFor={id} className="text-xs font-medium text-[color:var(--text-secondary)]">
-        {label}{required && <span className="ml-0.5 text-red-400" aria-hidden="true">*</span>}
-      </label>
-      {children}
-      {hint && !error && <p className="text-[11px] text-[color:var(--text-muted)]">{hint}</p>}
-      {error && (
-        <p role="alert" data-field-error className="flex items-center gap-1 text-[11px] text-red-400">
-          <AlertCircle size={12} className="shrink-0" /> {error}
-        </p>
-      )}
-    </div>
-  )
-}
-
 function Segmented({ id, value, onChange, options }) {
   return (
     <div id={id} role="radiogroup" className="grid gap-1 rounded-xl border border-[color:var(--border)] bg-[color:var(--bg-primary)] p-1"
@@ -765,15 +726,6 @@ function Thumb({ src, alt, className = "" }) {
     <div aria-hidden="true" className={`${className} flex items-center justify-center rounded-lg border border-dashed border-[color:var(--border)] text-[color:var(--text-muted)]`}>
       <ImageIcon size={20} />
     </div>
-  )
-}
-
-function IconBtn({ label, danger, children, ...props }) {
-  return (
-    <button type="button" aria-label={label} title={label} {...props}
-      className={`rounded-md p-2 transition hover:bg-[rgba(255,255,255,0.06)] disabled:opacity-40 ${danger ? "text-red-400" : "text-[color:var(--text-secondary)]"}`}>
-      {children}
-    </button>
   )
 }
 

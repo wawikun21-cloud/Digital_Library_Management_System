@@ -43,6 +43,7 @@ const coursesRoutes      = require("./features/courses/courses.routes");
 const coursesBuilderRoutes = require("./features/courses/builder.routes");
 const usersRoutes        = require("./features/users/users.routes");
 const portalRoutes       = require("./features/portal/portal.routes");
+const bookIntelligenceRoutes = require("./features/book-intelligence/toc.routes");
 const toolsRoutes        = require("./features/tools/tools.routes");
 
 // ── Roles & permissions feature (router + guards) ─────────
@@ -100,16 +101,24 @@ app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
 
 // ── Static uploads ────────────────────────────────────────
+//
+// Every stored asset is written under a generated UUID name, and replacing a
+// file always writes a NEW name (the old one is unlinked). So a media URL's
+// content never changes under it: safe to cache for a year and treat as
+// immutable. Without this, every cover and every PDF page revalidated on each
+// view, and pdf.js issues many Range requests per document.
+const MEDIA_CACHE = { maxAge: "1y", immutable: true, acceptRanges: true };
+
 app.use("/uploads/lexora-books", lexoraMediaAccess);
 app.use("/uploads/tmp", (_req, res) => res.status(404).end());
 fs.mkdirSync(uploadsDir, { recursive: true });
-app.use("/uploads", express.static(uploadsDir));
+app.use("/uploads", express.static(uploadsDir, MEDIA_CACHE));
 // Preserve files uploaded before UPLOADS_DIR was configurable.
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", express.static(path.join(__dirname, "uploads"), MEDIA_CACHE));
 // Keep older Lexora files readable when they were stored beside the server folder.
 app.use(
   "/uploads/lexora-books",
-  express.static(path.join(__dirname, "../uploads/lexora-books"))
+  express.static(path.join(__dirname, "../uploads/lexora-books"), MEDIA_CACHE)
 );
 
 // ── Global API rate limiter ───────────────────────────────
@@ -145,6 +154,9 @@ app.use("/api/", globalApiLimiter);
 app.use("/api/auth",         authRoutes);
 app.use("/api/books",        booksRoutes);
 app.use("/api/lexora-books", lexoraBooksRoutes);
+// Mounted after lexoraBooksRoutes so its /:id routes never shadow the
+// /:id/toc/generate path.
+app.use("/api/lexora-books", bookIntelligenceRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/attendance",   attendanceRoutes);
 app.use("/api/students",     studentsRoutes);

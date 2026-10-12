@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react"
+import { useNavigate } from "react-router-dom"
 import { Plus, BookOpen } from "lucide-react"
 import { useLexoraBooks } from "../hooks/useLexoraBooks"
 import LexoraBookAdminTable from "../components/LexoraBookAdminTable"

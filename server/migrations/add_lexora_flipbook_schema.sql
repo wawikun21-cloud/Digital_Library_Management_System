@@ -9,7 +9,18 @@
 --   6. lexora_book_pages (image-page books)
 --   7. lexora_bookmarks
 --   8. lexora_book_progress
+--
+-- SOURCE OF TRUTH: server/config/db.js applies the same schema (idempotently)
+-- on every boot, tolerating already-applied columns. Keep this file in sync
+-- with db.js — it exists for deploys that only run the migrations folder.
 -- ============================================================
+
+-- --------------------------------------------------------
+-- 0. Reconciliation — columns added in db.js after this
+--    file was written. Idempotent so the file stays re-runnable.
+-- --------------------------------------------------------
+ALTER TABLE lexora_books ADD COLUMN IF NOT EXISTS file_size BIGINT      DEFAULT NULL AFTER dimensions;
+ALTER TABLE lexora_books ADD COLUMN IF NOT EXISTS edition  VARCHAR(50)  DEFAULT NULL AFTER weight_unit;
 
 -- --------------------------------------------------------
 -- 1. EXTEND lexora_books
@@ -127,6 +138,9 @@ CREATE TABLE IF NOT EXISTS lexora_book_pages (
   PRIMARY KEY (id),
   UNIQUE KEY uq_lexora_book_page (book_id, page_number),
   KEY idx_lexora_pages_book (book_id),
+  -- Media access checks "(book_id, image_url)" once per image served, so this
+  -- pair must be an index hit rather than a scan of the book's pages.
+  KEY idx_lexora_pages_book_url (book_id, image_url),
   CONSTRAINT fk_lexora_pages_book
     FOREIGN KEY (book_id) REFERENCES lexora_books(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

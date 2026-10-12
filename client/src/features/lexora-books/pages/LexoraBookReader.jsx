@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { ArrowLeft, Loader2, AlertCircle } from "lucide-react"
 import FlipbookReader, { FlipbookBookmark } from "../flipbook"
@@ -12,6 +12,10 @@ import { useAuth } from "../../../hooks/useAuth"
 
 const MODE_3D = "3d"
 const MODE_CSS   = "css"
+
+// Fast flipping must not write one row per page: the latest page is held
+// and flushed after a short idle, on tab hide, and on unmount.
+const PROGRESS_SAVE_DEBOUNCE_MS = 1500
 
 function parseTableOfContents(value) {
   if (typeof value === "string") {
@@ -48,6 +52,47 @@ export default function LexoraBookReader() {
   const [readerActionError, setReaderActionError] = useState("")
 
   const isAuthenticated = !!user
+
+  // ── Reading progress (debounced, flushed on idle/unmount/tab hide) ──
+  const pendingPageRef = useRef(null)
+  const saveTimerRef   = useRef(null)
+  const savingRef      = useRef(false)
+
+  const flushProgress = useCallback(async () => {
+    const page = pendingPageRef.current;
+    if (page == null || savingRef.current) return;
+    pendingPageRef.current = null;
+    savingRef.current = true;
+    setSavingProgress(true);
+    try {
+      const result = await saveReadingProgress(bookId, page);
+      if (!result.success) throw new Error(result.error || "Could not save reading progress");
+      setReaderActionError("");
+    } catch (saveError) {
+      setReaderActionError(saveError.message);
+    } finally {
+      savingRef.current = false;
+      setSavingProgress(false);
+    }
+  }, [bookId]);
+
+  const scheduleProgressSave = useCallback((pageNumber) => {
+    pendingPageRef.current = pageNumber;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => { void flushProgress(); }, PROGRESS_SAVE_DEBOUNCE_MS);
+  }, [flushProgress]);
+
+  // Never lose the last page: flush on unmount and when the tab is hidden.
+  useEffect(() => () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    if (pendingPageRef.current != null) void flushProgress();
+  }, [flushProgress]);
+
+  useEffect(() => {
+    const onHide = () => { if (pendingPageRef.current != null) void flushProgress(); };
+    window.addEventListener("pagehide", onHide);
+    return () => window.removeEventListener("pagehide", onHide);
+  }, [flushProgress]);
 
   useEffect(() => {
     if (!bookId) return
@@ -132,18 +177,8 @@ export default function LexoraBookReader() {
 
   const handlePageChange = useCallback((page) => {
     setCurrentPage(page)
-    if (isAuthenticated && bookId) {
-      setSavingProgress(true)
-      saveReadingProgress(bookId, page + 1)
-        .then((result) => {
-          if (!result.success) throw new Error(result.error || "Could not save reading progress")
-          setReaderActionError("")
-        })
-        .catch((saveError) => setReaderActionError(saveError.message))
-        .finally(() => setSavingProgress(false))
-    }
-
-  }, [isAuthenticated, bookId])
+    if (isAuthenticated && bookId) scheduleProgressSave(page + 1)
+  }, [isAuthenticated, bookId, scheduleProgressSave])
 
   const handleReady = useCallback(() => {
     // Flipbook ready

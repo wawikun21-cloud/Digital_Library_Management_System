@@ -18,6 +18,7 @@
 const express        = require("express");
 const router         = express.Router();
 const lexoraCtrl     = require("../controllers/lexoraController");
+const LexoraBookModel = require("../models/LexoraBook");
 
 const { requireAuth } = require("../middleware/authMiddleware");
 const {
@@ -25,20 +26,35 @@ const {
   requirePermissionAction,
 } = require("../features/roles");
 
+/** Clamps client paging input; returns { page, pageSize } or null. */
+function parsePaging(query) {
+  const rawPage = Number(query.page);
+  const rawSize = Number(query.pageSize);
+  if (!Number.isSafeInteger(rawPage) || rawPage < 1) return null;
+  return {
+    page: Math.floor(rawPage),
+    pageSize: Number.isSafeInteger(rawSize) && rawSize > 0
+      ? Math.min(100, Math.floor(rawSize))
+      : 25,
+  };
+}
+
 // ── Public (read-only) — no auth, registered first ─────────
 
 router.get("/public", async (req, res) => {
   try {
-    const { search, category, tag, source_type, program } = req.query;
-    const result = await require("../models/LexoraBook").getPublic({
+    const { search, category, tag, source_type, program, page: rawPage, pageSize: rawSize } = req.query;
+    const paging = parsePaging({ page: rawPage, pageSize: rawSize });
+    const result = await LexoraBookModel.getPublic({
       search,
       program,
       source_type,
       category_slug: category,
       tag_slug: tag,
+      ...(paging ? { page: paging.page, pageSize: paging.pageSize } : {}),
     });
     if (!result.success) return res.status(400).json({ success: false, error: result.error });
-    res.json({ success: true, data: result.data });
+    res.json({ success: true, data: result.data, pagination: result.pagination });
   } catch (err) {
     console.error("[GET /api/lexora-books/public]", err.message);
     res.status(500).json({ success: false, error: "Internal server error" });
@@ -97,8 +113,7 @@ router.get("/public/:id", async (req, res) => {
 
 router.get("/:id/reader", async (req, res) => {
   try {
-    const LexoraBook = require("../models/LexoraBook");
-    const bookResult = await LexoraBook.getById(req.params.id);
+    const bookResult = await LexoraBookModel.getById(req.params.id);
     if (!bookResult.success) return res.status(404).json({ success: false, error: bookResult.error });
 
     const book = bookResult.data;
@@ -109,13 +124,10 @@ router.get("/:id/reader", async (req, res) => {
     if (!isPublic && !isManager && !isOwner) {
       return res.status(user ? 403 : 401).json({ success: false, error: "Access denied" });
     }
-    if (book.visibility === "private" && !isManager && !isOwner) {
-      return res.status(user ? 403 : 401).json({ success: false, error: "Access denied" });
-    }
 
     let pages = [];
     if (book.source_type === "images") {
-      const pageResult = await LexoraBook.getBookPages(req.params.id);
+      const pageResult = await LexoraBookModel.getBookPages(req.params.id);
       if (!pageResult.success) {
         return res.status(500).json({ success: false, error: "Failed to load book pages" });
       }
@@ -126,8 +138,8 @@ router.get("/:id/reader", async (req, res) => {
     let progress = null;
     if (user?.id) {
       const [bookmarkResult, progressResult] = await Promise.all([
-        LexoraBook.getUserBookmarks(user.id, req.params.id),
-        LexoraBook.getReadingProgress(user.id, req.params.id),
+        LexoraBookModel.getUserBookmarks(user.id, req.params.id),
+        LexoraBookModel.getReadingProgress(user.id, req.params.id),
       ]);
       if (!bookmarkResult.success || !progressResult.success) {
         return res.status(500).json({ success: false, error: "Failed to load reader data" });
@@ -136,10 +148,23 @@ router.get("/:id/reader", async (req, res) => {
       progress = progressResult.data;
     }
 
+    // Explicit field list: the reader must never receive internal columns
+    // (created_by, deleted_at, file_size, …) — this endpoint also serves
+    // anonymous readers of public books.
     res.json({
       success: true,
       data: {
-        ...book,
+        id: book.id,
+        title: book.title,
+        author: book.author,
+        source_type: book.source_type,
+        pdf_url: book.pdf_url,
+        thumbnail_url: book.thumbnail_url,
+        cover_url: book.cover_url,
+        total_pages: book.total_pages,
+        table_of_contents: book.table_of_contents,
+        status: book.status,
+        visibility: book.visibility,
         pages,
         bookmarks,
         reading_progress: progress,
@@ -179,17 +204,20 @@ router.post("/:id/restore", requirePermissionAction("manage_lexora_books", "arch
 
 // ── Uploads ────────────────────────────────────────────────
 
+// Upload middleware maps its own limit/type errors to 400 responses, so each
+// route is just guard → rate limit → upload → controller.
 const {
   uploadPdf,
   uploadImage,
   uploadThumbnail,
   uploadPages,
-  handleLexoraUploadError,
 } = require("../middleware/lexoraUpload");
+const { singleUploadLimiter, batchUploadLimiter } = require("../middleware/uploadRateLimits");
 
 router.post("/:id/pdf",
   requirePermissionAction("manage_lexora_books", "edit"),
-  uploadPdf, handleLexoraUploadError,
+  singleUploadLimiter,
+  uploadPdf,
   lexoraCtrl.uploadBookPdf
 );
 
@@ -197,7 +225,8 @@ router.delete("/:id/pdf", requirePermissionAction("manage_lexora_books", "edit")
 
 router.post("/:id/cover",
   requirePermissionAction("manage_lexora_books", "edit"),
-  uploadImage, handleLexoraUploadError,
+  singleUploadLimiter,
+  uploadImage,
   lexoraCtrl.uploadBookCover
 );
 
@@ -205,19 +234,22 @@ router.delete("/:id/cover", requirePermissionAction("manage_lexora_books", "edit
 
 router.post("/:id/thumbnail",
   requirePermissionAction("manage_lexora_books", "edit"),
-  uploadThumbnail, handleLexoraUploadError,
+  singleUploadLimiter,
+  uploadThumbnail,
   lexoraCtrl.uploadBookThumbnail
 );
 
 router.post("/:id/pages",
   requirePermissionAction("manage_lexora_books", "edit"),
-  uploadPages, handleLexoraUploadError,
+  batchUploadLimiter,
+  uploadPages,
   lexoraCtrl.uploadBookPages
 );
 
 router.post("/:id/pages/:pageId/image",
   requirePermissionAction("manage_lexora_books", "edit"),
-  uploadImage, handleLexoraUploadError,
+  singleUploadLimiter,
+  uploadImage,
   lexoraCtrl.replaceBookPageImage
 );
 

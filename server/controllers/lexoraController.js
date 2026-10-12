@@ -2,16 +2,18 @@ const LexoraBookModel = require("../models/LexoraBook");
 const auditService    = require("../services/auditService");
 const { successResponse, errorResponse } = require("../utils/responseFormatter");
 const path            = require("path");
-const fs              = require("fs");
+// Async forms only: every handler below awaited these calls while holding the
+// event loop, which stalled unrelated requests during a large upload.
+const fs              = require("fs/promises");
 const crypto          = require("crypto");
 const { lexoraUploadsDir } = require("../config/uploads");
 
 // ── Uploads directory ───────────────────────────────────────
 const UPLOAD_DIR = lexoraUploadsDir;
 
-function ensureBookDir(bookId) {
+async function ensureBookDir(bookId) {
   const dir = path.join(UPLOAD_DIR, String(bookId));
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  await fs.mkdir(dir, { recursive: true });
   return dir;
 }
 
@@ -20,47 +22,75 @@ function safeFilename(originalName) {
   return `${crypto.randomUUID()}${ext}`;
 }
 
-function hasValidFileSignature(file, type) {
-  const fd = fs.openSync(file.path, "r");
-  let header;
+/** True when the file's magic bytes match the extension it claims. */
+async function hasValidFileSignature(file, type) {
+  let handle;
   try {
+    handle = await fs.open(file.path, "r");
     const buffer = Buffer.alloc(1024);
-    const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
-    header = buffer.subarray(0, bytesRead);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const header = buffer.subarray(0, bytesRead);
+
+    if (type === "pdf") return header.includes(Buffer.from("%PDF-"));
+
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    if (ext === ".jpg" || ext === ".jpeg") {
+      return bytesRead >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+    }
+    if (ext === ".png") {
+      return header.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    }
+    if (ext === ".webp") {
+      return bytesRead >= 12 &&
+        header.toString("ascii", 0, 4) === "RIFF" &&
+        header.toString("ascii", 8, 12) === "WEBP";
+    }
+    return false;
+  } catch {
+    return false;
   } finally {
-    fs.closeSync(fd);
+    if (handle) await handle.close().catch(() => {});
   }
-
-  if (type === "pdf") return header.includes(Buffer.from("%PDF-"));
-
-  const ext = path.extname(file.originalname || "").toLowerCase();
-  if (ext === ".jpg" || ext === ".jpeg") {
-    return header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
-  }
-  if (ext === ".png") {
-    return header.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-  }
-  if (ext === ".webp") {
-    return header.length >= 12 &&
-      header.toString("ascii", 0, 4) === "RIFF" &&
-      header.toString("ascii", 8, 12) === "WEBP";
-  }
-  return false;
 }
 
-function removeTempUpload(file) {
-  if (file?.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+/** Deletes a multer temp file, tolerating one that was already moved. */
+async function removeTempUpload(file) {
+  try {
+    if (file?.path) await fs.unlink(file.path);
+  } catch {}
 }
 
-function removePreviousMedia(bookId, url, replacementPath) {
+/** Deletes several multer temp files, tolerating ones already moved. */
+async function removeTempUploads(files = []) {
+  await Promise.all(files.map(removeTempUpload));
+}
+
+/** Deletes a file already in its final location, tolerating a missing one. */
+async function removeStoredFile(storedPath) {
+  try {
+    await fs.unlink(storedPath);
+  } catch {}
+}
+
+/** True when a book already has a regular file stored under that name. */
+async function hasValidStoredFile(bookId, filename) {
+  if (!filename || path.basename(filename) !== filename) return false;
+  try {
+    const stat = await fs.stat(path.join(UPLOAD_DIR, String(bookId), filename));
+    return stat.isFile();
+  } catch {
+    return false;
+  }
+}
+
+async function removePreviousMedia(bookId, url, replacementPath) {
   const prefix = `/uploads/lexora-books/${bookId}/`;
   if (typeof url !== "string" || !url.startsWith(prefix)) return;
   const filename = url.slice(prefix.length);
   if (!filename || path.basename(filename) !== filename) return;
   const oldPath = path.join(UPLOAD_DIR, String(bookId), filename);
-  if (oldPath !== replacementPath && fs.existsSync(oldPath) && fs.statSync(oldPath).isFile()) {
-    fs.unlinkSync(oldPath);
-  }
+  if (oldPath === replacementPath) return;
+  await removeStoredFile(oldPath);
 }
 
 function parseBookId(value) {
@@ -72,6 +102,38 @@ function getSessionUserId(req) {
   return parseBookId(req.session?.user?.id);
 }
 
+/**
+ * Loads a book and applies the same access rule as the reader endpoint:
+ * managers, the book's owner, or anyone for a published public book.
+ * Returns { book } or { error: { status, message } }.
+ */
+async function resolveAccessibleBook(req) {
+  const bookId = parseBookId(req.params.id);
+  if (!bookId) return { error: { status: 400, message: "Invalid book ID" } };
+
+  const book = await LexoraBookModel.getById(bookId);
+  if (!book.success) return { error: { status: 404, message: book.error } };
+
+  const user = req.session?.user;
+  const isManager = user?.role === "admin" || user?.role === "librarian";
+  const isOwner = user && Number(book.data.created_by) === Number(user.id);
+  const isPublic = book.data.status === "published" && book.data.visibility === "public";
+  if (!isPublic && !isManager && !isOwner) {
+    return { error: { status: user ? 403 : 401, message: "Access denied" } };
+  }
+
+  return { book: book.data };
+}
+
+/** Rejects page numbers past the book's known length (0 = unknown length). */
+function pageBoundError(book, pageNum) {
+  const total = Number(book.total_pages) || 0;
+  if (total > 0 && pageNum > total) {
+    return `page_number must be between 1 and ${total}`;
+  }
+  return null;
+}
+
 // ───────────────────────────────────────────────────────────
 //  CRUD
 // ───────────────────────────────────────────────────────────
@@ -80,10 +142,24 @@ const getLexoraBooks = async (req, res) => {
   try {
     const {
       program, subjectCourse, search, status, visibility, source_type,
-      category_id, tag_id,
+      category_id, tag_id, page, pageSize, sortBy,
     } = req.query;
+
+    const rawPage  = Number(page);
+    const rawSize  = Number(pageSize);
+    const usePaging = Number.isSafeInteger(rawPage) && rawPage >= 1;
+
     const result = await LexoraBookModel.getAll({
       program, search, status, visibility, source_type, category_id, tag_id,
+      ...(usePaging
+        ? {
+            page: Math.floor(rawPage),
+            pageSize: Number.isSafeInteger(rawSize) && rawSize > 0
+              ? Math.min(100, Math.floor(rawSize))
+              : 25,
+          }
+        : {}),
+      sortBy,
     });
     if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
     res.json({ success: true, ...result });
@@ -208,13 +284,14 @@ const publishLexoraBook = async (req, res) => {
     if (book.source_type === "pdf") {
       const expectedPrefix = `/uploads/lexora-books/${book.id}/`;
       const filename = path.basename(book.pdf_url || "");
+      const pdfOnDisk = await hasValidStoredFile(book.id, filename);
       if (
         !book.pdf_url?.startsWith(expectedPrefix) ||
         !filename ||
         filename === "." ||
         filename === ".." ||
         path.extname(filename) !== ".pdf" ||
-        !fs.existsSync(path.join(UPLOAD_DIR, String(book.id), filename))
+        !pdfOnDisk
       ) {
         return res.status(400).json(errorResponse("Upload a valid PDF before publishing.", 400));
       }
@@ -439,7 +516,7 @@ const deleteBookPage = async (req, res) => {
       if (!reorderResult.success) return res.status(500).json(errorResponse(reorderResult.error || "Page deleted but page order could not be updated", 500));
       const updateResult = await LexoraBookModel.update(bookId, { total_pages: pages.data.length });
       if (!updateResult.success) return res.status(500).json(errorResponse(updateResult.error || "Page deleted but book page count could not be updated", 500));
-      removePreviousMedia(bookId, result.data.image_url);
+      await removePreviousMedia(bookId, result.data.image_url);
     }
     res.json(successResponse(null, "Page deleted"));
   } catch (error) {
@@ -454,45 +531,45 @@ const replaceBookPageImage = async (req, res) => {
     if (!req.file) return res.status(400).json(errorResponse("Page image is required", 400));
     const bookId = parseBookId(req.params.id);
     if (!bookId) {
-      removeTempUpload(req.file);
+      await removeTempUpload(req.file);
       return res.status(400).json(errorResponse("Invalid book ID", 400));
     }
     const book = await LexoraBookModel.getById(bookId);
     if (!book.success) {
-      removeTempUpload(req.file);
+      await removeTempUpload(req.file);
       return res.status(404).json(errorResponse(book.error, 404));
     }
     const pages = await LexoraBookModel.getBookPages(bookId);
     if (!pages.success) {
-      removeTempUpload(req.file);
+      await removeTempUpload(req.file);
       return res.status(500).json(errorResponse(pages.error || "Failed to read book pages", 500));
     }
     const page = pages.data.find((item) => String(item.id) === String(req.params.pageId));
     if (!page) {
-      removeTempUpload(req.file);
+      await removeTempUpload(req.file);
       return res.status(404).json(errorResponse("Book page not found", 404));
     }
-    if (!hasValidFileSignature(req.file, "image")) {
-      removeTempUpload(req.file);
+    if (!(await hasValidFileSignature(req.file, "image"))) {
+      await removeTempUpload(req.file);
       return res.status(400).json(errorResponse("The uploaded file is not a valid image.", 400));
     }
     const filename = safeFilename(req.file.originalname);
-    destPath = path.join(ensureBookDir(bookId), filename);
-    fs.renameSync(req.file.path, destPath);
+    destPath = path.join(await ensureBookDir(bookId), filename);
+    await fs.rename(req.file.path, destPath);
     const imageUrl = `/uploads/lexora-books/${bookId}/${filename}`;
     const updated = await LexoraBookModel.updateBookPage(page.id, {
       image_url: imageUrl,
       file_size: req.file.size,
     });
     if (!updated.success) {
-      fs.unlinkSync(destPath);
+      await removeStoredFile(destPath);
       return res.status(400).json(errorResponse(updated.error, 400));
     }
-    removePreviousMedia(bookId, page.image_url, destPath);
+    await removePreviousMedia(bookId, page.image_url, destPath);
     res.json(successResponse(updated.data, "Page image replaced"));
   } catch (error) {
-    removeTempUpload(req.file);
-    if (destPath && fs.existsSync(destPath)) fs.unlinkSync(destPath);
+    await removeTempUpload(req.file);
+    if (destPath) await removeStoredFile(destPath);
     console.error("[LexoraController.replaceBookPageImage]", error.message);
     res.status(500).json(errorResponse("Failed to replace page image", 500));
   }
@@ -521,22 +598,22 @@ const uploadBookPdf = async (req, res) => {
     if (!req.file) return res.status(400).json(errorResponse("PDF file is required", 400));
     const bookId = parseBookId(req.params.id);
     if (!bookId) {
-      removeTempUpload(req.file);
+      await removeTempUpload(req.file);
       return res.status(400).json(errorResponse("Invalid book ID", 400));
     }
     const book = await LexoraBookModel.getById(bookId);
     if (!book.success) {
-      removeTempUpload(req.file);
+      await removeTempUpload(req.file);
       return res.status(404).json(errorResponse(book.error, 404));
     }
-    if (!hasValidFileSignature(req.file, "pdf")) {
-      removeTempUpload(req.file);
+    if (!(await hasValidFileSignature(req.file, "pdf"))) {
+      await removeTempUpload(req.file);
       return res.status(400).json(errorResponse("The uploaded file is not a valid PDF.", 400));
     }
-    const bookDir = ensureBookDir(bookId);
+    const bookDir = await ensureBookDir(bookId);
     const filename = safeFilename(req.file.originalname);
     destPath = path.join(bookDir, filename);
-    fs.renameSync(req.file.path, destPath);
+    await fs.rename(req.file.path, destPath);
 
     const pdfUrl = `/uploads/lexora-books/${bookId}/${filename}`;
     const result = await LexoraBookModel.update(bookId, {
@@ -545,14 +622,14 @@ const uploadBookPdf = async (req, res) => {
       file_size: req.file.size,
     });
     if (!result.success) {
-      fs.unlinkSync(destPath);
+      await removeStoredFile(destPath);
       return res.status(400).json(errorResponse(result.error, 400));
     }
-    removePreviousMedia(bookId, book.data.pdf_url, destPath);
+    await removePreviousMedia(bookId, book.data.pdf_url, destPath);
     res.json(successResponse({ pdf_url: pdfUrl, file_size: req.file.size }, "PDF uploaded"));
   } catch (error) {
-    removeTempUpload(req.file);
-    if (destPath && fs.existsSync(destPath)) fs.unlinkSync(destPath);
+    await removeTempUpload(req.file);
+    if (destPath) await removeStoredFile(destPath);
     console.error("[LexoraController.uploadBookPdf]", error.message);
     res.status(500).json(errorResponse("Failed to upload PDF", 500));
   }
@@ -588,34 +665,34 @@ const uploadBookCover = async (req, res) => {
     if (!req.file) return res.status(400).json(errorResponse("Cover image is required", 400));
     const bookId = parseBookId(req.params.id);
     if (!bookId) {
-      removeTempUpload(req.file);
+      await removeTempUpload(req.file);
       return res.status(400).json(errorResponse("Invalid book ID", 400));
     }
     const book = await LexoraBookModel.getById(bookId);
     if (!book.success) {
-      removeTempUpload(req.file);
+      await removeTempUpload(req.file);
       return res.status(404).json(errorResponse(book.error, 404));
     }
-    if (!hasValidFileSignature(req.file, "image")) {
-      removeTempUpload(req.file);
+    if (!(await hasValidFileSignature(req.file, "image"))) {
+      await removeTempUpload(req.file);
       return res.status(400).json(errorResponse("The uploaded file is not a valid image.", 400));
     }
-    const bookDir = ensureBookDir(bookId);
+    const bookDir = await ensureBookDir(bookId);
     const filename = safeFilename(req.file.originalname);
     destPath = path.join(bookDir, filename);
-    fs.renameSync(req.file.path, destPath);
+    await fs.rename(req.file.path, destPath);
 
     const coverUrl = `/uploads/lexora-books/${bookId}/${filename}`;
     const result = await LexoraBookModel.update(bookId, { cover_url: coverUrl });
     if (!result.success) {
-      fs.unlinkSync(destPath);
+      await removeStoredFile(destPath);
       return res.status(400).json(errorResponse(result.error, 400));
     }
-    removePreviousMedia(bookId, book.data.cover_url, destPath);
+    await removePreviousMedia(bookId, book.data.cover_url, destPath);
     res.json(successResponse({ cover_url: coverUrl }, "Cover uploaded"));
   } catch (error) {
-    removeTempUpload(req.file);
-    if (destPath && fs.existsSync(destPath)) fs.unlinkSync(destPath);
+    await removeTempUpload(req.file);
+    if (destPath) await removeStoredFile(destPath);
     console.error("[LexoraController.uploadBookCover]", error.message);
     res.status(500).json(errorResponse("Failed to upload cover", 500));
   }
@@ -643,91 +720,88 @@ const uploadBookThumbnail = async (req, res) => {
     if (!req.file) return res.status(400).json(errorResponse("Thumbnail image is required", 400));
     const bookId = parseBookId(req.params.id);
     if (!bookId) {
-      removeTempUpload(req.file);
+      await removeTempUpload(req.file);
       return res.status(400).json(errorResponse("Invalid book ID", 400));
     }
     const book = await LexoraBookModel.getById(bookId);
     if (!book.success) {
-      removeTempUpload(req.file);
+      await removeTempUpload(req.file);
       return res.status(404).json(errorResponse(book.error, 404));
     }
-    if (!hasValidFileSignature(req.file, "image")) {
-      removeTempUpload(req.file);
+    if (!(await hasValidFileSignature(req.file, "image"))) {
+      await removeTempUpload(req.file);
       return res.status(400).json(errorResponse("The uploaded file is not a valid image.", 400));
     }
-    const bookDir = ensureBookDir(bookId);
+    const bookDir = await ensureBookDir(bookId);
     const filename = safeFilename(req.file.originalname);
     destPath = path.join(bookDir, filename);
-    fs.renameSync(req.file.path, destPath);
+    await fs.rename(req.file.path, destPath);
 
     const thumbnailUrl = `/uploads/lexora-books/${bookId}/${filename}`;
     const result = await LexoraBookModel.update(bookId, { thumbnail_url: thumbnailUrl });
     if (!result.success) {
-      fs.unlinkSync(destPath);
+      await removeStoredFile(destPath);
       return res.status(400).json(errorResponse(result.error, 400));
     }
-    removePreviousMedia(bookId, book.data.thumbnail_url, destPath);
+    await removePreviousMedia(bookId, book.data.thumbnail_url, destPath);
     res.json(successResponse({ thumbnail_url: thumbnailUrl }, "Thumbnail uploaded"));
   } catch (error) {
-    removeTempUpload(req.file);
-    if (destPath && fs.existsSync(destPath)) fs.unlinkSync(destPath);
+    await removeTempUpload(req.file);
+    if (destPath) await removeStoredFile(destPath);
     console.error("[LexoraController.uploadBookThumbnail]", error.message);
     res.status(500).json(errorResponse("Failed to upload thumbnail", 500));
   }
 };
 
 const uploadBookPages = async (req, res) => {
-  const storedPaths = [];
-  const insertedPageIds = [];
+  const movedPaths = [];
   try {
     if (!req.files?.length) return res.status(400).json(errorResponse("Page images are required", 400));
     const bookId = parseBookId(req.params.id);
     if (!bookId) {
-      req.files.forEach(removeTempUpload);
+      await removeTempUploads(req.files);
       return res.status(400).json(errorResponse("Invalid book ID", 400));
     }
     const book = await LexoraBookModel.getById(bookId);
     if (!book.success) {
-      req.files.forEach(removeTempUpload);
+      await removeTempUploads(req.files);
       return res.status(404).json(errorResponse(book.error, 404));
     }
-    if (req.files.some((file) => !hasValidFileSignature(file, "image"))) {
-      req.files.forEach(removeTempUpload);
+
+    // Verify every image before any of them leaves the temp folder, so a
+    // rejected batch cannot leave orphaned files in the book's directory.
+    const signatures = await Promise.all(
+      req.files.map((file) => hasValidFileSignature(file, "image"))
+    );    if (signatures.some((valid) => !valid)) {
+      await removeTempUploads(req.files);
       return res.status(400).json(errorResponse("One or more uploads are not valid images.", 400));
     }
-    const existingPages = await LexoraBookModel.getBookPages(bookId);
-    if (!existingPages.success) {
-      req.files.forEach(removeTempUpload);
-      return res.status(500).json(errorResponse("Failed to read existing book pages", 500));
-    }
-    const bookDir = ensureBookDir(bookId);
-    const uploaded = [];
+
+    const bookDir = await ensureBookDir(bookId);
+    const staged = [];
     for (const file of req.files) {
       const filename = safeFilename(file.originalname);
       const destPath = path.join(bookDir, filename);
-      fs.renameSync(file.path, destPath);
-      storedPaths.push(destPath);
-      const imageUrl = `/uploads/lexora-books/${bookId}/${filename}`;
-      const pageResult = await LexoraBookModel.addBookPage(bookId, {
-        image_url: imageUrl,
+      await fs.rename(file.path, destPath);
+      movedPaths.push(destPath);
+      staged.push({
+        image_url: `/uploads/lexora-books/${bookId}/${filename}`,
         file_size: file.size,
       });
-      if (!pageResult.success) throw new Error(pageResult.error);
-      uploaded.push(pageResult.data);
-      insertedPageIds.push(pageResult.data.id);
     }
-    const updateResult = await LexoraBookModel.update(bookId, {
-      source_type: "images",
-      total_pages: existingPages.data.length + uploaded.length,
-    });
-    if (!updateResult.success) throw new Error(updateResult.error);
-    res.status(201).json(successResponse(uploaded, `${uploaded.length} pages uploaded`, 201));
+
+    // One transaction assigns page numbers and refreshes total_pages, so
+    // concurrent uploads for the same book cannot collide or lose counts.
+    const result = await LexoraBookModel.addBookPages(bookId, staged);
+    if (!result.success) {
+      await Promise.all(movedPaths.map(removeStoredFile));
+      return res.status(400).json(errorResponse(result.error, 400));
+    }
+
+    res.status(201).json(successResponse(result.data, `${result.data.length} pages uploaded`, 201));
   } catch (error) {
-    (req.files || []).forEach(removeTempUpload);
-    for (const pageId of insertedPageIds) await LexoraBookModel.deleteBookPage(pageId);
-    for (const storedPath of storedPaths) {
-      if (fs.existsSync(storedPath)) fs.unlinkSync(storedPath);
-    }
+    await removeTempUploads(req.files || []);
+    await Promise.all(movedPaths.map(removeStoredFile));
     console.error("[LexoraController.uploadBookPages]", error.message);
     res.status(500).json(errorResponse("Failed to upload pages", 500));
   }
@@ -766,14 +840,19 @@ const getMyBookmarks = async (req, res) => {
 const addBookmark = async (req, res) => {
   try {
     const userId   = getSessionUserId(req);
-    const bookId   = parseBookId(req.params.id);
     const pageNum  = Number(req.body.page_number);
     if (!userId) return res.status(401).json(errorResponse("Unauthorized", 401));
-    if (!bookId) return res.status(400).json(errorResponse("Invalid book ID", 400));
     if (!Number.isSafeInteger(pageNum) || pageNum < 1) {
       return res.status(400).json(errorResponse("page_number must be a positive integer", 400));
     }
-    const result = await LexoraBookModel.addBookmark(userId, bookId, pageNum);
+
+    const { book, error } = await resolveAccessibleBook(req);
+    if (error) return res.status(error.status).json(errorResponse(error.message, error.status));
+
+    const bound = pageBoundError(book, pageNum);
+    if (bound) return res.status(400).json(errorResponse(bound, 400));
+
+    const result = await LexoraBookModel.addBookmark(userId, book.id, pageNum);
     if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
     res.status(201).json(successResponse(result.data, "Bookmark added", 201));
   } catch (error) {
@@ -817,14 +896,19 @@ const getReadingProgress = async (req, res) => {
 const saveReadingProgress = async (req, res) => {
   try {
     const userId  = getSessionUserId(req);
-    const bookId  = parseBookId(req.params.id);
     const pageNum = Number(req.body.page_number);
     if (!userId) return res.status(401).json(errorResponse("Unauthorized", 401));
-    if (!bookId) return res.status(400).json(errorResponse("Invalid book ID", 400));
     if (!Number.isSafeInteger(pageNum) || pageNum < 1) {
       return res.status(400).json(errorResponse("page_number must be a positive integer", 400));
     }
-    const result = await LexoraBookModel.upsertReadingProgress(userId, bookId, pageNum);
+
+    const { book, error } = await resolveAccessibleBook(req);
+    if (error) return res.status(error.status).json(errorResponse(error.message, error.status));
+
+    const bound = pageBoundError(book, pageNum);
+    if (bound) return res.status(400).json(errorResponse(bound, 400));
+
+    const result = await LexoraBookModel.upsertReadingProgress(userId, book.id, pageNum);
     if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
     res.json(successResponse(result.data, "Progress saved"));
   } catch (error) {

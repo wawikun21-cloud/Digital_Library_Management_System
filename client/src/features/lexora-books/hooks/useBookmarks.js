@@ -4,6 +4,8 @@ import {
   addBookmark as addBookmarkAPI,
   removeBookmark as removeBookmarkAPI,
 } from "../../../services/api/lexoraBooksApi"
+
+export function useBookmarks({ bookId }) {
   const [bookmarks, setBookmarks] = useState([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState(null)
