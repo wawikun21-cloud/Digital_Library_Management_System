@@ -190,7 +190,7 @@ app.get("/api/health", (req, res) => {
 });
 
 // ── Client build, SPA fallback, and JSON 404s ─────────────
-registerFrontendRoutes(app, path.join(__dirname, "../client/dist"));
+registerFrontendRoutes(app, path.join(__dirname, "../dist"));
 
 // ── Global error handler ──────────────────────────────────
 app.use((err, req, res, _next) => {

@@ -18,11 +18,15 @@ deploying.
    application root to the repository root.
 2. Set the build command to `npm run build` and the start command to
    `npm start`. The build installs the client and production server
-   dependencies, then creates `client/dist`. The start command runs the
-   Express/Socket.IO server. Hostinger must supply `PORT` to the process.
-3. Select Node.js 20 or newer. Do not expose port 3001 in public URLs; the
+   dependencies, then creates the production client bundle in the
+   repository-root `dist/` directory (this is the "Output directory" you set
+   in step 3 of Hostinger's deploy config). The start command runs the
+   Express/Socket.IO server.
+3. Set the Hostinger **Output directory** to `dist` (repository root), since
+   the build script emits the production client bundle there.
+   Select Node.js 20 or newer. Do not expose port 3001 in public URLs; the
    Hostinger domain/reverse proxy should route HTTP and WebSocket traffic to the
-   Node application.
+   Node application. Hostinger must supply `PORT` to the process.
 4. Create a MySQL database and database user in hPanel. Grant the user access
    to that database, including the table/index/alter privileges needed for the
    application's schema setup and migrations. The production app connects

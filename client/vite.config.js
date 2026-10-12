@@ -30,6 +30,13 @@ export default defineConfig({
   },
 
   build: {
+    // Write the production client bundle to the repository-root `dist/` so a
+    // single-domain deployment (e.g. Hostinger "Output directory: dist")
+    // finds the built SPA exactly where the publish hook expects it. This
+    // only affects `vite build`; the dev server keeps emitting to memory.
+    outDir:         '../dist',
+    emptyOutDir:    true,
+
     // Raise the warning threshold slightly — individual vendor chunks
     // like xlsx are expected to be large, but they load on-demand only.
     chunkSizeWarningLimit: 600,
