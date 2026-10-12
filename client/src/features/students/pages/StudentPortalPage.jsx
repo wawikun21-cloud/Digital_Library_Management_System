@@ -4,9 +4,11 @@ import HeroCarousel from "../components/HeroCarousel";
 import HeroFallback from "../components/HeroFallback";
 import PortalSection from "../components/PortalSection";
 import PortalCourseCard from "../components/PortalCourseCard";
+import PortalReveal from "../components/PortalReveal";
 import { BooksSkeleton, CoursesSkeleton, HeroSkeleton } from "../components/PortalSkeletons";
 import LexoraBookCard from "../../lexora-books/components/LexoraBookCard";
 import { useAuth } from "../../../hooks/useAuth";
+import "../portalAnimations.css";
 
 function PortalLoading() {
   return (
@@ -33,8 +35,9 @@ export default function StudentPortalPage() {
 
   return (
     <div className="flex flex-col gap-10">
-      {/* Full-bleed hero: cancels the layout <main> padding so it fills the whole section. */}
-      <div className="-mx-4 -mt-4 sm:-mx-6 sm:-mt-6 lg:-mx-7 lg:-mt-7">
+      {/* Full-bleed hero: cancels the layout <main> padding so it fills the whole section.
+          Rises in once its real content lands (carousel/fallback replace the skeleton). */}
+      <div className={`-mx-4 -mt-4 sm:-mx-6 sm:-mt-6 lg:-mx-7 lg:-mt-7 ${home.loading ? "" : "portal-hero-rise"}`}>
         {home.loading ? (
           <HeroSkeleton />
         ) : home.slides.length > 0 ? (
@@ -58,9 +61,10 @@ export default function StudentPortalPage() {
             emptyMessage="No e-books have been published yet."
             skeleton={<BooksSkeleton />}
           >
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+            {/* Keyed on the reload counter so a retry replays the reveal. */}
+            <PortalReveal key={`books-${home.attempt}`} className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
               {home.books.map((book) => <LexoraBookCard key={book.id} book={book} />)}
-            </div>
+            </PortalReveal>
           </PortalSection>
         )}
 
@@ -77,9 +81,9 @@ export default function StudentPortalPage() {
             emptyMessage="No courses have been published yet."
             skeleton={<CoursesSkeleton />}
           >
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+            <PortalReveal key={`courses-${home.attempt}`} className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
               {home.courses.map((course) => <PortalCourseCard key={course.id} course={course} />)}
-            </div>
+            </PortalReveal>
           </PortalSection>
         )}
       </div>

@@ -23,5 +23,8 @@ export function useStudentPortalHome() {
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
-  return { ...data, loading, error, retry };
+  // `attempt` doubles as a reload key: consumers key animated/revealed
+  // sections on it so a retry replays their entrance instead of leaving
+  // stale content in its final state.
+  return { ...data, loading, error, retry, attempt };
 }

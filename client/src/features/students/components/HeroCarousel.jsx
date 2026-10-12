@@ -1,21 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+import { useReducedMotion } from "../hooks/useReducedMotion";
+import { heroBoxStyle, HERO_DEFAULT_RATIO, HERO_MIN_HEIGHT_CLASS } from "../constants/studentsUi";
 
 const AUTOPLAY_MS = 6000;
-
-function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(
-    () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-  );
-  useEffect(() => {
-    const query = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-    if (!query) return undefined;
-    const onChange = (event) => setReduced(event.matches);
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
-  }, []);
-  return reduced;
-}
 
 function ControlButton({ label, onClick, children, className = "" }) {
   return (
@@ -31,10 +19,12 @@ function ControlButton({ label, onClick, children, className = "" }) {
 }
 
 export default function HeroCarousel({ slides }) {
-  const reducedMotion = usePrefersReducedMotion();
+  const reducedMotion = useReducedMotion();
   const [index, setIndex] = useState(0);
   const [userPaused, setUserPaused] = useState(false);
   const [hovering, setHovering] = useState(false);
+  // slide id -> natural width/height, learned from each image as it loads.
+  const [ratios, setRatios] = useState({});
   const count = slides.length;
   const multiple = count > 1;
 
@@ -55,6 +45,20 @@ export default function HeroCarousel({ slides }) {
     if (event.key === "ArrowRight") go(index + 1);
   };
 
+  // The box height follows the active slide's own shape, so every upload is
+  // shown whole; isolate keeps the slides from ever bleeding into the page.
+  const activeRatio = ratios[slides[index]?.id] ?? HERO_DEFAULT_RATIO;
+
+  const handleImageLoad = useCallback((slideId, event) => {
+    const { naturalWidth, naturalHeight } = event.target;
+    if (!naturalWidth || !naturalHeight) return;
+    setRatios((prev) => (
+      prev[slideId] === naturalWidth / naturalHeight
+        ? prev
+        : { ...prev, [slideId]: naturalWidth / naturalHeight }
+    ));
+  }, []);
+
   return (
     <section
       aria-roledescription="carousel"
@@ -64,8 +68,8 @@ export default function HeroCarousel({ slides }) {
       onFocus={() => setHovering(true)}
       onBlur={() => setHovering(false)}
       onKeyDown={onKeyDown}
-      className="relative h-[56vh] min-h-[320px] overflow-hidden"
-      style={{ background: "var(--bg-surface)" }}
+      className={`relative w-full overflow-hidden isolate ${HERO_MIN_HEIGHT_CLASS}`}
+      style={{ ...heroBoxStyle(activeRatio), background: "var(--bg-surface)" }}
     >
       {slides.map((slide, i) => {
         const active = i === index;
@@ -82,8 +86,9 @@ export default function HeroCarousel({ slides }) {
               alt=""
               className="h-full w-full object-cover"
               loading={i === 0 ? "eager" : "lazy"}
+              decoding="async"
+              onLoad={(event) => handleImageLoad(slide.id, event)}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent sm:bg-gradient-to-r sm:from-black/75 sm:via-black/35 sm:to-transparent" />
           </article>
         );
       })}
@@ -107,7 +112,7 @@ export default function HeroCarousel({ slides }) {
                 {userPaused ? <Play size={12} /> : <Pause size={12} />}
               </ControlButton>
             )}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 rounded-full bg-black/35 px-2 py-1 backdrop-blur-sm">
               {slides.map((slide, i) => (
                 <button
                   key={slide.id}

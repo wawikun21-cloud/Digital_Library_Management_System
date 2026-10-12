@@ -1,8 +1,8 @@
 /**
- * features/students/constants/studentsUi.js
+ *  features/students/constants/studentsUi.js
  *
- * Page size, form shape and option lists for student management. Extracted
- * from the module scope and render body of the former pages/Students.jsx.
+ *  Page size, form shape, option lists and portal hero presentation for the
+ *  students feature.
  */
 
 export const STUDENTS_PER_PAGE = 10;
@@ -62,3 +62,26 @@ export const SAMPLE_TEMPLATE_ROWS = [
 ];
 
 export const TEMPLATE_FILE_NAME = "student_import_template.xlsx";
+
+/* ── Portal hero (carousel / fallback / skeleton) ─────────────────
+   One height contract for all three states: the box fills the available
+   width and its height follows the ACTIVE image's own aspect ratio, so a
+   banner upload (e.g. 1920×600) displays whole instead of being cropped
+   into a fixed viewport-height box. The clamp keeps unusual uploads
+   (ultra-wide or portrait) from dominating the page, and sharing the style
+   between states removes the loading → loaded layout jump.            */
+export const HERO_DEFAULT_RATIO = 16 / 5;
+export const HERO_MAX_HEIGHT_VH = 60;
+
+/** Shared minimum-height classes: phones keep banners whole (short),
+    larger screens get a comfortable hero for ultra-wide uploads. */
+export const HERO_MIN_HEIGHT_CLASS = "min-h-[120px] sm:min-h-[240px]";
+
+/** Inline style for the hero box at the given width/height ratio. */
+export function heroBoxStyle(ratio = HERO_DEFAULT_RATIO) {
+  const safeRatio = ratio > 0 ? ratio : HERO_DEFAULT_RATIO;
+  return {
+    aspectRatio: String(safeRatio),
+    maxHeight: `${HERO_MAX_HEIGHT_VH}vh`,
+  };
+}

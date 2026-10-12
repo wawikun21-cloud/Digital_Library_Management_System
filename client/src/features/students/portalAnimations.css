@@ -1,0 +1,52 @@
+/* ── Student portal entrance animations ───────────────────────────
+   Two layers:
+   1. .portal-hero-rise  — the hero rises in once when its content lands
+      (carousel mounted / fallback shown after loading).
+   2. .portal-reveal     — sections reveal when scrolled into view, with a
+      staggered fade-up for the grid children inside.
+   All motion is disabled under prefers-reduced-motion: content is shown
+   in its final state instead of animating.                          */
+
+.portal-hero-rise {
+  animation: portalHeroIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes portalHeroIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Scroll-reveal wrapper: hidden until observed, then children stagger in. */
+.portal-reveal > * {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.portal-reveal.is-visible > * {
+  animation: portalItemIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.portal-reveal.is-visible > *:nth-child(1) { animation-delay: 0ms; }
+.portal-reveal.is-visible > *:nth-child(2) { animation-delay: 60ms; }
+.portal-reveal.is-visible > *:nth-child(3) { animation-delay: 120ms; }
+.portal-reveal.is-visible > *:nth-child(4) { animation-delay: 180ms; }
+.portal-reveal.is-visible > *:nth-child(5) { animation-delay: 240ms; }
+.portal-reveal.is-visible > *:nth-child(6) { animation-delay: 300ms; }
+.portal-reveal.is-visible > *:nth-child(n + 7) { animation-delay: 340ms; }
+
+@keyframes portalItemIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-hero-rise { animation: none; }
+
+  .portal-reveal > *,
+  .portal-reveal.is-visible > * {
+    opacity: 1;
+    transform: none;
+    animation: none;
+    transition: none;
+  }
+}

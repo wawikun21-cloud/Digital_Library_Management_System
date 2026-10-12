@@ -1,5 +1,7 @@
-function Block({ className }) {
-  return <div className={`animate-pulse rounded-xl ${className}`} style={{ background: "var(--bg-hover)" }} />;
+import { heroBoxStyle, HERO_MIN_HEIGHT_CLASS } from "../constants/studentsUi";
+
+function Block({ className, style }) {
+  return <div className={`animate-pulse rounded-xl ${className}`} style={{ background: "var(--bg-hover)", ...style }} />;
 }
 
 export function BooksSkeleton() {
@@ -19,5 +21,5 @@ export function CoursesSkeleton() {
 }
 
 export function HeroSkeleton() {
-  return <Block className="h-[calc(100dvh-58px)] min-h-[360px] !rounded-none" />;
+  return <Block className={`!rounded-none ${HERO_MIN_HEIGHT_CLASS}`} style={heroBoxStyle()} />;
 }

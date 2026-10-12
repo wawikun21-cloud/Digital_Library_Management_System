@@ -1,14 +1,16 @@
 import { GraduationCap } from "lucide-react";
+import { heroBoxStyle, HERO_MIN_HEIGHT_CLASS } from "../constants/studentsUi";
 
-/** Shown when no hero slides are active. */
+/** Shown when no hero slides are active. Shares the carousel's height contract. */
 export default function HeroFallback() {
   return (
     <section
       aria-label="Welcome"
-      className="flex h-[56vh] min-h-[320px] items-center justify-center gap-4 p-6 sm:p-8"
+      className={`flex w-full items-center justify-center gap-4 p-6 sm:p-8 ${HERO_MIN_HEIGHT_CLASS}`}
       style={{
+        ...heroBoxStyle(),
         background: "linear-gradient(120deg, rgba(238,162,58,0.16), var(--bg-surface) 70%)",
-              }}
+      }}
     >
       <span
         className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl"
