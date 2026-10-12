@@ -12,11 +12,13 @@ This guide covers deployment of the Digital Library Management System to product
 
 ### 1. Server Environment Variables
 
-Copy `server/.env.example` to `server/.env` and configure:
+Copy `server/.env.production.example` to `server/.env.production` and configure:
 
 ```bash
-cp server/.env.example server/.env
+cp server/.env.production.example server/.env.production
 ```
+
+> **Important:** In production (`NODE_ENV=production`), the server loads `server/.env.production` — **not** `server/.env`. The committed `server/.env` is development-only and is never read in production. See `server/config/loadEnv.js` for the loading logic.
 
 Required in production:
 - `DB_HOST` - MySQL server hostname

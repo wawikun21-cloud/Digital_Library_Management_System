@@ -10,7 +10,7 @@
 //      Without this, socket.request.session was always undefined.
 // ─────────────────────────────────────────────────────────
 
-require("dotenv").config();
+require("./config/loadEnv").loadEnv();
 const http    = require("http");
 const express = require("express");
 const cors    = require("cors");

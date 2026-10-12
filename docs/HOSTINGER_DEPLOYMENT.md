@@ -47,13 +47,30 @@ deploying.
    | `DB_CREATE_DATABASE` | `false` |
    | `SESSION_SECRET` | Long, unique, randomly generated secret |
    | `UPLOADS_DIR` | Absolute writable directory outside deploy/release folders |
-   | `RUN_MIGRATIONS` | `true` for a planned schema upgrade; see migration warning below |
+   | `RUN_MIGRATIONS` | Controls startup schema changes (see note). Default when unset runs migrations |
    | `GMAIL_USER` / `GMAIL_APP_PASSWORD` | Optional; set both to enable email |
 
    If email is unused, leave both Gmail variables unset; the server logs that
    email is disabled. `DEFAULT_ADMIN_USERNAME` and `DEFAULT_ADMIN_PASSWORD`
    are optional first-install values. Otherwise create an initial account
    through the project's established administration process.
+
+   **Migration behavior (important):** `initDatabase()` runs `migrateSchema()`
+   unless `RUN_MIGRATIONS=false` (case-insensitive). The check is
+   `String(RUN_MIGRATIONS).toLowerCase() !== "false"`, so migrations run by
+   **default on every boot**, including when the variable is unset or set to
+   `true`. Only set `RUN_MIGRATIONS=false` when you have applied schema changes
+   out-of-band and want the server to skip startup migrations; otherwise leave
+   it unset or set it to `true`. Each individual `ALTER`/`CREATE` in
+   `migrateSchema` is wrapped in try/catch and tolerates already-applied
+   states (`errno` 1091/1060/1054/1061/1292 are logged as
+   `⏭️ Already applied`), so re-running is safe.
+
+   If you do **not** see `✅ Database initialization complete` (and per-statement
+   `✅ Migration:` / `⏭️ Already applied:` logs) in the Hostinger application
+   logs, the server did not reach `initDatabase()` — most commonly because the
+   build failed (see output directory) or because `validateEnv()` exited on a
+   missing required variable before startup proceeded.
 6. Leave `VITE_API_URL` **completely unset** in the Hostinger application
    environment for this single-domain deployment. Client API calls use
    relative `/api` paths, and Socket.IO connects to the current origin at

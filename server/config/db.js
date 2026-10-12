@@ -5,7 +5,7 @@
 
 const mysql  = require("mysql2/promise");
 const bcrypt = require("bcryptjs");
-require("dotenv").config();
+require("./loadEnv").loadEnv();
 
 const {
   PERMISSION_CATALOG,
