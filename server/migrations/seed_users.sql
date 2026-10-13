@@ -29,10 +29,10 @@
 --
 --  SAFE TO RE-RUN
 --    Rows are keyed on the `username` and `uk_users_email` unique
---    keys, so re-running refreshes the profile fields instead of
---    creating duplicates. To keep a lost password recoverable the
---    seed also restores the default password (see optional RESET
---    block at the bottom if you prefer to keep existing ones).
+--    keys, so re-running refreshes profile fields instead of
+--    creating duplicates. Existing passwords are NOT overwritten;
+--    the optional RESET block at the bottom force-restores the
+--    seed password for these usernames if one is ever lost.
 -- ============================================================
 
 -- One user per role: super_admin, admin, librarian, staff, student
