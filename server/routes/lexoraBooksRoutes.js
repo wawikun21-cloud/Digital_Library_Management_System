@@ -165,6 +165,11 @@ router.get("/:id/reader", async (req, res) => {
         table_of_contents: book.table_of_contents,
         status: book.status,
         visibility: book.visibility,
+        // Creator-controlled reader restrictions, normalised to booleans
+        // here so the client never casts. Missing/legacy rows read as
+        // "allowed", matching the column defaults.
+        allow_text_copy: book.allow_text_copy !== 0,
+        allow_screenshot: book.allow_screenshot !== 0,
         pages,
         bookmarks,
         reading_progress: progress,

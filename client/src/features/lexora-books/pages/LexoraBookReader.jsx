@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { ArrowLeft, Loader2, AlertCircle } from "lucide-react"
 import FlipbookReader, { FlipbookBookmark } from "../flipbook"
+import { resolveReaderPermissions } from "../utils/readerPermissions"
 import {
   fetchLexoraBookReader,
   addBookmark,
@@ -161,6 +162,14 @@ export default function LexoraBookReader() {
   }, [book])
 
   const pdfUrl = book?.source_type === "pdf" ? book.pdf_url : null
+
+  // Book flags come from the reader payload as booleans; managers bypass
+  // the restriction. Plain call — not a hook, so no memo needed.
+  const readerPermissions = resolveReaderPermissions({
+    allowTextCopy: book?.allow_text_copy,
+    allowScreenshot: book?.allow_screenshot,
+    canManage: hasPermissionAction("manage_lexora_books", "edit"),
+  })
 
   const tableOfContent = useMemo(() => {
     if (!book) return []
@@ -332,6 +341,8 @@ export default function LexoraBookReader() {
           defaultZoom={1}
           maxZoom={3}
           minZoom={0.5}
+          allowTextCopy={readerPermissions.allowTextCopy}
+          allowScreenshot={readerPermissions.allowScreenshot}
           className="h-full"
         />
       </div>

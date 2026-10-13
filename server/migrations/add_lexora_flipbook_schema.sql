@@ -22,6 +22,12 @@
 ALTER TABLE lexora_books ADD COLUMN IF NOT EXISTS file_size BIGINT      DEFAULT NULL AFTER dimensions;
 ALTER TABLE lexora_books ADD COLUMN IF NOT EXISTS edition  VARCHAR(50)  DEFAULT NULL AFTER weight_unit;
 
+-- Reader copy/screenshot settings — creator-controlled per book.
+-- Default 1 keeps the previous "always allowed" behaviour for
+-- existing rows; consumed by GET /:id/reader and the flipbook UI.
+ALTER TABLE lexora_books ADD COLUMN IF NOT EXISTS allow_text_copy TINYINT(1) NOT NULL DEFAULT 1;
+ALTER TABLE lexora_books ADD COLUMN IF NOT EXISTS allow_screenshot  TINYINT(1) NOT NULL DEFAULT 1;
+
 -- --------------------------------------------------------
 -- 1. EXTEND lexora_books
 -- --------------------------------------------------------

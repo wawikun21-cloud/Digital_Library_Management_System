@@ -15,6 +15,14 @@ function slugify(text) {
     .substring(0, 500);
 }
 
+// Reader copy/screenshot flags. Only an explicit "off" value disables one;
+// anything missing or unrecognised keeps the column default (1 = allowed),
+// so a client that never sends the field cannot lock a book down by omission.
+function toFlag(value) {
+  if (value === false || value === 0 || value === "0" || value === "false") return 0;
+  return 1;
+}
+
 const LexoraBookModel = {
   // ── Helpers ──────────────────────────────────────────────
   _applyCommonFilters(query, filters) {
@@ -45,6 +53,7 @@ const LexoraBookModel = {
       co_publisher, translator, asin, doi, llcn,
       weight_value, weight_unit, edition, status, visibility,
       created_by, published_at, slug, file_size, length, table_of_contents,
+      allow_text_copy, allow_screenshot,
       ...rest
     } = data;
     let tableOfContents = table_of_contents ?? [];
@@ -90,6 +99,8 @@ const LexoraBookModel = {
         title: sanitize(entry.title).trim(),
         page_number: Number(entry.page_number),
       }))),
+      allow_text_copy: toFlag(allow_text_copy),
+      allow_screenshot:  toFlag(allow_screenshot),
     };
   },
 
@@ -134,9 +145,10 @@ const LexoraBookModel = {
            short_description, source_type, pdf_url, thumbnail_url, cover_url,
            download_url, publish_on, isbn10, isbn13, total_pages, dimensions,
            length, file_size, co_publisher, translator, asin, doi, llcn,
-           weight_value, weight_unit, edition, table_of_contents,
-           status, visibility, created_by, published_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            weight_value, weight_unit, edition, table_of_contents,
+            status, visibility, created_by, published_at,
+            allow_text_copy, allow_screenshot)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           data.title, data.slug, data.author, data.source, data.year,
           data.resource_type, data.format, data.subject_course,
@@ -148,6 +160,7 @@ const LexoraBookModel = {
           data.translator, data.asin, data.doi, data.llcn,
           data.weight_value, data.weight_unit, data.edition, data.table_of_contents,
           data.status, data.visibility, data.created_by, data.published_at,
+          data.allow_text_copy, data.allow_screenshot,
         ]
       );
 

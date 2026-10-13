@@ -9,6 +9,7 @@ import FlipbookPageJump from "./FlipbookPageJump"
 export default function FlipbookToolbar({
   state, actions, theme, viewMode,
   hasPdf = false, hasTOC = false, hasCover = false,
+  canCapture = true,
 }) {
   const [isVisible, setIsVisible] = useState(true)
   const idleTimerRef = useRef(null)
@@ -139,14 +140,18 @@ export default function FlipbookToolbar({
         </button>
       )}
 
-      <button
-        className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${btnHoverClass} ${state.showCapture ? "bg-white/15" : ""}`}
-        style={btnStyle}
-        onClick={actions.toggleCapture}
-        title="Copy text & screenshot"
-      >
-        <Camera size={16} />
-      </button>
+      {/* Hidden entirely when the book's creator disabled both copy and
+          screenshot — there is no panel to open. */}
+      {canCapture && (
+        <button
+          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${btnHoverClass} ${state.showCapture ? "bg-white/15" : ""}`}
+          style={btnStyle}
+          onClick={actions.toggleCapture}
+          title="Copy text & screenshot"
+        >
+          <Camera size={16} />
+        </button>
+      )}
 
       <div className="mx-1 h-5 w-px" style={{ background: "rgba(255,255,255,0.15)" }} />
 

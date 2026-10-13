@@ -12,6 +12,7 @@ import {
   fetchBookPages, deleteBookPage, reorderBookPages, replaceBookPage,
 } from "../../../services/api/lexoraBooksApi"
 import BookTocEditor from "./BookTocEditor"
+import LexoraBookReaderSettings from "./LexoraBookReaderSettings"
 import { Field, IconBtn, inputCls } from "./FormControls"
 
 const EMPTY_FORM = {
@@ -21,6 +22,7 @@ const EMPTY_FORM = {
   dimensions: "", file_size: "", publisher: "", co_publisher: "", translator: "",
   asin: "", doi: "", llcn: "", weight_value: "", weight_unit: "",
   edition: "", status: "draft", visibility: "public",
+  allow_text_copy: true, allow_screenshot: true,
   source: "", year: "", resource_type: "", format: "",
   subject_course: "", program: "", collection: "Lexora",
   table_of_contents: [],
@@ -37,6 +39,7 @@ const SECTIONS = [
   { id: "contents", label: "Table of contents" },
   { id: "organize", label: "Categories & tags" },
   { id: "publish", label: "Visibility" },
+  { id: "reader", label: "Reader settings" },
 ]
 
 export default function LexoraBookFormModal({ isOpen, onClose, book, onSaved }) {
@@ -84,7 +87,10 @@ export default function LexoraBookFormModal({ isOpen, onClose, book, onSaved }) 
       ? { ...EMPTY_FORM, ...book,
           table_of_contents: tableOfContents,
           category_ids: book.categories?.map((c) => c.id) || [],
-          tag_ids: book.tags?.map((t) => t.id) || [] }
+          tag_ids: book.tags?.map((t) => t.id) || [],
+          // Reader flags arrive as 1/0; only an explicit 0 disables.
+          allow_text_copy: book.allow_text_copy !== 0,
+          allow_screenshot: book.allow_screenshot !== 0 }
       : { ...EMPTY_FORM }
     setDraftBook(null)
     setForm(next)
@@ -398,6 +404,7 @@ export default function LexoraBookFormModal({ isOpen, onClose, book, onSaved }) 
       (form.source_type === "pdf" ? !!(form.pdf_url || pdfFile) : pageFiles.length + existingPages.length > 0),
     cover: !!(form.cover_url || coverFile),
     organize: form.category_ids.length + form.tag_ids.length > 0,
+    reader: true,
   }
   const statusText = saving ? "Saving book…" : uploading ? "Uploading files…"
     : errorCount ? `${errorCount} ${errorCount === 1 ? "field needs" : "fields need"} attention`
@@ -645,6 +652,10 @@ export default function LexoraBookFormModal({ isOpen, onClose, book, onSaved }) 
                   {isEdit ? form.status : "draft"}
                 </p>
               </Field>
+            </Section>
+
+            <Section id="reader" title="Reader settings" desc="What students can do with this book in the flipbook reader.">
+              <LexoraBookReaderSettings form={form} onChange={updateField} />
             </Section>
           </form>
         </div>

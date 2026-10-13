@@ -643,6 +643,13 @@ async function migrateSchema(conn) {
     `ALTER TABLE lexora_books ADD COLUMN visibility ENUM('public','private') NOT NULL DEFAULT 'public' AFTER status`,
     `ALTER TABLE lexora_books ADD COLUMN created_by INT DEFAULT NULL AFTER visibility`,
     `ALTER TABLE lexora_books ADD COLUMN published_at DATETIME DEFAULT NULL AFTER created_by`,
+
+    // ── lexora_books: reader copy/screenshot settings ───────
+    // Creator-controlled per book; default 1 keeps the previous
+    // "always allowed" behaviour for existing rows. Read by the
+    // GET /:id/reader payload and enforced in the flipbook UI.
+    `ALTER TABLE lexora_books ADD COLUMN allow_text_copy TINYINT(1) NOT NULL DEFAULT 1`,
+    `ALTER TABLE lexora_books ADD COLUMN allow_screenshot TINYINT(1) NOT NULL DEFAULT 1`,
     `ALTER TABLE lexora_books ADD INDEX idx_lexora_status (status)`,
     `ALTER TABLE lexora_books ADD INDEX idx_lexora_visibility (visibility)`,
     `ALTER TABLE lexora_books ADD INDEX idx_lexora_source_type (source_type)`,

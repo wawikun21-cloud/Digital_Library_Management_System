@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useFlipbookEngine } from "./hooks/useFlipbookEngine"
+import "./styles/flipbook.css"
 import FlipbookToolbar   from "./FlipbookToolbar"
 import FlipbookThumbnails from "./FlipbookThumbnails"
 import FlipbookTOC       from "./FlipbookTOC"
@@ -40,6 +41,11 @@ export default function FlipbookReader({
   onBookmark,
   bookId,
   isBookmarked,
+  // Creator-set reader restrictions (see features/lexora-books/
+  // utils/readerPermissions.js). Both default to allowed so callers
+  // that do not pass them keep the previous behaviour.
+  allowTextCopy = true,
+  allowScreenshot = true,
 }) {
   const [pdfTableOfContent, setPdfTableOfContent] = useState([])
   const { state, actions, effectiveViewMode, pdfDocRef } = useFlipbookEngine({
@@ -104,6 +110,10 @@ export default function FlipbookReader({
 
   const hasPdf = !!pdfUrl
   const hasTOC = tocItems.length > 0
+
+  // With both actions disabled the capture panel is unreachable, so its
+  // toolbar button is hidden as well.
+  const canCapture = allowTextCopy || allowScreenshot
 
   // Pages the user actually sees right now — the capture target for both
   // text copy and screenshots. Double view shows the spread [current, +1].
@@ -170,6 +180,7 @@ export default function FlipbookReader({
           state={state} actions={actions}
           theme={theme} viewMode={effectiveViewMode}
           hasPdf={hasPdf} hasTOC={hasTOC} hasCover={actualMode === "pageflip"}
+          canCapture={canCapture}
         />
       )}
 
@@ -204,6 +215,8 @@ export default function FlipbookReader({
           pages={pages}
           pageNumbers={capturePages}
           viewMode={effectiveViewMode}
+          allowTextCopy={allowTextCopy}
+          allowScreenshot={allowScreenshot}
           onClose={actions.toggleCapture}
         />
       )}
