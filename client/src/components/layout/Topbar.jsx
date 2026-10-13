@@ -68,12 +68,19 @@ export default function Topbar() {
     setLoggingOut(true);
     try {
       await authApi.logout();
-    } catch {
-      // clear local state regardless
-    } finally {
+      // Only on success: wipe the cache and go to login. Navigating to "/"
+      // used to run LandingRouteGuard → me(), and with the cache already
+      // wiped it dead-ended on /dashboard/unauthorized ("Access Denied")
+      // whenever the server-side logout had failed.
       sessionStorage.removeItem("lexora_user");
       localStorage.removeItem("lexora_user");
-      navigate("/", { replace: true });
+      navigate("/login", { replace: true });
+    } catch (err) {
+      // Server session may still be alive — keep the user signed in
+      // locally and let them retry instead of clearing state blindly.
+      showToast(err.message || "Could not log out on the server", "error");
+    } finally {
+      setLoggingOut(false);
     }
   };
 

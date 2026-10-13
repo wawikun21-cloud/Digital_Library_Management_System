@@ -95,7 +95,20 @@ app.use(cors({
   credentials: true,
   exposedHeaders: ["Content-Range", "Accept-Ranges", "Content-Length"],
 }));
-app.use(helmet());
+// Helmet's default img-src ('self' data:) blocks the ui-avatars.com
+// fallback avatars (see Topbar.jsx) and its default-src fallback for
+// frame-src blocks the YouTube/Vimeo lesson embeds used by the course
+// builder (courseHelpers.js). Extend only those two directives so every
+// other default (script-src 'self', object-src 'none', ...) stays intact.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      "img-src":   ["'self'", "data:", "https://ui-avatars.com"],
+      "frame-src": ["'self'", "https://www.youtube.com", "https://player.vimeo.com"],
+    },
+  },
+}));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);

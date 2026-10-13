@@ -13,14 +13,16 @@ const csurf    = require("csurf");
 const { login, logout, me, updateProfile } = require("../controllers/authController");
 const { upload } = require("../middleware/upload");
 
-// CSRF protection middleware for state-changing routes (cookie mode)
-const csrfProtection = csurf({
-  cookie: {
-    httpOnly: true,
-    secure:   process.env.NODE_ENV === "production",
-    sameSite: "lax",
-  },
-});
+// CSRF protection middleware for state-changing routes.
+// SESSION MODE — the secret lives in req.session.csrfSecret, persisted by
+// the express-session middleware mounted in server/index.js (before the
+// routes). Do NOT switch this to cookie mode (`csurf({ cookie: ... })`):
+// cookie mode reads the secret from req.cookies, which only the
+// cookie-parser package populates, and cookie-parser is NOT installed
+// here. In cookie mode every request fails verifyConfiguration() and
+// csurf throws "misconfigured csrf" — which is exactly what happened in
+// production while the dev branches below masked the misconfiguration.
+const csrfProtection = csurf();
 
 // CSRF error handler - returns proper JSON response
 function csrfErrorHandler(err, req, res, next) {

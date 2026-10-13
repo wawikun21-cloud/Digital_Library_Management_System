@@ -113,6 +113,17 @@ export function RoleRoute({ allow, children }) {
 export function PermissionRoute({ permission, children }) {
   const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
 
+  // No cached user at all → not authenticated (or the cache was just
+  // wiped, e.g. after a logout whose server call failed). Send them to
+  // login instead of blaming permissions — hasPermission(null) is false,
+  // which would otherwise dead-end on /dashboard/unauthorized while the
+  // session is still alive server-side. ProtectedRoute normally
+  // refreshes the cache from /auth/me before children render, so this
+  // only fires when the session/cache really is gone.
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
   if (!hasPermission(user, permission)) {
     return <Navigate to="/dashboard/unauthorized" replace />;
   }

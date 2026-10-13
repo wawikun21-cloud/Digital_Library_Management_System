@@ -120,6 +120,31 @@ async function initDatabase() {
         INDEX idx_created_at (created_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    // ── audit_logs (activity trail) ───────────────────────
+    // Column contract is defined by models/AuditLog.js and
+    // utils/auditHelper.js — keep the three in sync.
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id            BIGINT       AUTO_INCREMENT PRIMARY KEY,
+        user_id       INT          NULL,
+        user_username VARCHAR(100) NOT NULL,
+        entity_type   VARCHAR(50)  NULL,
+        entity_id     INT          NULL,
+        action        VARCHAR(50)  NOT NULL,
+        old_data      JSON         NULL,
+        new_data      JSON         NULL,
+        ip_address    VARCHAR(45)  NULL,
+        user_agent    TEXT         NULL,
+        created_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_created (created_at),
+        INDEX idx_user (user_id),
+        INDEX idx_user_username (user_username),
+        INDEX idx_action (action),
+        INDEX idx_entity (entity_type, entity_id),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
     console.log("✅ Users table ready");
 
     const [existing] = await conn.query("SELECT id FROM users LIMIT 1");
@@ -486,6 +511,29 @@ async function migrateSchema(conn) {
       INDEX idx_user_id (user_id),
       INDEX idx_created_at (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // ── audit_logs ─────────────────────────────────────────────────
+    // initDatabase() creates the table; these ALTERs reconcile
+    // databases that still have the old add_audit_logs.sql shape
+    // (username / role / summary / changes) with the columns the
+    // code writes (user_username / old_data / new_data / ...).
+    // Duplicate column & key errors (1060 / 1061) are tolerated by
+    // the loop below, so this is safe on already-migrated databases.
+    `ALTER TABLE audit_logs ADD COLUMN user_id INT NULL`,
+    `ALTER TABLE audit_logs ADD COLUMN user_username VARCHAR(100) NULL`,
+    `ALTER TABLE audit_logs ADD COLUMN entity_type VARCHAR(50) NULL`,
+    `ALTER TABLE audit_logs ADD COLUMN entity_id INT NULL`,
+    `ALTER TABLE audit_logs ADD COLUMN action VARCHAR(50) NULL`,
+    `ALTER TABLE audit_logs ADD COLUMN old_data JSON NULL`,
+    `ALTER TABLE audit_logs ADD COLUMN new_data JSON NULL`,
+    `ALTER TABLE audit_logs ADD COLUMN ip_address VARCHAR(45) NULL`,
+    `ALTER TABLE audit_logs ADD COLUMN user_agent TEXT NULL`,
+    `ALTER TABLE audit_logs ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+    `ALTER TABLE audit_logs ADD INDEX idx_created (created_at)`,
+    `ALTER TABLE audit_logs ADD INDEX idx_user (user_id)`,
+    `ALTER TABLE audit_logs ADD INDEX idx_user_username (user_username)`,
+    `ALTER TABLE audit_logs ADD INDEX idx_action (action)`,
+    `ALTER TABLE audit_logs ADD INDEX idx_entity (entity_type, entity_id)`,
 
     // ── books ──────────────────────────────────────────
     `ALTER TABLE books MODIFY COLUMN author    VARCHAR(255) NULL`,
