@@ -103,7 +103,7 @@ async function initDatabase() {
         INDEX idx_users_role (role),
         INDEX idx_users_active (is_active),
         UNIQUE KEY uk_users_email (email)
-      )
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
     // ── user_role_history (audit trail for role changes) ───
@@ -118,7 +118,7 @@ async function initDatabase() {
         created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_user_id (user_id),
         INDEX idx_created_at (created_at)
-      )
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     console.log("✅ Users table ready");
 
@@ -200,7 +200,7 @@ async function initDatabase() {
         INDEX idx_authors    (authors(100)),
         INDEX idx_callNumber (callNumber),
         INDEX idx_title      (title)
-      )
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     console.log("✅ Books table ready");
 
@@ -219,7 +219,7 @@ async function initDatabase() {
         INDEX idx_book_id (book_id),
         INDEX idx_acc     (accession_number),
         INDEX idx_status  (status)
-      )
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     console.log("✅ Book copies table ready");
 
@@ -251,7 +251,7 @@ async function initDatabase() {
         INDEX idx_status           (status),
         INDEX idx_due_date         (due_date),
         INDEX idx_accession_number (accession_number)
-      )
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     console.log("✅ Borrowed books table ready");
 
@@ -273,7 +273,7 @@ async function initDatabase() {
         INDEX idx_subject_course (subject_course(191)),
         INDEX idx_program        (program),
         INDEX idx_resource_type  (resource_type)
-      )
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     console.log("✅ Lexora books table ready");
 
@@ -438,7 +438,7 @@ async function initDatabase() {
         INDEX idx_student_id (student_id_number),
         INDEX idx_check_in   (check_in_time),
         INDEX idx_status     (status)
-      )
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     console.log("✅ Attendance table ready");
 
@@ -485,7 +485,7 @@ async function migrateSchema(conn) {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_user_id (user_id),
       INDEX idx_created_at (created_at)
-    )`,
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
     // ── books ──────────────────────────────────────────
     `ALTER TABLE books MODIFY COLUMN author    VARCHAR(255) NULL`,
@@ -555,7 +555,7 @@ async function migrateSchema(conn) {
       expires_at      TIMESTAMP    NULL,
       INDEX idx_entity (entity_type, entity_id),
       INDEX idx_expires (expires_at)
-    )`,
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
     // ── lexora_books ───────────────────────────────────
     `ALTER TABLE lexora_books ADD COLUMN format         VARCHAR(50)  NULL AFTER resource_type`,
