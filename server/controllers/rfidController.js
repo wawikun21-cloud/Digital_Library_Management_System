@@ -22,10 +22,22 @@ const RfidController = {
         return res.status(400).json({ success: false, error: "rfid_code is required." });
       }
 
-      const result = await RfidCardModel.tap(rfid_code.trim());
+      const result = await RfidCardModel.tap(rfid_code.trim(), req.schoolScope);
 
       if (result.unregistered) {
         // Broadcast to all connected clients so the UI can react
+        broadcast("rfid:unregistered", { rfid_code: rfid_code.trim() });
+        return res.status(200).json({
+          success: false,
+          unregistered: true,
+          rfid_code: rfid_code.trim(),
+          message: "RFID card not registered.",
+        });
+      }
+
+      if (result.outOfScope) {
+        // Kiosk fail-closed: the card belongs to a student of another
+        // school. Indistinguishable from "not registered" — no leak.
         broadcast("rfid:unregistered", { rfid_code: rfid_code.trim() });
         return res.status(200).json({
           success: false,
@@ -96,7 +108,7 @@ const RfidController = {
         return res.status(400).json({ success: false, error: "rfid_code and student_id_number are required." });
       }
 
-      const result = await RfidCardModel.register(rfid_code.trim(), student_id_number.trim());
+      const result = await RfidCardModel.register(rfid_code.trim(), student_id_number.trim(), req.schoolScope);
 
       if (!result.success) {
         return res.status(400).json(result);
@@ -117,7 +129,7 @@ const RfidController = {
    */
   async getAll(req, res) {
     try {
-      const result = await RfidCardModel.getAll();
+      const result = await RfidCardModel.getAll(req.schoolScope);
       return res.status(200).json(result);
     } catch (error) {
       console.error("[RfidController.getAll]", error.message);
@@ -131,7 +143,7 @@ const RfidController = {
   async delete(req, res) {
     try {
       const { id } = req.params;
-      const result = await RfidCardModel.delete(id);
+      const result = await RfidCardModel.delete(id, req.schoolScope);
       if (!result.success) return res.status(400).json(result);
       return res.status(200).json({ success: true, message: "RFID card removed." });
     } catch (error) {

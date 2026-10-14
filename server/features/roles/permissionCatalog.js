@@ -29,6 +29,7 @@ const PERMISSION_CATEGORIES = {
   settings:     "Settings",
   tools:        "Tools",
   roles:        "Roles & Permissions",
+  organization: "Organization",
 };
 
 /**
@@ -182,6 +183,13 @@ const PERMISSION_CATALOG = [
     actions: ["view", "edit"],
     grants: ["super_admin"],
   },
+  {
+    name: "manage_organization",
+    display_name: "Manage Organization",
+    category: "organization",
+    actions: ["view", "create", "edit", "delete"],
+    grants: ["super_admin", "admin"],
+  },
 ];
 
 /** Role grants mirror today's effective role access exactly. */
@@ -231,6 +239,7 @@ const SEED_BATCHES = {
   PERMISSIONS:  "v1_permissions",
   ROLE_GRANTS:  "v1_role_grants",
   ACTION_BACKFILL: "v1_action_backfill",
+  ORGANIZATION: "v2_organization",
 };
 
 function getPermissionDefinition(name) {

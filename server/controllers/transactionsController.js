@@ -8,6 +8,7 @@ const auditService        = require("../services/auditService");
 const { broadcast }       = require("../utils/websocket");
 const { successResponse, errorResponse } = require("../utils/responseFormatter");
 const { sendBorrowConfirmation } = require("../services/emailService");
+const bookAccess          = require("../features/organization/bookAccess.service");
 
 /**
  * After any mutation that changes stock/borrow counts,
@@ -27,7 +28,7 @@ const TransactionsController = {
   /** GET /api/transactions */
   getAllTransactions: async (req, res) => {
     try {
-      const result = await TransactionModel.getAll();
+      const result = await TransactionModel.getAll(req.schoolScope);
       if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
       res.json(successResponse(result.data));
     } catch (error) {
@@ -39,6 +40,14 @@ const TransactionsController = {
   /** POST /api/transactions — borrow a book */
   createTransaction: async (req, res) => {
     try {
+      // ── Book access is enforced HERE, before any stock mutation ──
+      // (server-side; a scoped operator cannot borrow a book outside
+      // their school's categories. 404 keeps the response uniform.)
+      const access = await bookAccess.isPhysicalBookAccessible(req.schoolScope, req.body?.book_id);
+      if (access.success && !access.accessible) {
+        return res.status(404).json(errorResponse("Book not found", 404));
+      }
+
       const result = await TransactionModel.create(req.body);
       if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
 
@@ -91,7 +100,7 @@ const TransactionsController = {
   /** PUT /api/transactions/:id — update / renew metadata */
   updateTransaction: async (req, res) => {
     try {
-      const result = await TransactionModel.update(req.params.id, req.body);
+      const result = await TransactionModel.update(req.params.id, req.body, req.schoolScope);
       if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
 
       // ── Audit: UPDATE (renew / edit) ─────────────────
@@ -113,7 +122,7 @@ const TransactionsController = {
   /** PUT /api/transactions/:id/return — return a book */
   returnTransaction: async (req, res) => {
     try {
-      const result = await TransactionModel.returnBook(req.params.id);
+      const result = await TransactionModel.returnBook(req.params.id, req.schoolScope);
       if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
 
       // ── Audit: RETURN ────────────────────────────────
@@ -142,7 +151,7 @@ const TransactionsController = {
   /** DELETE /api/transactions/:id */
   deleteTransaction: async (req, res) => {
     try {
-      const result = await TransactionModel.delete(req.params.id);
+      const result = await TransactionModel.delete(req.params.id, req.schoolScope);
       if (!result.success) return res.status(404).json(errorResponse(result.error, 404));
 
       // ── Audit: DELETE ────────────────────────────────
@@ -167,7 +176,7 @@ const TransactionsController = {
   /** PUT /api/transactions/:id/pay-fine — mark fine as paid */
   payFine: async (req, res) => {
     try {
-      const result = await TransactionModel.payFine(req.params.id);
+      const result = await TransactionModel.payFine(req.params.id, req.schoolScope);
       if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
 
       broadcast("transaction:fine_paid", result.data);

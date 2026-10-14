@@ -13,9 +13,12 @@ const controller = require("../controllers/analyticsController");
 
 const { requireAuth } = require("../middleware/authMiddleware");
 const { resolvePermissions, requirePermissionAction } = require("../features/roles");
+const { resolveSchoolScope } = require("../features/organization");
 
-// All analytics routes: authenticated + view_reports:view
-router.use(requireAuth, resolvePermissions);
+// All analytics routes: authenticated + view_reports:view + school scope
+// (book KPIs/charts scope through book assignments; the attendance chart
+// through the student-user link).
+router.use(requireAuth, resolvePermissions, resolveSchoolScope);
 router.use(requirePermissionAction("view_reports", "view"));
 
 // ── KPI stats ─────────────────────────────────────────────

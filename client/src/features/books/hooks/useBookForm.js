@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import booksApi from "../../../services/api/booksApi";
+import { setBookCategories } from "../../organization";
 import { EMPTY_FORM } from "../constants/bookForm";
 import { validateBookForm } from "../validation/bookValidation";
 import { applyServerErrors, focusFirstError } from "../utils/bookApiErrors";
@@ -84,6 +85,15 @@ export function useBookForm({ showToast, onCreated, onUpdated, onSaved }) {
     try {
       const result = await booksApi.createBook(form);
       if (result.success) {
+        // Category assignments are pending until the book has an id —
+        // persist them now so school access control applies immediately.
+        const categoryIds = form._categoryIds;
+        if (Array.isArray(categoryIds) && categoryIds.length > 0) {
+          const assignment = await setBookCategories(result.data.id, categoryIds);
+          if (!assignment.success) {
+            showToast(`Book added, but categories were not saved: ${assignment.error}`, "warning");
+          }
+        }
         onCreated?.(result.data);
         setModal(false);
         showToast("Book added successfully!", "success");

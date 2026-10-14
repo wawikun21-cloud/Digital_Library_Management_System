@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Trash2, Copy, AlertCircle } from "lucide-react";
+import { useAuth } from "../../../../hooks/useAuth";
+import { BookCategoryAssignment } from "../../../organization";
 
 const inputCls =
   "w-full px-3 py-2.5 rounded-lg text-[13px] border-[1.5px] outline-none transition-all duration-150 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10";
@@ -69,6 +71,11 @@ const SECTIONS = [
 // ─────────────────────────────────────────────────────────────────────────────
 export default function BookForm({ form, setForm, errors, setErrors, bookId }) {
   const [loadingCopies, setLoadingCopies] = useState(false);
+
+  // Category assignment (organization feature) — hidden without the
+  // manage_organization permission; the server enforces the same gate.
+  const { hasPermission } = useAuth();
+  const canManageOrg = hasPermission("manage_organization");
 
   // ── On edit mode: fetch existing copies from the server and seed form.copies ──
   useEffect(() => {
@@ -265,6 +272,18 @@ export default function BookForm({ form, setForm, errors, setErrors, bookId }) {
           onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
         />
       </div>
+
+      {/* ── Category assignment (school access control) ── */}
+      {canManageOrg && (
+        <div className="flex flex-col gap-4">
+          <SectionDivider title="Category Assignment" />
+          <BookCategoryAssignment
+            bookId={bookId ?? null}
+            type="physical"
+            onSelectionChange={(ids) => setForm((f) => ({ ...f, _categoryIds: ids }))}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -84,20 +84,6 @@ export default function BorrowedPage() {
   return (
     <div className="flex flex-col gap-5">
 
-      {/* ── Page Header ──────────────────────────────── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
-            style={{ color: "var(--text-primary)" }}>
-            <BookOpen size={22} style={{ color: "var(--accent-amber)" }} />
-            Borrowed Books
-          </h1>
-          <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
-            Manage borrowing transactions, returns, renewals, and overdue fines
-          </p>
-        </div>
-      </div>
-
       {/* ── Summary pills ──────────────────────────────── */}
       <TransactionSummaryCards summary={summary} />
 

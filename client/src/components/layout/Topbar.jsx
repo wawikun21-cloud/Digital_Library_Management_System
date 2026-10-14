@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ChevronDown, User, LogOut, Camera, Lock, Eye, EyeOff, Save, X, Loader2 } from "lucide-react";
+import { ChevronDown, User, LogOut, Camera, Lock, Eye, EyeOff, Save, X, Loader2, Menu } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -10,14 +10,33 @@ import {
 } from "../DropdownMenu";
 import Toast from "../Toast";
 import authApi from "../../services/api/authApi";
+import { NAV_ITEMS } from "./navItems.js";
 
-const PAGE_TITLES = {
-  "/":         "Analytics Dashboard",
-  "/books":    "Books",
-  "/borrowed": "Borrowed",
-  "/deleted":  "Recently Deleted",
-  "/lexora-books": "Lexora Books",
+// Page titles come from the same catalog the sidebar renders, so a new nav
+// entry gets its header title for free. The longest matching route wins, so
+// /dashboard/courses/create reads "Courses" rather than "Dashboard Analytics".
+const TITLE_ROUTES = NAV_ITEMS
+  .flatMap((item) => [item, ...(item.children ?? [])])
+  .map(({ to, label }) => ({ to, label }));
+
+// Nav labels that read ambiguously as a page title ("Book", "Attendance").
+const TITLE_OVERRIDES = {
+  "/dashboard/books/dashboard":      "Book Analytics",
+  "/dashboard/attendance/dashboard": "Attendance Analytics",
 };
+
+function resolveTitle(pathname) {
+  if (TITLE_OVERRIDES[pathname]) return TITLE_OVERRIDES[pathname];
+  let best = null;
+  for (const { to, label } of TITLE_ROUTES) {
+    // "/dashboard" is the index route only — it must not claim every child.
+    const matches = to === "/dashboard"
+      ? pathname === to
+      : pathname === to || pathname.startsWith(to + "/");
+    if (matches && (!best || to.length > best.to.length)) best = { to, label };
+  }
+  return best?.label ?? "Dashboard";
+}
 
 /** Read the cached user from session/localStorage (set during login) */
 function getCachedUser() {
@@ -43,10 +62,10 @@ function updateCachedUser(user) {
   }
 }
 
-export default function Topbar() {
+export default function Topbar({ onMobileToggle }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const title    = PAGE_TITLES[location.pathname] ?? "Dashboard";
+  const title    = resolveTitle(location.pathname);
 
   // ── Session user ─────────────────────────────────────
   const [sessionUser, setSessionUser] = useState(getCachedUser);
@@ -68,19 +87,12 @@ export default function Topbar() {
     setLoggingOut(true);
     try {
       await authApi.logout();
-      // Only on success: wipe the cache and go to login. Navigating to "/"
-      // used to run LandingRouteGuard → me(), and with the cache already
-      // wiped it dead-ended on /dashboard/unauthorized ("Access Denied")
-      // whenever the server-side logout had failed.
+    } catch {
+      // clear local state regardless
+    } finally {
       sessionStorage.removeItem("lexora_user");
       localStorage.removeItem("lexora_user");
-      navigate("/login", { replace: true });
-    } catch (err) {
-      // Server session may still be alive — keep the user signed in
-      // locally and let them retry instead of clearing state blindly.
-      showToast(err.message || "Could not log out on the server", "error");
-    } finally {
-      setLoggingOut(false);
+      navigate("/", { replace: true });
     }
   };
 
@@ -219,39 +231,33 @@ export default function Topbar() {
 
   return (
     <>
-      <header
-        className="sticky top-0 z-30 flex items-center justify-between h-[58px] px-4 sm:px-6"
-        style={{
-          background:   "var(--bg-topbar)",
-          borderBottom: "1px solid var(--border)",
-          boxShadow:    "0 1px 4px rgba(19,47,69,0.07)",
-          transition:   "background 0.3s, border-color 0.3s",
-        }}
-      >
-        {/* Left: page title */}
+      <header className="shell-header">
+        {/* Left: menu button (mobile) + page title */}
         <div className="flex items-center gap-3 min-w-0">
-          <h1 className="text-[15px] font-semibold truncate" style={{ color: "var(--text-primary)" }}>
-            {title}
-          </h1>
+          <button
+            type="button"
+            onClick={onMobileToggle}
+            className="shell-icon-btn lg:hidden"
+            aria-label="Open navigation menu"
+          >
+            <Menu size={18} />
+          </button>
+          <h1 className="shell-title">{title}</h1>
         </div>
 
         {/* Right: profile dropdown */}
         <DropdownMenu>
-          <DropdownMenuTrigger
-            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg select-none transition-colors duration-150 border-none bg-transparent cursor-pointer"
-            onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
-            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-          >
+          <DropdownMenuTrigger className="shell-profile-btn">
             <img
               src={avatarSrc}
               alt="Avatar"
-              className="w-8 h-8 rounded-full object-cover shrink-0"
-              style={{ border: "2px solid var(--accent-amber)" }}
+              className="w-9 h-9 rounded-full object-cover shrink-0"
+              style={{ border: "2px solid var(--accent-gold)" }}
             />
             <span className="hidden sm:block text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>
               {displayName}
             </span>
-            <ChevronDown size={14} style={{ color: "var(--text-secondary)", transition: "transform 0.2s" }} />
+            <ChevronDown size={14} style={{ color: "var(--text-secondary)" }} />
           </DropdownMenuTrigger>
 
           <DropdownMenuContent align="end" className="w-44">

@@ -22,8 +22,12 @@ const {
   resolvePermissions,
   requirePermissionAction,
 } = require("../features/roles");
+const { resolveSchoolScope } = require("../features/organization");
 
-router.use(requireAuth, resolvePermissions);
+// School scope is resolved fresh per request (session → DB) and
+// threaded into every model call; unscoped = super_admin or a
+// legacy (unassigned) user.
+router.use(requireAuth, resolvePermissions, resolveSchoolScope);
 
 // ── GET ───────────────────────────────────────────────────
 

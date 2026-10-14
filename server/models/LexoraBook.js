@@ -23,6 +23,19 @@ function toFlag(value) {
   return 1;
 }
 
+/**
+ * Validate a book's resource_type against the managed vocabulary
+ * (lexora_book_resource_types). Legacy values already stored on the book
+ * are still accepted so an old import keeps saving; only a *change* to a
+ * non-managed value is rejected. Pure — the model fetches the names.
+ */
+function resourceTypeError(value, managedNames, currentValue) {
+  if (!value) return null;
+  if (currentValue != null && String(value) === String(currentValue)) return null;
+  if (managedNames.some((name) => name === String(value))) return null;
+  return `"${value}" is not a managed resource type. Pick one from the list or create it first.`;
+}
+
 const LexoraBookModel = {
   // ── Helpers ──────────────────────────────────────────────
   _applyCommonFilters(query, filters) {
@@ -135,6 +148,12 @@ const LexoraBookModel = {
       const tocError = this._validateTableOfContents(bookData);
       if (tocError) return { success: false, error: tocError };
 
+      const typeError = resourceTypeError(
+        bookData.resource_type,
+        await this._managedResourceTypeNames()
+      );
+      if (typeError) return { success: false, error: typeError };
+
       const data = this._sanitizeBookData(bookData);
       if (!data.title?.trim()) return { success: false, error: "Title is required" };
 
@@ -177,15 +196,22 @@ const LexoraBookModel = {
 
   async getById(id, options = {}) {
     try {
-      const conditions = ["id = ?", "deleted_at IS NULL"]
+      const conditions = ["lb.id = ?", "lb.deleted_at IS NULL"]
       const params = [id]
       if (options.publishedOnly) {
-        conditions.push("status = 'published'", "visibility = 'public'")
+        conditions.push("lb.status = 'published'", "lb.visibility = 'public'")
       }
+      // School scope: filter by digital-book category assignments.
+      const { lexoraBookScopeSql, lexoraBookAssignmentSummary } = require("../features/organization/bookAccess.service");
+      const scopeSql = lexoraBookScopeSql(options.scope);
+      if (scopeSql.sql) conditions.push(scopeSql.sql.replace(/^AND /, ""));
       const where = conditions.join(" AND ")
+      const summary = lexoraBookAssignmentSummary();
       const [rows] = await pool.query(
-        `SELECT * FROM lexora_books WHERE ${where} LIMIT 1`,
-        params
+        `SELECT lb.* ${summary.columns}
+         FROM lexora_books lb ${summary.join}
+         WHERE ${where} LIMIT 1`,
+        [...params, ...scopeSql.params]
       );
       if (!rows.length) return { success: false, error: "Book not found" }
       return { success: true, data: rows[0] }
@@ -203,6 +229,15 @@ const LexoraBookModel = {
       const mergedData = { ...existing.data, ...bookData };
       const tocError = this._validateTableOfContents(mergedData);
       if (tocError) return { success: false, error: tocError };
+
+      // A value already stored on the book stays valid, so legacy imports
+      // keep saving; only switching to an unmanaged name is rejected.
+      const typeError = resourceTypeError(
+        mergedData.resource_type,
+        await this._managedResourceTypeNames(),
+        existing.data.resource_type
+      );
+      if (typeError) return { success: false, error: typeError };
 
       const data = this._sanitizeBookData(mergedData);
       if (bookData.status === "published" && !data.published_at) {
@@ -231,13 +266,24 @@ const LexoraBookModel = {
     }
   },
 
-  async delete(id) {
+  async delete(id, scope = null) {
     try {
-      const existing = await this.getById(id);
+      const existing = await this.getById(id, { scope });
       if (!existing.success) return existing;
 
+      // Snapshot the book's school onto the trash entry (scoped trash list).
       const TrashModel = require("./Trash");
-      return TrashModel.softDelete("lexora_book", Number(id));
+      const { pool } = require("../config/db");
+      const [schoolRow] = await pool.query(
+        `SELECT d.school_id
+         FROM lexora_book_assignments a
+         JOIN categories c  ON c.id = a.category_id AND c.deleted_at IS NULL
+         JOIN departments d ON d.id = c.department_id
+         WHERE a.lexora_book_id = ?
+         LIMIT 1`,
+        [id]
+      );
+      return TrashModel.softDelete("lexora_book", Number(id), null, schoolRow[0]?.school_id ?? null);
     } catch (error) {
       console.error("[LexoraBookModel.delete]", error.message);
       return { success: false, error: error.message };
@@ -249,63 +295,44 @@ const LexoraBookModel = {
       const conditions = ["deleted_at IS NULL"];
       const params = [];
 
-      if (filters.status) {
-        conditions.push("status = ?");
-        params.push(filters.status);
-      }
-      if (filters.visibility) {
-        conditions.push("visibility = ?");
-        params.push(filters.visibility);
-      }
-      if (filters.source_type) {
-        conditions.push("source_type = ?");
-        params.push(filters.source_type);
-      }
+      // Shared predicates (search / status / visibility / source_type /
+      // resource_type) come from the single source of truth so the list
+      // endpoints and the organization bulk assignment agree.
+      const shared = require("../shared/bookFilterSql").lexoraBookFilters(filters, "lb");
+      conditions.push(...shared.conditions);
+      params.push(...shared.params);
+
       if (filters.category_id) {
         conditions.push(`EXISTS (
           SELECT 1 FROM lexora_book_category_relations lcr
-          WHERE lcr.book_id = lexora_books.id AND lcr.category_id = ?
+          WHERE lcr.book_id = lb.id AND lcr.category_id = ?
         )`);
         params.push(filters.category_id);
       } else if (filters.category_slug) {
         conditions.push(`EXISTS (
           SELECT 1 FROM lexora_book_category_relations lcr
           INNER JOIN lexora_book_categories lc ON lc.id = lcr.category_id
-          WHERE lcr.book_id = lexora_books.id AND lc.slug = ?
+          WHERE lcr.book_id = lb.id AND lc.slug = ?
         )`);
         params.push(filters.category_slug);
       }
       if (filters.tag_id) {
         conditions.push(`EXISTS (
           SELECT 1 FROM lexora_book_tag_relations ltr
-          WHERE ltr.book_id = lexora_books.id AND ltr.tag_id = ?
+          WHERE ltr.book_id = lb.id AND ltr.tag_id = ?
         )`);
         params.push(filters.tag_id);
       } else if (filters.tag_slug) {
         conditions.push(`EXISTS (
           SELECT 1 FROM lexora_book_tag_relations ltr
           INNER JOIN lexora_book_tags lt ON lt.id = ltr.tag_id
-          WHERE ltr.book_id = lexora_books.id AND lt.slug = ?
+          WHERE ltr.book_id = lb.id AND lt.slug = ?
         )`);
         params.push(filters.tag_slug);
       }
       if (filters.program) {
         conditions.push("program = ?");
         params.push(filters.program);
-      }
-      if (filters.resource_type) {
-        conditions.push("resource_type = ?");
-        params.push(filters.resource_type);
-      }
-      if (filters.search) {
-        const term = `%${sanitize(filters.search).toLowerCase()}%`;
-        conditions.push(
-          `(LOWER(REPLACE(REPLACE(title, '\\n', ' '), '\\r', ' ')) LIKE ?
-             OR LOWER(COALESCE(short_description,'')) LIKE ?
-             OR LOWER(COALESCE(author,'')) LIKE ?
-             OR LOWER(COALESCE(subject_course,'')) LIKE ?)`
-        );
-        params.push(term, term, term, term);
       }
 
       const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -328,33 +355,42 @@ const LexoraBookModel = {
 
       let totalItems = null;
       if (usePaging) {
+        // Same scope as the rows query so pagination totals stay correct.
+        const { lexoraBookScopeSql } = require("../features/organization/bookAccess.service");
+        const countScope = lexoraBookScopeSql(filters.scope);
         const [[{ count }]] = await pool.query(
-          `SELECT COUNT(*) AS count FROM lexora_books ${where}`,
-          params
+          `SELECT COUNT(*) AS count FROM lexora_books lb ${where} ${countScope.sql}`,
+          [...params, ...countScope.params]
         );
         totalItems = Number(count) || 0;
       }
 
+      // School scope: filter by digital-book category assignments (lb alias).
+      const { lexoraBookScopeSql, lexoraBookAssignmentSummary } = require("../features/organization/bookAccess.service");
+      const scopeSql = lexoraBookScopeSql(filters.scope);
+      const summary = lexoraBookAssignmentSummary();
+
       const [rows] = await pool.query(
-        `SELECT lexora_books.*,
+        `SELECT lb.*,
           (SELECT GROUP_CONCAT(lc.name ORDER BY lc.name SEPARATOR ', ')
            FROM lexora_book_category_relations lcr
            INNER JOIN lexora_book_categories lc ON lc.id = lcr.category_id
-           WHERE lcr.book_id = lexora_books.id) AS category_names,
+           WHERE lcr.book_id = lb.id) AS category_names,
           (SELECT GROUP_CONCAT(lt.name ORDER BY lt.name SEPARATOR ', ')
            FROM lexora_book_tag_relations ltr
            INNER JOIN lexora_book_tags lt ON lt.id = ltr.tag_id
-           WHERE ltr.book_id = lexora_books.id) AS tag_names
-         FROM lexora_books ${where} ORDER BY ${orderBy}
+           WHERE ltr.book_id = lb.id) AS tag_names
+          ${summary.columns}
+         FROM lexora_books lb ${summary.join} ${where} ${scopeSql.sql} ORDER BY ${orderBy}
          ${usePaging ? "LIMIT ? OFFSET ?" : ""}`,
-        usePaging ? [...params, pageSize, (page - 1) * pageSize] : params
+        usePaging ? [...params, ...scopeSql.params, pageSize, (page - 1) * pageSize] : [...params, ...scopeSql.params]
       );
 
       const [programs] = await pool.query(
         "SELECT DISTINCT program FROM lexora_books WHERE program IS NOT NULL AND deleted_at IS NULL ORDER BY program"
       );
       const [resourceTypes] = await pool.query(
-        "SELECT DISTINCT resource_type FROM lexora_books WHERE resource_type IS NOT NULL AND deleted_at IS NULL ORDER BY resource_type"
+        "SELECT * FROM lexora_book_resource_types ORDER BY name"
       );
       const [categoriesList] = await pool.query(
         "SELECT DISTINCT lc.id, lc.name, lc.slug FROM lexora_book_categories lc INNER JOIN lexora_book_category_relations lcr ON lc.id = lcr.category_id ORDER BY lc.name"
@@ -367,7 +403,7 @@ const LexoraBookModel = {
         success: true,
         data: rows,
         programs: programs.map((r) => r.program),
-        resourceTypes: resourceTypes.map((r) => r.resource_type),
+        resourceTypes,
         categories: categoriesList,
         tags: tagsList,
       };
@@ -653,6 +689,69 @@ const LexoraBookModel = {
     } finally {
       conn.release();
     }
+  },
+
+  // ── Resource types (single-valued; the book stores the name) ──
+
+  async getResourceTypes() {
+    try {
+      const [rows] = await pool.query("SELECT * FROM lexora_book_resource_types ORDER BY name");
+      return { success: true, data: rows };
+    } catch (error) {
+      console.error("[LexoraBookModel.getResourceTypes]", error.message);
+      return { success: false, error: error.message };
+    }
+  },
+
+  async createResourceType(name) {
+    try {
+      const slug = slugify(name);
+      const [result] = await pool.query(
+        "INSERT INTO lexora_book_resource_types (name, slug) VALUES (?, ?)",
+        [name.trim(), slug]
+      );
+      const [rows] = await pool.query("SELECT * FROM lexora_book_resource_types WHERE id = ?", [result.insertId]);
+      return { success: true, data: rows[0] };
+    } catch (error) {
+      if (error.code === "ER_DUP_ENTRY") {
+        const [rows] = await pool.query("SELECT * FROM lexora_book_resource_types WHERE slug = ?", [slugify(name)]);
+        return { success: true, data: rows[0] };
+      }
+      console.error("[LexoraBookModel.createResourceType]", error.message);
+      return { success: false, error: error.message };
+    }
+  },
+
+  async deleteResourceType(id) {
+    try {
+      const [rows] = await pool.query("SELECT * FROM lexora_book_resource_types WHERE id = ?", [id]);
+      const type = rows[0];
+      if (!type) return { success: false, error: "Resource type not found" };
+      // Books store the type's name, so deleting a type that is still in
+      // use would leave books showing a badge nobody can manage — refuse
+      // with the count and let the librarian reassign first.
+      const [used] = await pool.query(
+        "SELECT COUNT(*) AS total FROM lexora_books WHERE resource_type = ? AND deleted_at IS NULL",
+        [type.name]
+      );
+      if (used[0].total > 0) {
+        return {
+          success: false,
+          error: `${used[0].total} book${used[0].total === 1 ? "" : "s"} still use "${type.name}". Reassign ${used[0].total === 1 ? "it" : "them"} first.`,
+        };
+      }
+      await pool.query("DELETE FROM lexora_book_resource_types WHERE id = ?", [id]);
+      return { success: true };
+    } catch (error) {
+      console.error("[LexoraBookModel.deleteResourceType]", error.message);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /** Names of the managed resource types, for write validation. */
+  async _managedResourceTypeNames() {
+    const result = await this.getResourceTypes();
+    return result.success ? result.data.map((row) => row.name) : [];
   },
 
   // ── Book Pages (image books) ─────────────────────────────

@@ -13,6 +13,14 @@ function StatusBadge({ isActive }) {
   );
 }
 
+/** School / department name with the Unassigned badge for legacy rows. */
+function ScopeCell({ name }) {
+  if (!name) {
+    return <span className="rp-badge rp-badge--muted">Unassigned</span>;
+  }
+  return <span style={{ color: "var(--text-secondary)" }}>{name}</span>;
+}
+
 /**
  * Desktop user list (hidden below lg — UserCard covers small screens).
  *
@@ -66,14 +74,14 @@ export default function UserTable({
       <table className="min-w-full text-sm">
         <thead>
           <tr style={{ background: "var(--bg-subtle, var(--bg-hover))", borderBottom: "1px solid var(--border)" }}>
-            {["User", "Role", "Status", "Created", "Actions"].map((heading, i) => (
+            {["User", "School", "Department", "Role", "Status", "Created", "Actions"].map((heading, i) => (
               <th
                 key={heading}
                 scope="col"
-                className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider ${i === 4 ? "text-right" : "text-left"}`}
+                className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider ${i === 6 ? "text-right" : "text-left"}`}
                 style={{ color: "var(--text-muted)" }}
               >
-                {i === 4 ? <span className="sr-only">{heading}</span> : heading}
+                {i === 6 ? <span className="sr-only">{heading}</span> : heading}
               </th>
             ))}
           </tr>
@@ -124,12 +132,17 @@ export default function UserTable({
                   </div>
                 </td>
                 <td className="px-4 py-3">
+                  <ScopeCell name={user.school_name} />
+                </td>
+                <td className="px-4 py-3">
+                  <ScopeCell name={user.department_name} />
+                </td>
+                <td className="px-4 py-3">
                   <UserRoleBadge role={user.role} />
                 </td>
                 <td className="px-4 py-3">
                   <StatusBadge isActive={isActive} />
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                </td>                <td className="px-4 py-3 whitespace-nowrap tabular-nums" style={{ color: "var(--text-secondary)" }}>
                   {formatDate(user.created_at) || "—"}
                 </td>
                 <td className="px-3 py-3">

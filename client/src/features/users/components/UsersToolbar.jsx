@@ -16,6 +16,9 @@ export default function UsersToolbar({
   onRoleFilter,
   roleOptions = [],
   total = 0,
+  canIncludeStudents = false,
+  includeStudents = false,
+  onIncludeStudentsChange,
 }) {
   const isSearching = Boolean(search && search.trim());
 
@@ -66,6 +69,17 @@ export default function UsersToolbar({
       <span className="ml-auto text-[12px]" style={{ color: "var(--text-muted)" }} aria-live="polite">
         {total} user{total !== 1 ? "s" : ""}
       </span>
+
+      {canIncludeStudents && (
+        <label className="flex items-center gap-1.5 text-[12px]" style={{ color: "var(--text-secondary)" }}>
+          <input
+            type="checkbox"
+            checked={includeStudents}
+            onChange={(e) => onIncludeStudentsChange?.(e.target.checked)}
+          />
+          Include students
+        </label>
+      )}
     </div>
   );
 }

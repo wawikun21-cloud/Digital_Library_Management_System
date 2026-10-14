@@ -72,10 +72,10 @@ export default function RecentlyDeletedPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <h1 className="text-xl sm:text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-            Recently Deleted
+            
           </h1>
           <p className="text-[12px] sm:text-[13px]" style={{ color: "var(--text-secondary)" }}>
-            Items are automatically purged after 30 days. Restore or permanently delete them below.
+            
           </p>
         </div>
         {canDeleteAll && items.length > 0 && (

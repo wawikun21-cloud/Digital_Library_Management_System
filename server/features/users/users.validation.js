@@ -100,6 +100,69 @@ function validateListQuery(query) {
   if (query.role && !VALID_ROLES.includes(query.role)) {
     errors.role = "Invalid role filter";
   }
+  if (query.exclude_role && !VALID_ROLES.includes(query.exclude_role)) {
+    errors.exclude_role = "Invalid role exclusion filter";
+  }
+  return { errors, isValid: Object.keys(errors).length === 0 };
+}
+
+/**
+ * Student-user payload validation. The server derives username AND
+ * password from the student ID number, so neither is ever accepted
+ * from the client.
+ */
+function validateCreateStudentUser(data) {
+  const errors = {};
+
+  if (!data.student_id_number || !data.student_id_number.trim()) {
+    errors.student_id_number = "Student ID number is required";
+  } else {
+    if (data.student_id_number.trim().length < 2) {
+      errors.student_id_number = "Student ID number must be at least 2 characters";
+    }
+    if (data.student_id_number.trim().length > 100) {
+      errors.student_id_number = "Student ID number must be at most 100 characters";
+    }
+  }
+
+  if (data.full_name !== undefined && data.full_name !== null && data.full_name.length > 255) {
+    errors.full_name = "Full name must be at most 255 characters";
+  }
+  if (data.student_course !== undefined && data.student_course !== null && data.student_course.length > 100) {
+    errors.student_course = "Course must be at most 100 characters";
+  }
+  if (data.student_email !== undefined && data.student_email !== null && data.student_email.trim()
+      && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.student_email)) {
+    errors.student_email = "Must be a valid email address";
+  }
+  if (data.school_id !== undefined && data.school_id !== null && !Number.isInteger(Number(data.school_id))) {
+    errors.school_id = "School must be a valid id";
+  }
+  if (data.department_id !== undefined && data.department_id !== null && !Number.isInteger(Number(data.department_id))) {
+    errors.department_id = "Department must be a valid id";
+  }
+  return { errors, isValid: Object.keys(errors).length === 0 };
+}
+
+function validateUpdateStudentUser(data) {
+  const errors = {};
+  if (data.student_id_number !== undefined) {
+    if (!data.student_id_number?.trim()) {
+      errors.student_id_number = "Student ID number cannot be empty";
+    } else if (data.student_id_number.trim().length > 100) {
+      errors.student_id_number = "Student ID number must be at most 100 characters";
+    }
+  }
+  if (data.full_name !== undefined && data.full_name !== null && data.full_name.length > 255) {
+    errors.full_name = "Full name must be at most 255 characters";
+  }
+  if (data.student_email !== undefined && data.student_email !== null && data.student_email.trim()
+      && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.student_email)) {
+    errors.student_email = "Must be a valid email address";
+  }
+  if (data.department_id !== undefined && data.department_id !== null && !Number.isInteger(Number(data.department_id))) {
+    errors.department_id = "Department must be a valid id";
+  }
   return { errors, isValid: Object.keys(errors).length === 0 };
 }
 
@@ -110,4 +173,6 @@ module.exports = {
   validateChangeRole,
   validateChangePassword,
   validateListQuery,
+  validateCreateStudentUser,
+  validateUpdateStudentUser,
 };

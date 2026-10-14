@@ -36,8 +36,15 @@ export default function AttendancePage() {
     toast, showToast, hideToast,
     fetchData, tap, checkOutStudent, removeRecord,
   } = useAttendanceRecords();
-  const { idInput, setIdInput, studentInfo, lookingUp, clearStudent } = useStudentLookup();
+  const { idInput, setIdInput, studentInfo, lookingUp, lookupStudentById, clearStudent } = useStudentLookup();
   const filters = useAttendanceFilters(records);
+
+  // Debounced lookup as the operator types (out-of-scope students are
+  // invisible server-side, so a miss is simply "not found").
+  const handleIdChange = useCallback((value) => {
+    setIdInput(value);
+    lookupStudentById(value);
+  }, [setIdInput, lookupStudentById]);
 
   const [tapResult,            setTapResult]            = useState(null);
   const [notFoundStudentId,    setNotFoundStudentId]    = useState(null);
@@ -82,7 +89,7 @@ export default function AttendancePage() {
       {/* ── Check-In / Tap Form ──────────────────────── */}
       <CheckInPanel
         idInput={idInput}
-        onIdChange={setIdInput}
+        onIdChange={handleIdChange}
         onSubmit={handleTap}
         tapping={tapping}
         lookingUp={lookingUp}

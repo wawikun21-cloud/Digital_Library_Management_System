@@ -6,9 +6,10 @@ const {
   resolvePermissions,
   requirePermissionAction,
 } = require("../../features/roles");
+const { resolveSchoolScope } = require("../organization");
 const { toolsUpload } = require("../../middleware/toolsUpload");
 
-router.use(requireAuth, resolvePermissions);
+router.use(requireAuth, resolvePermissions, resolveSchoolScope);
 
 // Listing and reading are open to every authenticated role that holds
 // use_tools (all five seeded roles). The controller still forces an

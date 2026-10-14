@@ -20,6 +20,7 @@ const { ipKeyGenerator } = require("express-rate-limit");
 const RfidController = require("../controllers/rfidController");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { resolvePermissions, requirePermissionAction } = require("../features/roles");
+const { resolveSchoolScope } = require("../features/organization");
 
 // ── Parse allowed IPs from env (comma-separated, e.g. "192.168.1.100,10.0.0.5") ─
 const allowedIPs = (process.env.RFID_ALLOWED_IPS || "")
@@ -76,8 +77,13 @@ const rfidTapLimiter = rateLimit({
  * @route   POST /api/rfid/tap
  * @desc    Handle an RFID card tap (check-in / check-out or unregistered)
  * @access  Public (RFID reader hits this) — rate-limited: 20/min/IP, IP-whitelisted in prod
+ *
+ *  resolveSchoolScope is session-OPTIONAL here: hardware readers hit
+ *  this endpoint with no session (scope = null = unrestricted, the
+ *  gate itself enforces presence), while the web kiosk runs as a
+ *  logged-in operator and gets the fail-closed school check.
  */
-router.post("/tap", ipWhitelist, rfidTapLimiter, RfidController.tap);
+router.post("/tap", ipWhitelist, rfidTapLimiter, resolveSchoolScope, RfidController.tap);
 
 /**
  * @route   GET /api/rfid/simulate

@@ -1,4 +1,31 @@
-export default function BookTable({ 
+/** School / category names from the book's org assignment summary. */
+function OrgBadges({ names, emptyLabel = "Unassigned" }) {
+  if (!names) {
+    return (
+      <span
+        className="text-[10px] font-bold px-2 py-1 rounded-md"
+        style={{ background: "var(--bg-subtle)", color: "var(--text-muted)", border: "1px solid var(--border-light)" }}
+      >
+        {emptyLabel}
+      </span>
+    );
+  }
+  return (
+    <span className="flex flex-wrap gap-1">
+      {names.split(", ").map((name) => (
+        <span
+          key={name}
+          className="text-[10px] font-bold px-2 py-1 rounded-md"
+          style={{ background: "var(--bg-subtle)", color: "var(--text-secondary)", border: "1px solid var(--border-light)" }}
+        >
+          {name}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+export default function BookTable({
   books, 
   onView, 
 }) {
@@ -24,6 +51,10 @@ export default function BookTable({
               color: "var(--text-muted)", 
               minWidth: "80px"
             }}>Collection</th>
+            <th scope="col" className="px-3 py-3 text-[11px] font-bold uppercase tracking-wider" style={{ 
+              color: "var(--text-muted)", 
+              minWidth: "120px"
+            }}>School / Category</th>
             <th scope="col" className="px-3 py-3 text-[11px] font-bold uppercase tracking-wider" style={{ 
               color: "var(--text-muted)", 
               minWidth: "60px"
@@ -111,6 +142,12 @@ export default function BookTable({
                     }}
                   >
                     {book.collection || "—"}
+                  </span>
+                </td>
+                <td className="px-3 py-3.5">
+                  <OrgBadges names={book.org_school_names} />
+                  <span className="mt-1 block">
+                    <OrgBadges names={book.org_category_names} emptyLabel="No category" />
                   </span>
                 </td>
                 <td className="px-3 py-3.5">

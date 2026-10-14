@@ -1,13 +1,18 @@
 /**
  * features/students/hooks/useStudentImport.js
  *
- * Bulk-import state machine: file selection, Excel parsing, course / school
- * year selection, the simulated progress bar, the import call and results.
- * Extracted from the component body of the former pages/Students.jsx.
+ * Bulk-import state machine: file selection, Excel parsing, course /
+ * school-year selection, the simulated progress bar, the import call
+ * and results. Extracted from the component body of the former
+ * pages/Students.jsx.
+ *
+ * Imported rows become student users with default credentials applied
+ * server-side; the per-row report classifies every row (imported /
+ * failed + reason) — nothing is silently dropped.
  */
 
 import { useState, useCallback, useRef } from "react";
-import { bulkImportStudents } from "../../../services/api/studentsApi";
+import { bulkImportStudents } from "../api/studentsApi";
 import { parseStudentsExcel, downloadStudentTemplate } from "../utils/studentExcel";
 import { validateImportFields } from "../validation/studentValidation";
 import { schoolYearOptions } from "../utils/studentFilters";
@@ -21,6 +26,8 @@ export function useStudentImport({ showToast, onImported }) {
   const [importResult, setImportResult]       = useState(null);
   const [importCourse, setImportCourse]       = useState("");
   const [importSchoolYear, setImportSchoolYear] = useState("");
+  const [importSchoolId, setImportSchoolId]   = useState(null);
+  const [importDepartmentId, setImportDepartmentId] = useState(null);
   const [isImporting, setIsImporting]         = useState(false);
   const [importProgress, setImportProgress]   = useState(0);
   const [importErrors, setImportErrors]       = useState({});
@@ -37,6 +44,8 @@ export function useStudentImport({ showToast, onImported }) {
     setImportResult(null);
     setImportCourse("");
     setImportSchoolYear("");
+    setImportSchoolId(null);
+    setImportDepartmentId(null);
     setImportProgress(0);
     setImportErrors({});
     clearFileInput();
@@ -102,8 +111,11 @@ export function useStudentImport({ showToast, onImported }) {
     try {
       const studentsWithCourse = studentsData.map(student => ({
         ...student,
+        role: "student",
         student_course: importCourse,
-        student_school_year: importSchoolYear
+        student_school_year: importSchoolYear,
+        school_id: importSchoolId,
+        department_id: importDepartmentId,
       }));
 
       const response = await bulkImportStudents(studentsWithCourse);
@@ -111,11 +123,23 @@ export function useStudentImport({ showToast, onImported }) {
 
       if (response.success) {
         setImportProgress(100);
-        setImportResult(response.data);
+        const report = response.data || { imported: 0, failed: 0, results: [] };
+        setImportResult({
+          successful: report.imported,
+          failed: report.failed,
+          errors: (report.results || [])
+            .filter(row => row.status === "failed")
+            .map(row => ({
+              index: row.index,
+              student_id_number: row.student_id_number,
+              name: row.name,
+              error: row.error,
+            })),
+        });
         setParsedStudentsData(null);
-        showToast(`Successfully imported ${response.data.successful} students`, "success");
-        if (response.data.failed > 0) {
-          showToast(`Failed to import ${response.data.failed} students. Check the results for details.`, "warning");
+        showToast(`Successfully imported ${report.imported} students`, "success");
+        if (report.failed > 0) {
+          showToast(`Failed to import ${report.failed} students. Check the results for details.`, "warning");
         }
         onImported?.();
       } else {
@@ -129,7 +153,7 @@ export function useStudentImport({ showToast, onImported }) {
     } finally {
       setIsImporting(false);
     }
-  }, [importCourse, importSchoolYear, showToast, onImported]);
+  }, [importCourse, importSchoolYear, importSchoolId, importDepartmentId, showToast, onImported]);
 
   const setCourse = useCallback((value) => {
     setImportCourse(value);
@@ -157,6 +181,8 @@ export function useStudentImport({ showToast, onImported }) {
   return {
     importFile, parsedStudentsData, importResult,
     importCourse, setCourse, importSchoolYear, setSchoolYear,
+    importSchoolId, setImportSchoolId,
+    importDepartmentId, setImportDepartmentId,
     isImporting, importProgress, importErrors,
     schoolYearChoices,
     fileInputRef,

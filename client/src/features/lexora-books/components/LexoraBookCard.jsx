@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom"
 import { BookOpen, Bookmark, Loader2 } from "lucide-react"
+import { resourceTypeBadgeStyle } from "../utils/resourceTypeBadge"
 
 export default function LexoraBookCard({
   book,
@@ -44,7 +45,12 @@ export default function LexoraBookCard({
         <div className="flex flex-col gap-0.5 px-2.5 pb-2.5">
           <h3 className="line-clamp-1 text-[12px] font-semibold leading-tight" style={{ color: "var(--text-primary)" }}>{displayTitle}</h3>
           {book.author && <p className="truncate text-[10px]" style={{ color: "var(--text-muted)" }}>{book.author}</p>}
-          <div className="flex items-center gap-1.5 mt-1">
+          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+            {book.resource_type && (
+              <span className="rounded px-1.5 py-0.5 text-[9px] font-semibold" style={resourceTypeBadgeStyle(book.resource_type)}>
+                {book.resource_type}
+              </span>
+            )}
             <span className="rounded px-1.5 py-0.5 text-[9px]" style={{ background: "rgba(238,162,58,0.12)", color: "var(--accent-amber)" }}>{book.source_type === "pdf" ? "PDF" : "Images"}</span>
             {book.total_pages && <span className="text-[9px]" style={{ color: "var(--text-muted)" }}>{book.total_pages} pages</span>}
           </div>

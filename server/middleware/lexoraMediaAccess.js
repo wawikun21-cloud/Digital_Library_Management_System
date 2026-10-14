@@ -1,4 +1,8 @@
+const fs = require("fs");
+const path = require("path");
+const { pool } = require("../config/db");
 const LexoraBookModel = require("../models/LexoraBook");
+const { lexoraBookScopeSql } = require("../features/organization/bookAccess.service");
 
 // pdf.js issues many Range requests per PDF; avoid 1-2 DB queries for each one.
 // The decision is cached briefly per (book, viewer), so unpublishing/permission
@@ -10,8 +14,11 @@ const accessCache = new Map();
 // it may point off-site and is never served from this folder.
 const BOOK_FILE_FIELDS = ["pdf_url", "thumbnail_url", "cover_url"];
 
-function accessKey(bookId, user) {
-  return `${bookId}:${user?.id ?? "anon"}:${user?.role ?? ""}`;
+function accessKey(bookId, user, schoolId) {
+  // Scope is part of the viewer identity: a permission change takes
+  // effect within ACCESS_TTL_MS, and viewers of different schools
+  // never share a cached verdict.
+  return `${bookId}:${user?.id ?? "anon"}:${user?.role ?? ""}:${schoolId ?? "-"}`;
 }
 
 /** Drops expired rows; bounded by distinct (book, viewer) pairs in one window. */
@@ -42,7 +49,22 @@ module.exports = async function lexoraMediaAccess(req, res, next) {
     if (!Number.isSafeInteger(bookId) || bookId < 1) return res.status(404).end();
 
     const user = req.session?.user;
-    const cacheKey = accessKey(bookId, user);
+
+    // ── School scope: resolve the viewer's scope fresh (this middleware
+    //    is mounted at app level, before any per-route scope middleware)
+    //    and refuse files of another school's book. Anonymous readers
+    //    have no scope — they are covered by the isPublic check below.
+    let schoolId = null;
+    if (user?.id) {
+      const [scopeRows] = await pool.query(
+        "SELECT role, school_id FROM users WHERE id = ? LIMIT 1",
+        [user.id]
+      );
+      schoolId = scopeRows[0]?.school_id ?? null;
+    }
+    const scoped = !!schoolId;
+
+    const cacheKey = accessKey(bookId, user, schoolId);
     const cached = accessCache.get(cacheKey);
     const requestedUrl = `${req.baseUrl}${req.path}`;
 
@@ -55,6 +77,27 @@ module.exports = async function lexoraMediaAccess(req, res, next) {
     if (!result.success) return res.status(404).end();
 
     const book = result.data;
+
+    // ── Org check BEFORE anything else: a scoped viewer may only load
+    //    media of books assigned to their school's categories
+    //    (unassigned books stay visible — legacy fallback).
+    if (scoped) {
+      const scopeSql = lexoraBookScopeSql({ scoped: true, schoolId });
+      const [allowed] = await pool.query(
+        `SELECT lb.id FROM lexora_books lb WHERE lb.id = ? ${scopeSql.sql} LIMIT 1`,
+        [bookId, ...scopeSql.params]
+      );
+      if (!allowed.length) {
+        accessCache.set(cacheKey, {
+          urls: new Set(),
+          verified: true,
+          expires: Date.now() + ACCESS_TTL_MS,
+        });
+        pruneAccessCache();
+        return res.status(404).end();
+      }
+    }
+
     const isManager = user?.role === "admin" || user?.role === "librarian";
     const isOwner = user && Number(book.created_by) === Number(user.id);
     const isPublic = book.status === "published" && book.visibility === "public";

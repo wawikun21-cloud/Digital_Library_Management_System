@@ -1,4 +1,4 @@
-const toolsService = require("./tools.service");
+﻿const toolsService = require("./tools.service");
 const { uploadsDir } = require("../../config/uploads");
 const path = require("path");
 const fs = require("fs/promises");
@@ -63,14 +63,14 @@ function listTools(req, res) {
     // so a crafted `is_active=false` cannot reveal unpublished entries.
     if (!canManage(role)) filters.is_active = "true";
 
-    const result = await toolsService.listTools(filters);
+      const result = await toolsService.listTools(filters, req.schoolScope);
     res.status(200).json({ success: true, ...result });
   });
 }
 
 function getTool(req, res) {
   return runAsync(req, res, async () => {
-    const tool = await toolsService.getTool(parseInt(req.params.id));
+      const tool = await toolsService.getTool(parseInt(req.params.id), req.schoolScope);
     if (!tool) {
       return res.status(404).json({ success: false, error: "Tool not found" });
     }
@@ -109,8 +109,8 @@ function createTool(req, res) {
         toolData.file_type = file.mimetype;
       }
 
-      const id = await toolsService.createTool(userId, toolData);
-      const saved = await toolsService.getTool(id);
+      const id = await toolsService.createTool(userId, toolData, req.schoolScope);
+      const saved = await toolsService.getTool(id, req.schoolScope);
       res.status(201).json({ success: true, data: saved });
     } catch (error) {
       // Never leave an asset on disk that no row points at.
@@ -123,7 +123,7 @@ function createTool(req, res) {
 function updateTool(req, res) {
   return runAsync(req, res, async () => {
     const id = parseInt(req.params.id);
-    const existing = await toolsService.getTool(id);
+      const existing = await toolsService.getTool(id, req.schoolScope);
     if (!existing) {
       return res.status(404).json({ success: false, error: "Tool not found" });
     }
@@ -152,13 +152,13 @@ function updateTool(req, res) {
         updates.file_type = file.mimetype;
       }
 
-      await toolsService.updateTool(id, updates);
+      await toolsService.updateTool(id, updates, req.schoolScope);
 
       // Only drop the previous assets once the row is known to be updated.
       if (updates.thumbnail_url) await removeToolFile(existing.thumbnail_url);
       if (updates.file_path) await removeToolFile(existing.file_path);
 
-      const updated = await toolsService.getTool(id);
+      const updated = await toolsService.getTool(id, req.schoolScope);
       res.status(200).json({ success: true, data: updated });
     } catch (error) {
       await Promise.all(stored.map((filename) => removeToolFile(filename)));
@@ -170,7 +170,7 @@ function updateTool(req, res) {
 function deleteTool(req, res) {
   return runAsync(req, res, async () => {
     const id = parseInt(req.params.id);
-    const existing = await toolsService.getTool(id);
+      const existing = await toolsService.getTool(id, req.schoolScope);
     if (!existing) {
       return res.status(404).json({ success: false, error: "Tool not found" });
     }
@@ -178,7 +178,7 @@ function deleteTool(req, res) {
     await removeToolFile(existing.file_path);
     await removeToolFile(existing.thumbnail_url);
 
-    await toolsService.deleteTool(id);
+      await toolsService.deleteTool(id, req.schoolScope);
     res.status(200).json({ success: true, message: "Tool deleted" });
   });
 }
@@ -201,7 +201,7 @@ function getStats(req, res) {
 function downloadTool(req, res) {
   return runAsync(req, res, async () => {
     const id = parseInt(req.params.id);
-    const tool = await toolsService.getTool(id);
+      const tool = await toolsService.getTool(id, req.schoolScope);
     if (!tool) {
       return res.status(404).json({ success: false, error: "Tool not found" });
     }

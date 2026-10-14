@@ -224,6 +224,24 @@ export async function replaceBookPage(id, pageId, file) {
   return requestForm(`${LEXORA_API}/${id}/pages/${pageId}/image`, form)
 }
 
+export async function fetchResourceTypes() {
+  try {
+    const res = await fetch(`${LEXORA_API}/resource-types/all`, { credentials: "include" })
+    return await res.json()
+  } catch (error) {
+    console.error("[lexoraBooksApi] fetchResourceTypes:", error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function createResourceType(name) {
+  return request(`${LEXORA_API}/resource-types`, { method: "POST", body: JSON.stringify({ name }) })
+}
+
+export async function deleteResourceType(id) {
+  return request(`${LEXORA_API}/resource-types/${id}`, { method: "DELETE" })
+}
+
 export async function fetchCategories() {
   try {
     const res = await fetch(`${LEXORA_API}/categories/all`, { credentials: "include" })

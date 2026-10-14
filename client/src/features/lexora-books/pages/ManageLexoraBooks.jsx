@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
-import { Plus, BookOpen } from "lucide-react"
+import { Plus } from "lucide-react"
 import { useLexoraBooks } from "../hooks/useLexoraBooks"
 import LexoraBookAdminTable from "../components/LexoraBookAdminTable"
 import LexoraBookFormModal from "../components/LexoraBookFormModal"
@@ -96,11 +96,8 @@ export default function ManageLexoraBooks() {
         <div>
           <h1 className="text-[22px] font-bold flex items-center gap-2.5"
             style={{ color: "var(--text-primary)" }}>
-            <BookOpen size={22} style={{ color: "var(--accent-amber)" }} />
-            Manage Lexora Books
           </h1>
           <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
-            Create, edit, and publish digital books
           </p>
         </div>
         <div className="flex items-center gap-2">

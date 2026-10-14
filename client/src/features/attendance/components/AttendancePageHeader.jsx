@@ -5,7 +5,7 @@
  * Extracted from the former pages/Attendance.jsx.
  */
 
-import { Users, CreditCard, Monitor, Download } from "lucide-react";
+import { CreditCard, Monitor, Download } from "lucide-react";
 
 export default function AttendancePageHeader({ onRegisterRfid, onKioskView, onDownloadPdf }) {
   return (
@@ -13,11 +13,8 @@ export default function AttendancePageHeader({ onRegisterRfid, onKioskView, onDo
       <div>
         <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
           style={{ color: "var(--text-primary)" }}>
-          <Users size={22} style={{ color: "var(--accent-amber)" }} />
-          Attendance Management
         </h1>
         <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
-          Track student check-in / check-out and library visit history
         </p>
       </div>
 

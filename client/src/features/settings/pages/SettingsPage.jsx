@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Settings } from "lucide-react";
 import { HeroSlidesManager } from "../../portal";
 
 function StudentPortalTab() {
@@ -25,11 +24,9 @@ export default function SettingsPage({ defaultTab = "student-portal" }) {
     <div className="mx-auto flex max-w-4xl flex-col gap-5">
       <div>
         <h1 className="flex items-center gap-2.5 text-[22px] font-bold" style={{ color: "var(--text-primary)" }}>
-          <Settings size={22} style={{ color: "var(--accent-amber)" }} />
-          Settings
+          
         </h1>
         <p className="mt-0.5 text-[13px]" style={{ color: "var(--text-secondary)" }}>
-          Manage what students see in the portal.
         </p>
       </div>
 

@@ -32,7 +32,7 @@ const SNAPSHOT_MAP = {
 const TrashModel = {
 
   // ── Soft-delete a record ────────────────────────────────
-  async softDelete(entityType, entityId, deletedBy = "admin") {
+  async softDelete(entityType, entityId, deletedBy = "admin", schoolId = null) {
     const table = TABLE_MAP[entityType];
     if (!table) return { success: false, error: `Unknown entity type: ${entityType}` };
 
@@ -101,9 +101,9 @@ const TrashModel = {
 
       // Log to trash_log
       await conn.query(
-        `INSERT INTO trash_log (entity_type, entity_id, entity_title, entity_meta, deleted_by)
-         VALUES (?, ?, ?, ?, ?)`,
-        [entityType, entityId, snapshot.title || `ID: ${entityId}`, JSON.stringify(snapshot), deletedBy]
+        `INSERT INTO trash_log (entity_type, entity_id, entity_title, entity_meta, deleted_by, school_id)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [entityType, entityId, snapshot.title || `ID: ${entityId}`, JSON.stringify(snapshot), deletedBy, schoolId]
       );
 
       await conn.commit();
@@ -119,7 +119,7 @@ const TrashModel = {
   },
 
   // ── Restore a soft-deleted record ──────────────────────
-  async restore(trashLogId) {
+  async restore(trashLogId, scope = null) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -132,7 +132,16 @@ const TrashModel = {
         return { success: false, error: "Trash entry not found" };
       }
 
-      const log    = logRows[0];
+      const log = logRows[0];
+
+      // School scope: a scoped caller may only restore their school's
+      // trash (NULL school = legacy fallback).
+      if (scope && scope.scoped && scope.schoolId != null
+          && log.school_id != null && log.school_id !== scope.schoolId) {
+        await conn.rollback();
+        return { success: false, error: "Trash entry not found" };
+      }
+
       const table  = TABLE_MAP[log.entity_type];
       if (!table) {
         await conn.rollback();
@@ -185,7 +194,7 @@ const TrashModel = {
   },
 
   // ── Permanently delete a single trash entry ─────────────
-  async permanentDelete(trashLogId) {
+  async permanentDelete(trashLogId, scope = null) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -198,7 +207,15 @@ const TrashModel = {
         return { success: false, error: "Trash entry not found" };
       }
 
-      const log   = logRows[0];
+      const log = logRows[0];
+
+      // School scope: a scoped caller may only purge their school's trash.
+      if (scope && scope.scoped && scope.schoolId != null
+          && log.school_id != null && log.school_id !== scope.schoolId) {
+        await conn.rollback();
+        return { success: false, error: "Trash entry not found" };
+      }
+
       const table = TABLE_MAP[log.entity_type];
 
       if (table) {
@@ -240,16 +257,27 @@ const TrashModel = {
   },
 
   // ── Permanently delete ALL trash ───────────────────────
-  async permanentDeleteAll(entityType = null) {
+  async permanentDeleteAll(entityType = null, scope = null) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
 
-      const whereClause = entityType ? "WHERE entity_type = ?" : "";
-      const params = entityType ? [entityType] : [];
+      const whereClauses = [];
+      const params = [];
+      if (entityType) {
+        whereClauses.push("entity_type = ?");
+        params.push(entityType);
+      }
+      // School scope: scoped callers purge only their school's trash
+      // (and NULL-school legacy entries they created before scoping).
+      if (scope && scope.scoped && scope.schoolId != null) {
+        whereClauses.push("(school_id = ? OR school_id IS NULL)");
+        params.push(scope.schoolId);
+      }
+      const where = whereClauses.length ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
       const [logs] = await conn.query(
-        `SELECT * FROM trash_log ${whereClause}`, params
+        `SELECT * FROM trash_log ${where}`, params
       );
 
       for (const log of logs) {
@@ -301,7 +329,7 @@ const TrashModel = {
   },
 
   // ── Get all trash entries ───────────────────────────────
-  async getAll(filters = {}) {
+  async getAll(filters = {}, scope = null) {
     try {
       const conditions = ["DATE_SUB(NOW(), INTERVAL 30 DAY) < t.deleted_at"];
       const params     = [];
@@ -315,6 +343,13 @@ const TrashModel = {
         conditions.push("(t.entity_title LIKE ? OR t.entity_meta LIKE ?)");
         const term = `%${filters.search}%`;
         params.push(term, term);
+      }
+
+      // School scope: scoped callers see their school's trash plus
+      // legacy (NULL-school) entries.
+      if (scope && scope.scoped && scope.schoolId != null) {
+        conditions.push("(t.school_id = ? OR t.school_id IS NULL)");
+        params.push(scope.schoolId);
       }
 
       const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";

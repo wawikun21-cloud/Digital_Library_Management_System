@@ -28,6 +28,13 @@ export function validateUserForm(formData, currentUser = null) {
     errors.full_name = "Full name must be at most 255 characters";
   }
 
+  // A department can only exist inside a school (server enforces the
+  // same pairing). Edit mode: the school is fixed for scoped callers.
+  if (formData.department_id != null && formData.department_id !== ""
+      && (formData.school_id == null || formData.school_id === "")) {
+    errors.department_id = "Assign a school before assigning a department";
+  }
+
   return { errors, isValid: Object.keys(errors).length === 0 };
 }
 
@@ -59,7 +66,7 @@ export const defaultFormValues = {
   username: "",
   password: "",
   confirmPassword: "",
-  role: ROLES.STUDENT,
+  role: ROLES.STAFF,
   full_name: "",
   email: "",
   position_title: "",
@@ -69,11 +76,8 @@ export const defaultFormValues = {
   birthdate: "",
   address: "",
   employment_status: "",
-  student_id_number: "",
-  student_course: "",
-  student_yr_level: "",
-  student_email: "",
-  student_contact: "",
+  school_id: null,
+  department_id: null,
   avatar_url: null,
 };
 

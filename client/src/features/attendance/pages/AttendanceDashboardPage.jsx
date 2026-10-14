@@ -55,14 +55,6 @@ export default function AttendanceDashboardPage() {
 
       {/* ── Page Header + Inline Filters ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 7 }}>
-            <Users size={17} color={C.amber} /> Library Attendance Dashboard
-          </h1>
-          <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>
-            Monitor student library usage, visits, and engagement
-          </p>
-        </div>
 
         <AttendanceFilterBar
           globalFilter={globalFilter}

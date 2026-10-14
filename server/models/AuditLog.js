@@ -44,7 +44,7 @@ const AuditLog = {
   },
 
   // ── Paginated + filtered query ───────────────────────────
-  async getAll({ page = 1, limit = 50, entity_type, action, user_username, date_from, date_to } = {}) {
+  async getAll({ page = 1, limit = 50, entity_type, action, user_username, date_from, date_to, scope } = {}) {
     const offset = (Number(page) - 1) * Number(limit);
     const conditions = [];
     const params     = [];
@@ -55,22 +55,32 @@ const AuditLog = {
     if (date_from)     { conditions.push("created_at >= ?");      params.push(date_from); }
     if (date_to)       { conditions.push("created_at <= ?");      params.push(date_to + " 23:59:59"); }
 
+    // School scope: records by the caller's school's users (system /
+    // NULL-user actions are the legacy fallback — visible).
+    if (scope && scope.scoped && scope.schoolId != null) {
+      conditions.push(`(a.user_id IS NULL OR COALESCE(u.school_id, -1) IN (-1, ?))`);
+      params.push(scope.schoolId);
+    }
+
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
     // Count query
     const [countRows] = await pool.query(
-      `SELECT COUNT(*) AS total FROM audit_logs ${where}`,
+      `SELECT COUNT(*) AS total FROM audit_logs a
+       LEFT JOIN users u ON u.id = a.user_id
+       ${where}`,
       params
     );
     const total = countRows[0].total;
 
     // Data query
     const [rows] = await pool.query(
-      `SELECT id, user_id, user_username, entity_type, entity_id, action,
-              old_data, new_data, ip_address, user_agent, created_at
-       FROM audit_logs
+      `SELECT a.id, a.user_id, a.user_username, a.entity_type, a.entity_id, a.action,
+              a.old_data, a.new_data, a.ip_address, a.user_agent, a.created_at
+       FROM audit_logs a
+       LEFT JOIN users u ON u.id = a.user_id
        ${where}
-       ORDER BY created_at DESC
+       ORDER BY a.created_at DESC
        LIMIT ? OFFSET ?`,
       [...params, Number(limit), offset]
     );
@@ -79,54 +89,72 @@ const AuditLog = {
   },
 
   // ── Fetch a single log entry by ID ───────────────────────
-  async getById(id) {
+  async getById(id, scope = null) {
+    const params = [id];
+    let scopeSql = "";
+    if (scope && scope.scoped && scope.schoolId != null) {
+      scopeSql = " AND (a.user_id IS NULL OR COALESCE(u.school_id, -1) IN (-1, ?))";
+      params.push(scope.schoolId);
+    }
     const [rows] = await pool.query(
-      "SELECT * FROM audit_logs WHERE id = ? LIMIT 1",
-      [id]
+      `SELECT a.* FROM audit_logs a
+       LEFT JOIN users u ON u.id = a.user_id
+       WHERE a.id = ?${scopeSql} LIMIT 1`,
+      params
     );
     return rows[0] || null;
   },
 
   // ── Summary stats for the dashboard widget ───────────────
-  async getStats() {
+  async getStats(scope = null) {
+    // School scope fragment on the acting user (NULL/system = legacy fallback).
+    const scopeWhere = scope && scope.scoped && scope.schoolId != null
+      ? " AND (a.user_id IS NULL OR COALESCE(u.school_id, -1) IN (-1, ?))"
+      : "";
+    const scopeParams = scope && scope.scoped && scope.schoolId != null ? [scope.schoolId] : [];
+    const join = "FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id WHERE 1=1";
+
     const [actionBreakdown] = await pool.query(
-      `SELECT action, COUNT(*) AS count
-       FROM audit_logs
-       GROUP BY action
-       ORDER BY count DESC`
+      `SELECT a.action, COUNT(*) AS count
+       ${join} ${scopeWhere}
+       GROUP BY a.action
+       ORDER BY count DESC`,
+      scopeParams
     );
 
     const [entityBreakdown] = await pool.query(
-      `SELECT entity_type, COUNT(*) AS count
-       FROM audit_logs
-       GROUP BY entity_type
-       ORDER BY count DESC`
+      `SELECT a.entity_type, COUNT(*) AS count
+       ${join} ${scopeWhere}
+       GROUP BY a.entity_type
+       ORDER BY count DESC`,
+      scopeParams
     );
 
     const [recent7Days] = await pool.query(
-      `SELECT DATE(created_at) AS day, COUNT(*) AS count
-       FROM audit_logs
-       WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-       GROUP BY DATE(created_at)
-       ORDER BY day ASC`
+      `SELECT DATE(a.created_at) AS day, COUNT(*) AS count
+       ${join} ${scopeWhere} AND a.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+       GROUP BY DATE(a.created_at)
+       ORDER BY day ASC`,
+      scopeParams
     );
 
     const [totals] = await pool.query(
       `SELECT
          COUNT(*)                          AS total,
-         SUM(action = 'CREATE')            AS creates,
-         SUM(action = 'UPDATE')            AS updates,
-         SUM(action = 'DELETE')            AS deletes,
-         SUM(action = 'RESTORE')           AS restores,
-         SUM(action = 'BULK_IMPORT')       AS bulk_imports,
-         SUM(action = 'LOGIN')             AS logins,
-         SUM(action = 'LOGIN_FAILED')      AS login_failures,
-         SUM(action = 'LOGOUT')            AS logouts,
-         SUM(action = 'BORROW')            AS borrows,
-         SUM(action = 'RETURN')            AS returns,
-         SUM(action = 'CHECK_IN')          AS check_ins,
-         SUM(action = 'CHECK_OUT')         AS check_outs
-       FROM audit_logs`
+         SUM(a.action = 'CREATE')          AS creates,
+         SUM(a.action = 'UPDATE')          AS updates,
+         SUM(a.action = 'DELETE')          AS deletes,
+         SUM(a.action = 'RESTORE')         AS restores,
+         SUM(a.action = 'BULK_IMPORT')     AS bulk_imports,
+         SUM(a.action = 'LOGIN')           AS logins,
+         SUM(a.action = 'LOGIN_FAILED')    AS login_failures,
+         SUM(a.action = 'LOGOUT')          AS logouts,
+         SUM(a.action = 'BORROW')          AS borrows,
+         SUM(a.action = 'RETURN')          AS returns,
+         SUM(a.action = 'CHECK_IN')        AS check_ins,
+         SUM(a.action = 'CHECK_OUT')       AS check_outs
+       ${join} ${scopeWhere}`,
+      scopeParams
     );
 
     return {
@@ -138,24 +166,29 @@ const AuditLog = {
   },
 
   // ── Export: all rows matching filters (no pagination cap) ─
-  async exportAll({ entity_type, action, user_username, date_from, date_to } = {}) {
+  async exportAll({ entity_type, action, user_username, date_from, date_to, scope } = {}) {
     const conditions = [];
     const params     = [];
 
-    if (entity_type)   { conditions.push("entity_type = ?");     params.push(entity_type); }
-    if (action)        { conditions.push("action = ?");           params.push(action); }
-    if (user_username) { conditions.push("user_username LIKE ?"); params.push(`%${user_username}%`); }
-    if (date_from)     { conditions.push("created_at >= ?");      params.push(date_from); }
-    if (date_to)       { conditions.push("created_at <= ?");      params.push(date_to + " 23:59:59"); }
+    if (entity_type)   { conditions.push("a.entity_type = ?");     params.push(entity_type); }
+    if (action)        { conditions.push("a.action = ?");           params.push(action); }
+    if (user_username) { conditions.push("a.user_username LIKE ?"); params.push(`%${user_username}%`); }
+    if (date_from)     { conditions.push("a.created_at >= ?");      params.push(date_from); }
+    if (date_to)       { conditions.push("a.created_at <= ?");      params.push(date_to + " 23:59:59"); }
+    if (scope && scope.scoped && scope.schoolId != null) {
+      conditions.push("(a.user_id IS NULL OR COALESCE(u.school_id, -1) IN (-1, ?))");
+      params.push(scope.schoolId);
+    }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
     const [rows] = await pool.query(
-      `SELECT id, user_id, user_username, entity_type, entity_id, action,
-              old_data, new_data, ip_address, user_agent, created_at
-       FROM audit_logs
+      `SELECT a.id, a.user_id, a.user_username, a.entity_type, a.entity_id, a.action,
+              a.old_data, a.new_data, a.ip_address, a.user_agent, a.created_at
+       FROM audit_logs a
+       LEFT JOIN users u ON u.id = a.user_id
        ${where}
-       ORDER BY created_at DESC
+       ORDER BY a.created_at DESC
        LIMIT 50000`,   // safety cap
       params
     );

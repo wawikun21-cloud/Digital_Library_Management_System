@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback, useRef } from "react";
-import { bulkImportFaculty } from "../../../services/api/studentsApi";
+import { bulkImportFaculty } from "../api/facultyApi";
 import {
   isExcelFile, parseFacultyExcel, downloadFacultyTemplate, invalidDepartmentMessage,
 } from "../utils/facultyImport";
@@ -67,9 +67,20 @@ export function useFacultyImport({ showToast, onImported }) {
     try {
       const data = await bulkImportFaculty(parsedData);
       if (data.success) {
-        setImportResult(data.data);
+        // Report shape mirrors the student import: { imported, failed, results[] }.
+        const report = data.data || { imported: 0, failed: 0, results: [] };
+        setImportResult({
+          successful: report.imported,
+          failed: report.failed,
+          errors: (report.results || [])
+            .filter(row => row.status === "failed")
+            .map(row => ({ index: row.index, error: row.error })),
+        });
         setParsedData(null);
-        showToast(`Imported ${data.data.successful} faculty records`, "success");
+        showToast(`Imported ${report.imported} faculty records`, "success");
+        if (report.failed > 0) {
+          showToast(`${report.failed} record(s) were skipped`, "warning");
+        }
         onImported?.();
       } else {
         showToast(data.error || "Import failed", "error");

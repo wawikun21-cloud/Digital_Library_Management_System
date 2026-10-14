@@ -12,19 +12,28 @@ import {
   AlertCircle, ChevronDown, Download,
 } from "lucide-react";
 import ModalAnimations from "../../../components/ui/ModalAnimations";
+import { ROLES } from "../../../constants/roles";
+import { SchoolSelect, DepartmentSelect } from "../../organization";
 import { useStudentImport } from "../hooks/useStudentImport";
 import { COURSES } from "../constants/studentsUi";
 
-export default function StudentImportModal({ onClose, showToast, onImported }) {
+export default function StudentImportModal({ onClose, showToast, onImported, currentUser }) {
   const {
     importFile, parsedStudentsData, importResult,
     importCourse, setCourse, importSchoolYear, setSchoolYear,
+    importSchoolId, setImportSchoolId,
+    importDepartmentId, setImportDepartmentId,
     isImporting, importProgress, importErrors,
     schoolYearChoices,
     fileInputRef,
     handleFileChange, removeFile, handleBulkImport, downloadTemplate,
     openWithDefaults, reset,
   } = useStudentImport({ showToast, onImported });
+
+  const isSuperAdmin = currentUser?.role === ROLES.SUPER_ADMIN;
+  const ownSchoolId = currentUser?.school_id ?? null;
+  const schoolFixed = !isSuperAdmin && ownSchoolId != null;
+  const schoolValue = schoolFixed ? ownSchoolId : importSchoolId;
 
   // Seed the default school year when the modal opens (June-based rule).
   useEffect(() => { openWithDefaults(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -142,6 +151,25 @@ export default function StudentImportModal({ onClose, showToast, onImported }) {
             </div>
           </div>
 
+          {/* ── School organization ─────────────────────── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <SchoolSelect
+              value={schoolValue}
+              onChange={(schoolId) => {
+                setImportSchoolId(schoolId);
+                setImportDepartmentId(null);
+              }}
+              fixedSchoolId={schoolFixed ? ownSchoolId : null}
+              required
+            />
+            <DepartmentSelect
+              schoolId={schoolValue}
+              value={importDepartmentId}
+              onChange={setImportDepartmentId}
+              disabled={!schoolValue}
+            />
+          </div>
+
           {/* ── Course Selection ────────────────────────── */}
           <div>
             <label className="block text-[12.5px] font-semibold mb-1" style={{ color: "var(--text-secondary)" }}>
@@ -245,7 +273,8 @@ export default function StudentImportModal({ onClose, showToast, onImported }) {
                   <div className="text-[12px] max-h-32 overflow-y-auto space-y-1" style={{ color: "#dc2626" }}>
                     {importResult.errors.map((error, index) => (
                       <div key={index}>
-                        <strong>Row {error.index + 2}:</strong> {error.error}
+                        <strong>Row {error.index + 2}:</strong>
+                        {error.student_id_number ? ` (${error.student_id_number})` : ""} {error.error}
                       </div>
                     ))}
                   </div>

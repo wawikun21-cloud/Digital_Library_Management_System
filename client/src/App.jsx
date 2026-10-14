@@ -35,7 +35,7 @@ const AuditLog            = lazy(() => import("./features/audit/pages/AuditLogPa
 const AttendanceDashboard = lazy(() => import("./features/attendance/pages/AttendanceDashboardPage"));
 const BookDashboard       = lazy(() => import("./features/analytics/pages/BookDashboardPage"));
 const Unauthorized        = lazy(() => import("./features/auth/pages/UnauthorizedPage"));
-const StudentPortal       = lazy(() => import("./features/students/pages/StudentPortalPage"));
+const StudentPortal       = lazy(() => import("./features/portal/pages/StudentPortalPage"));
 const Courses             = lazy(() => import("./features/courses/pages/CourseCatalog"));
 const CourseLibrary       = lazy(() => import("./features/courses/pages/CourseLibrary"));
 const CourseCreate        = lazy(() => import("./features/courses/pages/CourseCreatePage"));
@@ -43,6 +43,10 @@ const CourseDetails       = lazy(() => import("./features/courses/pages/CourseDe
 const CourseLearnerView   = lazy(() => import("./features/courses/pages/CourseLearnerView"));
 const CourseBuilder       = lazy(() => import("./features/courses/pages/CourseBuilderPage"));
 const Users               = lazy(() => import("./features/users/pages/UsersPage"));
+const Schools             = lazy(() => import("./features/organization/pages/SchoolsPage"));
+const OrganizationOverview = lazy(() => import("./features/organization/pages/OrganizationOverviewPage"));
+const Departments         = lazy(() => import("./features/organization/pages/DepartmentsPage"));
+const Categories          = lazy(() => import("./features/organization/pages/CategoriesPage"));
 const Settings            = lazy(() => import("./features/settings/pages/SettingsPage"));
 const Roles               = lazy(() => import("./features/roles/pages/RolesPage"));
 const Tools               = lazy(() => import("./features/tools/pages/ToolsPage"));
@@ -257,6 +261,24 @@ export default function App() {
             <Route
               path="courses/:id/builder"
               element={<PermissionRoute permission="manage_courses"><Page><CourseBuilder /></Page></PermissionRoute>}
+            />
+
+            {/* ── Organization: schools / departments / categories ── */}
+            <Route
+              path="organization"
+              element={<PermissionRoute permission="manage_organization"><Page><OrganizationOverview /></Page></PermissionRoute>}
+            />
+            <Route
+              path="organization/schools"
+              element={<PermissionRoute permission="manage_organization"><Page><Schools /></Page></PermissionRoute>}
+            />
+            <Route
+              path="organization/departments"
+              element={<PermissionRoute permission="manage_organization"><Page><Departments /></Page></PermissionRoute>}
+            />
+            <Route
+              path="organization/categories"
+              element={<PermissionRoute permission="manage_organization"><Page><Categories /></Page></PermissionRoute>}
             />
 
             {/* ── User Management: Super Admin + Admin ────── */}

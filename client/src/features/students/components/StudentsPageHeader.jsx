@@ -5,7 +5,7 @@
  * former pages/Students.jsx.
  */
 
-import { GraduationCap, RefreshCw, Upload, Plus } from "lucide-react";
+import { RefreshCw, Upload, Plus } from "lucide-react";
 
 export default function StudentsPageHeader({
   canImport, canCreate, onRefresh, onImportClick, onAddClick,
@@ -15,11 +15,8 @@ export default function StudentsPageHeader({
       <div>
         <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
           style={{ color: "var(--text-primary)" }}>
-          <GraduationCap size={22} style={{ color: "var(--accent-amber)" }} />
-          Student Management
         </h1>
         <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
-          Manage student records, enrollments, and bulk import functionality
         </p>
       </div>
 

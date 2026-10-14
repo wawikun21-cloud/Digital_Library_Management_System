@@ -25,6 +25,8 @@ export default function LexoraBookAdminTable({
             <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
               style={{ color: "var(--text-muted)" }}>Type</th>
             <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+              style={{ color: "var(--text-muted)" }}>School</th>
+            <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
               style={{ color: "var(--text-muted)" }}>Categories / Tags</th>
             <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider"
               style={{ color: "var(--text-muted)" }}>Status</th>
@@ -72,6 +74,16 @@ export default function LexoraBookAdminTable({
                     style={{ background: "rgba(238,162,58,0.12)", color: "var(--accent-amber)" }}>
                     {book.source_type === "pdf" ? "PDF" : book.source_type === "images" ? "Images" : "—"}
                   </span>
+                </td>
+                <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>
+                  {book.org_school_names
+                    ? <span className="flex flex-wrap gap-1">{book.org_school_names.split(", ").map((name) => (
+                        <span key={name} className="rounded-lg px-2 py-0.5 text-[11px] font-medium"
+                          style={{ background: "var(--bg-subtle)", border: "1px solid var(--border-light)" }}>
+                          {name}
+                        </span>
+                      ))}</span>
+                    : <span style={{ color: "var(--text-muted)" }}>Unassigned</span>}
                 </td>
                 <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>
                   {[book.category_names, book.tag_names].filter(Boolean).join(" · ") || "—"}
@@ -142,7 +154,7 @@ export default function LexoraBookAdminTable({
           })}
           {books.length === 0 && (
             <tr>
-              <td colSpan={7} className="px-4 py-12 text-center text-sm"
+              <td colSpan={8} className="px-4 py-12 text-center text-sm"
                 style={{ color: "var(--text-muted)" }}>
                 No books found.
               </td>

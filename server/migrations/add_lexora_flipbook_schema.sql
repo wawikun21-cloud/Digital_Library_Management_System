@@ -131,6 +131,33 @@ CREATE TABLE IF NOT EXISTS lexora_book_tag_relations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
+-- 5b. lexora_book_resource_types
+-- Managed vocabulary for the single-valued lexora_books.resource_type
+-- column (badge on the book card). No relation table: the book stores
+-- the type's name. Seeded once, only while the table is empty.
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS lexora_book_resource_types (
+  id          INT           NOT NULL AUTO_INCREMENT,
+  name        VARCHAR(100)  NOT NULL,
+  slug        VARCHAR(100)  NOT NULL,
+  created_at  TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_lexora_resource_type_slug (slug),
+  UNIQUE KEY uq_lexora_resource_type_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Widen the existing 50-char column so longer managed names are not truncated.
+ALTER TABLE lexora_books MODIFY COLUMN resource_type VARCHAR(100) DEFAULT NULL;
+
+INSERT IGNORE INTO lexora_book_resource_types (name, slug)
+SELECT * FROM (
+  SELECT 'Open Source' AS name, 'open-source' AS slug
+  UNION ALL SELECT 'Premium', 'premium'
+) AS defaults
+WHERE NOT EXISTS (SELECT 1 FROM lexora_book_resource_types);
+
+-- --------------------------------------------------------
 -- 6. lexora_book_pages  (image-page books)
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS lexora_book_pages (

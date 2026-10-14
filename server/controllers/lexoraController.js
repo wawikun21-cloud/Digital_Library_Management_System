@@ -105,13 +105,16 @@ function getSessionUserId(req) {
 /**
  * Loads a book and applies the same access rule as the reader endpoint:
  * managers, the book's owner, or anyone for a published public book.
+ * School scope (category assignments) is checked after those rules —
+ * defense in depth, so a direct request cannot read another school's
+ * titles, pages, bookmarks, or progress.
  * Returns { book } or { error: { status, message } }.
  */
 async function resolveAccessibleBook(req) {
   const bookId = parseBookId(req.params.id);
   if (!bookId) return { error: { status: 400, message: "Invalid book ID" } };
 
-  const book = await LexoraBookModel.getById(bookId);
+  const book = await LexoraBookModel.getById(bookId, { scope: req.schoolScope });
   if (!book.success) return { error: { status: 404, message: book.error } };
 
   const user = req.session?.user;
@@ -120,6 +123,12 @@ async function resolveAccessibleBook(req) {
   const isPublic = book.data.status === "published" && book.data.visibility === "public";
   if (!isPublic && !isManager && !isOwner) {
     return { error: { status: user ? 403 : 401, message: "Access denied" } };
+  }
+
+  const { bookAccess } = require("../features/organization");
+  const access = await bookAccess.isLexoraBookAccessible(req.schoolScope, bookId);
+  if (access.success && !access.accessible) {
+    return { error: { status: 404, message: "Book not found" } };
   }
 
   return { book: book.data };
@@ -132,6 +141,20 @@ function pageBoundError(book, pageNum) {
     return `page_number must be between 1 and ${total}`;
   }
   return null;
+}
+
+/**
+ * School-scope-only check for user-scoped endpoints (bookmarks,
+ * progress): is this book visible to the caller at all?
+ * Returns false for a book of another school (indistinguishable
+ * from "Book not found").
+ */
+async function isBookAccessible(req) {
+  const { bookAccess } = require("../features/organization");
+  const bookId = parseBookId(req.params.id);
+  if (!bookId) return false;
+  const access = await bookAccess.isLexoraBookAccessible(req.schoolScope, bookId);
+  return !access.success ? true : access.accessible;
 }
 
 // ───────────────────────────────────────────────────────────
@@ -160,6 +183,7 @@ const getLexoraBooks = async (req, res) => {
           }
         : {}),
       sortBy,
+      scope: req.schoolScope,
     });
     if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
     res.json({ success: true, ...result });
@@ -171,7 +195,7 @@ const getLexoraBooks = async (req, res) => {
 
 const getLexoraBook = async (req, res) => {
   try {
-    const result = await LexoraBookModel.getById(req.params.id);
+    const result = await LexoraBookModel.getById(req.params.id, { scope: req.schoolScope });
     if (!result.success) return res.status(404).json(errorResponse(result.error, 404));
 
     const [categoryResult, tagResult, pageResult] = await Promise.all([
@@ -396,6 +420,52 @@ const deleteCategory = async (req, res) => {
   } catch (error) {
     console.error("[LexoraController.deleteCategory]", error.message);
     res.status(500).json(errorResponse("Failed to delete category", 500));
+  }
+};
+
+// ───────────────────────────────────────────────────────────
+//  Resource Types
+// ───────────────────────────────────────────────────────────
+
+const getResourceTypes = async (req, res) => {
+  try {
+    const result = await LexoraBookModel.getResourceTypes();
+    if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
+    res.json({ success: true, data: result.data });
+  } catch (error) {
+    console.error("[LexoraController.getResourceTypes]", error.message);
+    res.status(500).json(errorResponse("Failed to fetch resource types", 500));
+  }
+};
+
+const createResourceType = async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name?.trim()) return res.status(400).json(errorResponse("Resource type name is required", 400));
+    const result = await LexoraBookModel.createResourceType(name.trim());
+    if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
+    res.status(201).json(successResponse(result.data, "Resource type created", 201));
+  } catch (error) {
+    console.error("[LexoraController.createResourceType]", error.message);
+    res.status(500).json(errorResponse("Failed to create resource type", 500));
+  }
+};
+
+const deleteResourceType = async (req, res) => {
+  try {
+    const resourceTypeId = Number(req.params.id);
+    if (!Number.isSafeInteger(resourceTypeId) || resourceTypeId <= 0) {
+      return res.status(400).json(errorResponse("Invalid resource type ID", 400));
+    }
+    const result = await LexoraBookModel.deleteResourceType(resourceTypeId);
+    if (!result.success) {
+      const status = /not found/i.test(result.error) ? 404 : 400;
+      return res.status(status).json(errorResponse(result.error, status));
+    }
+    res.json(successResponse(null, "Resource type deleted"));
+  } catch (error) {
+    console.error("[LexoraController.deleteResourceType]", error.message);
+    res.status(500).json(errorResponse("Failed to delete resource type", 500));
   }
 };
 
@@ -815,6 +885,11 @@ const getBookmarks = async (req, res) => {
   try {
     const userId = getSessionUserId(req);
     if (!userId) return res.status(401).json(errorResponse("Unauthorized", 401));
+
+    // School scope: bookmarks of another school's book are not readable.
+    const accessible = await isBookAccessible(req);
+    if (!accessible) return res.status(404).json(errorResponse("Book not found", 404));
+
     const result = await LexoraBookModel.getUserBookmarks(userId, req.params.id);
     if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
     res.json({ success: true, data: result.data });
@@ -830,7 +905,27 @@ const getMyBookmarks = async (req, res) => {
     if (!userId) return res.status(401).json(errorResponse("Unauthorized", 401));
     const result = await LexoraBookModel.getUserBookmarks(userId);
     if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
-    res.json({ success: true, data: result.data });
+
+    // School scope: keep only bookmarks on accessible books.
+    const { bookAccess } = require("../features/organization");
+    const { pool } = require("../config/db");
+    const { lexoraBookScopeSql } = require("../features/organization/bookAccess.service");
+    const rows = Array.isArray(result.data) ? result.data : [result.data].filter(Boolean);
+    const scope = lexoraBookScopeSql(req.schoolScope);
+    if (scope.sql && rows.length) {
+      const ids = [...new Set(rows.map((r) => r.book_id).filter(Boolean))];
+      if (ids.length) {
+        const [allowed] = await pool.query(
+          `SELECT lb.id FROM lexora_books lb WHERE lb.id IN (${ids.map(() => "?").join(", ")}) ${scope.sql}`,
+          [...ids, ...scope.params]
+        );
+        const allowedSet = new Set(allowed.map((r) => r.id));
+        const filtered = rows.filter((r) => allowedSet.has(r.book_id));
+        return res.json({ success: true, data: filtered });
+      }
+      return res.json({ success: true, data: [] });
+    }
+    res.json({ success: true, data: rows });
   } catch (error) {
     console.error("[LexoraController.getMyBookmarks]", error.message);
     res.status(500).json(errorResponse("Failed to fetch bookmarks", 500));
@@ -871,6 +966,11 @@ const removeBookmark = async (req, res) => {
     if (!Number.isSafeInteger(pageNum) || pageNum < 1) {
       return res.status(400).json(errorResponse("page must be a positive integer", 400));
     }
+
+    // School scope: no mutating bookmarks on another school's book.
+    const accessible = await isBookAccessible(req);
+    if (!accessible) return res.status(404).json(errorResponse("Book not found", 404));
+
     const result = await LexoraBookModel.removeBookmark(userId, bookId, pageNum);
     if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
     res.json(successResponse(null, "Bookmark removed"));
@@ -884,6 +984,11 @@ const getReadingProgress = async (req, res) => {
   try {
     const userId = getSessionUserId(req);
     if (!userId) return res.status(401).json(errorResponse("Unauthorized", 401));
+
+    // School scope: progress of another school's book is not readable.
+    const accessible = await isBookAccessible(req);
+    if (!accessible) return res.status(404).json(errorResponse("Book not found", 404));
+
     const result = await LexoraBookModel.getReadingProgress(userId, req.params.id);
     if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
     res.json({ success: true, data: result.data });
@@ -988,6 +1093,9 @@ module.exports = {
   getCategories,
   createCategory,
   deleteCategory,
+  getResourceTypes,
+  createResourceType,
+  deleteResourceType,
   getTags,
   createTag,
   deleteTag,

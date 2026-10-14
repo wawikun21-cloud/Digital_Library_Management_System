@@ -5,6 +5,12 @@
 //    GETs → manage_transactions:view
 //    POST / → :create   PUT /:id → :edit   /:id/return → :return
 //    /:id/extend → :extend   /:id/pay-fine → :pay_fine   DELETE → :delete
+//
+//  School scoping: every route is school-scoped through the
+//  borrowed book's category assignments (bookAccess). The
+//  student borrower lookup is scoped (a student of another
+//  school is "not found"); the faculty borrower lookup is
+//  deliberately unscoped — faculty may borrow at any school.
 // ─────────────────────────────────────────────────────────
 
 const express                = require("express");
@@ -16,23 +22,24 @@ const {
   resolvePermissions,
   requirePermissionAction,
 } = require("../features/roles");
+const { resolveSchoolScope } = require("../features/organization");
 
-router.use(requireAuth, resolvePermissions);
+router.use(requireAuth, resolvePermissions, resolveSchoolScope);
 
 // ── Static routes first ───────────────────────────────────
 
 router.get("/active", requirePermissionAction("manage_transactions", "view"), async (req, res) => {
-  const result = await TransactionModel.getActiveBorrows();
+  const result = await TransactionModel.getActiveBorrows(req.schoolScope);
   res.status(result.success ? 200 : 400).json(result);
 });
 
 router.get("/overdue", requirePermissionAction("manage_transactions", "view"), async (req, res) => {
-  const result = await TransactionModel.getOverdueBorrows();
+  const result = await TransactionModel.getOverdueBorrows(req.schoolScope);
   res.status(result.success ? 200 : 400).json(result);
 });
 
 router.get("/stats", requirePermissionAction("manage_transactions", "view"), async (req, res) => {
-  const result = await TransactionModel.getStats();
+  const result = await TransactionModel.getStats(req.schoolScope);
   res.status(result.success ? 200 : 400).json(result);
 });
 
@@ -40,13 +47,14 @@ router.get("/stats", requirePermissionAction("manage_transactions", "view"), asy
 
 router.get("/lookup/student/:idNumber", requirePermissionAction("manage_transactions", "view"), async (req, res) => {
   try {
-    const result = await TransactionModel.lookupStudent(req.params.idNumber);
+    const result = await TransactionModel.lookupStudent(req.params.idNumber, req.schoolScope);
     res.status(result.success ? 200 : 404).json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
+// Faculty lookups stay unscoped (patron rule): faculty may borrow at any school.
 router.get("/lookup/faculty", requirePermissionAction("manage_transactions", "view"), async (req, res) => {
   try {
     const { q = "" } = req.query;
@@ -60,7 +68,7 @@ router.get("/lookup/faculty", requirePermissionAction("manage_transactions", "vi
 router.get("/search/books", requirePermissionAction("manage_transactions", "view"), async (req, res) => {
   try {
     const { q = "" } = req.query;
-    const result = await TransactionModel.searchBooks(q);
+    const result = await TransactionModel.searchBooks(q, req.schoolScope);
     res.status(result.success ? 200 : 400).json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: "Internal server error" });
@@ -70,7 +78,7 @@ router.get("/search/books", requirePermissionAction("manage_transactions", "view
 // ── CRUD ──────────────────────────────────────────────────
 
 router.get("/", requirePermissionAction("manage_transactions", "view"), async (req, res) => {
-  const result = await TransactionModel.getAll();
+  const result = await TransactionModel.getAll(req.schoolScope);
   res.status(result.success ? 200 : 400).json(result);
 });
 
@@ -80,7 +88,7 @@ router.get("/book/:bookId", requirePermissionAction("manage_transactions", "view
 });
 
 router.get("/:id", requirePermissionAction("manage_transactions", "view"), async (req, res) => {
-  const result = await TransactionModel.getById(req.params.id);
+  const result = await TransactionModel.getById(req.params.id, req.schoolScope);
   res.status(result.success ? 200 : 404).json(result);
 });
 
@@ -93,7 +101,7 @@ router.put("/:id/return", requirePermissionAction("manage_transactions", "return
 router.put("/:id/extend", requirePermissionAction("manage_transactions", "extend"), async (req, res) => {
   try {
     const days   = Number(req.body.days) || 1;
-    const result = await TransactionModel.extend(req.params.id, days);
+    const result = await TransactionModel.extend(req.params.id, days, req.schoolScope);
     res.status(result.success ? 200 : 400).json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: "Internal server error" });

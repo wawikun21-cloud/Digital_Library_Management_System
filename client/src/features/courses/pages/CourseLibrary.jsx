@@ -112,15 +112,6 @@ export default function CourseLibrary() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2.5 text-[22px] font-bold" style={{ color: "var(--text-primary)" }}>
-            <BookOpen size={22} style={{ color: "var(--accent-amber)" }} />
-            Course Library
-          </h1>
-          <p className="mt-0.5 text-[13px]" style={{ color: "var(--text-secondary)" }}>
-            Browse the published course collection
-          </p>
-        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

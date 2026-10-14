@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getPortalHome } from "../../portal";
+import { getPortalHome } from "../api/portalApi";
 
 const EMPTY = { slides: [], books: [], courses: [] };
 

@@ -47,6 +47,9 @@ export default function UsersPage() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  // Students live on the Students page; the Users list excludes them by
+  // default and a super admin may include them read-only.
+  const [includeStudents, setIncludeStudents] = useState(false);
   const [page, setPage] = useState(1);
   const [reloadToken, setReloadToken] = useState(0);
 
@@ -75,9 +78,10 @@ export default function UsersPage() {
       page,
       limit: pagination.limit,
       ...(roleFilter && { role: roleFilter }),
+      ...(!includeStudents && { exclude_role: "student" }),
       ...(search && { search }),
     });
-  }, [loadUsers, page, search, roleFilter, pagination.limit, reloadToken]);
+  }, [loadUsers, page, search, roleFilter, includeStudents, pagination.limit, reloadToken]);
 
   const handleSearch = (value) => {
     setSearch(value);
@@ -176,12 +180,11 @@ export default function UsersPage() {
       {/* ── Header ──────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="flex items-center gap-2.5 text-[22px] font-bold" style={{ color: "var(--text-primary)" }}>
-            <Users size={22} style={{ color: "var(--accent-amber)" }} aria-hidden="true" />
-            User Management
+          <h1 className="text-[22px] font-bold" style={{ color: "var(--text-primary)" }}>
+            Users
           </h1>
           <p className="mt-0.5 text-[13px]" style={{ color: "var(--text-secondary)" }}>
-            Manage accounts, roles, and permissions
+            Staff accounts for your school. Students are managed on the Students page.
           </p>
         </div>
         {canCreate && (
@@ -218,6 +221,9 @@ export default function UsersPage() {
         onRoleFilter={handleRoleFilter}
         roleOptions={availableRoles}
         total={pagination.total}
+        canIncludeStudents={isSuperAdmin}
+        includeStudents={includeStudents}
+        onIncludeStudentsChange={setIncludeStudents}
       />
 
       {/* ── Desktop table ───────────────────────────────── */}
@@ -247,6 +253,7 @@ export default function UsersPage() {
         mode={modalMode}
         user={selectedUser}
         currentUserRole={currentUser?.role}
+        currentUser={currentUser}
         onClose={handleModalClose}
         onSubmit={modalMode === "create" ? handleCreate : handleEdit}
       />

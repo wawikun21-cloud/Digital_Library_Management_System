@@ -76,20 +76,6 @@ export default function BooksPage() {
   return (
     <div className="flex flex-col gap-5">
 
-      {/* ── Page Header ──────────────────────────────── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
-            style={{ color: "var(--text-primary)" }}>
-            <PackageX size={22} style={{ color: "var(--accent-amber)" }} />
-            Books
-          </h1>
-          <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
-            Manage library catalog, copies, and availability
-          </p>
-        </div>
-      </div>
-
       <BookToolbar
         query={filters.query}                 setQuery={filters.setQuery}
         genreFilter={filters.collectionFilter} setGenreFilter={filters.setCollectionFilter}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { useReducedMotion } from "../hooks/useReducedMotion";
-import { heroBoxStyle, HERO_DEFAULT_RATIO, HERO_MIN_HEIGHT_CLASS } from "../constants/studentsUi";
+import { heroBoxStyle, HERO_DEFAULT_RATIO, HERO_MIN_HEIGHT_CLASS } from "../constants/portalUi";
 
 const AUTOPLAY_MS = 6000;
 
@@ -11,7 +11,7 @@ function ControlButton({ label, onClick, children, className = "" }) {
       type="button"
       onClick={onClick}
       aria-label={label}
-      className={`flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition-colors hover:bg-black/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${className}`}
+      className={`flex h-7 w-7 sm:h-9 sm:w-9 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition-colors hover:bg-black/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${className}`}
     >
       {children}
     </button>
@@ -95,14 +95,14 @@ export default function HeroCarousel({ slides }) {
 
       {multiple && (
         <>
-          <ControlButton label="Previous slide" onClick={() => go(index - 1)} className="absolute left-3 top-1/2 -translate-y-1/2">
+          <ControlButton label="Previous slide" onClick={() => go(index - 1)} className="absolute left-3 top-1/2 -translate-y-1/2 lg:left-5">
             <ChevronLeft size={18} />
           </ControlButton>
-          <ControlButton label="Next slide" onClick={() => go(index + 1)} className="absolute right-3 top-1/2 -translate-y-1/2">
+          <ControlButton label="Next slide" onClick={() => go(index + 1)} className="absolute right-3 top-1/2 -translate-y-1/2 lg:right-5">
             <ChevronRight size={18} />
           </ControlButton>
 
-          <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-2">
+          <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-2 lg:bottom-4">
             {!reducedMotion && (
               <ControlButton
                 label={userPaused ? "Play slideshow" : "Pause slideshow"}

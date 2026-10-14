@@ -13,6 +13,11 @@
 //
 //  Public routes (/public-search, /:id/copies/public) stay open and
 //  are registered BEFORE the guard middleware so it never runs for them.
+//
+//  School scoping: resolveSchoolScope is mounted after the guard;
+//  every authenticated query is filtered by the book's category
+//  assignments server-side (bookAccess). The PUBLIC routes are
+//  deliberately unscoped (anonymous visitors have no scope).
 // ─────────────────────────────────────────────────────────
 
 const express          = require("express");
@@ -27,6 +32,7 @@ const {
   resolvePermissions,
   requirePermissionAction,
 } = require("../features/roles");
+const { resolveSchoolScope } = require("../features/organization");
 
 // ── PUBLIC routes (no auth) — must precede router.use ──────
 
@@ -149,7 +155,7 @@ router.get("/:id/copies/public", async (req, res) => {
 
 // ── Everything below requires an authenticated caller with
 //    resolved permissions attached to the request. ──────────
-router.use(requireAuth, resolvePermissions);
+router.use(requireAuth, resolvePermissions, resolveSchoolScope);
 
 // ── STATIC routes — MUST be before /:id ──────────────────
 
@@ -245,7 +251,7 @@ router.post("/", requirePermissionAction("manage_books", "create"), booksControl
 // GET /api/books/:id
 router.get("/:id", requirePermissionAction("manage_books", "view"), async (req, res) => {
   try {
-    const result = await BookModel.getById(req.params.id);
+    const result = await BookModel.getById(req.params.id, req.schoolScope);
     if (!result.success) return res.status(404).json({ success: false, error: result.error });
     res.json({ success: true, data: result.data });
   } catch (err) {
@@ -257,6 +263,8 @@ router.get("/:id", requirePermissionAction("manage_books", "view"), async (req, 
 // GET /api/books/:id/copies
 router.get("/:id/copies", requirePermissionAction("manage_books", "view"), async (req, res) => {
   try {
+    const book = await BookModel.getById(req.params.id, req.schoolScope);
+    if (!book.success) return res.status(404).json({ success: false, error: book.error });
     const result = await BookModel.getCopies(req.params.id);
     if (!result.success) return res.status(400).json({ success: false, error: result.error });
     res.json({ success: true, data: result.data });

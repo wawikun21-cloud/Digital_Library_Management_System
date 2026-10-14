@@ -35,7 +35,7 @@ export default function StudentsTable({
             <table className="w-full">
               <thead>
                 <tr style={{ background: "var(--bg-subtle)", borderBottom: "1px solid var(--border-light)" }}>
-                  {["Student", "Status", "ID Number", "Course", "Year Level", "Email", "Actions"].map(h => (
+                  {["Student", "School", "Status", "ID Number", "Course", "Year Level", "Email", "Actions"].map(h => (
                     <th key={h} className="text-left py-3 px-4 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
                       {h}
                     </th>
@@ -61,6 +61,19 @@ export default function StudentsTable({
                           {student.student_name}
                         </span>
                       </div>
+                    </td>
+                    <td className="py-3 px-4 text-[13px]">
+                      {student.school_name ? (
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                          style={{ background: "rgba(30,58,123,.1)", color: "#2d4fa3" }}>
+                          {student.school_name}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                          style={{ background: "var(--bg-subtle)", color: "var(--text-muted)" }}>
+                          Unassigned
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-[13px]">
                       <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${student.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>

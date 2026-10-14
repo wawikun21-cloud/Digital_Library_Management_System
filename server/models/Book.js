@@ -3,6 +3,11 @@
 // ─────────────────────────────────────────────────────────
 
 const { pool } = require("../config/db");
+const sharedBookFilters = require("../shared/bookFilterSql");
+const {
+  physicalBookScopeSql,
+  physicalBookAssignmentSummary,
+} = require("../features/organization/bookAccess.service");
 
 // ── column whitelist for books INSERT / UPDATE ──────────────────────────────
 const BOOK_COLUMNS = [
@@ -94,8 +99,10 @@ function normaliseCopiesFromImport(bookData) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  getAll
 // ─────────────────────────────────────────────────────────────────────────────
-async function getAll() {
+async function getAll(scope = null) {
   try {
+    const bookScope = physicalBookScopeSql(scope);
+    const summary = physicalBookAssignmentSummary();
     const [rows] = await pool.query(
       `SELECT b.*,
               COALESCE(cc.total_copies,  b.quantity) AS total_copies,
@@ -105,6 +112,7 @@ async function getAll() {
                 WHEN cc.avail_copies = 0     THEN 'OutOfStock'
                 ELSE 'Available'
               END AS display_status
+              ${summary.columns}
        FROM   books b
        LEFT JOIN (
          SELECT book_id,
@@ -113,9 +121,10 @@ async function getAll() {
          FROM   book_copies
          WHERE  is_deleted = 0
          GROUP  BY book_id
-       ) cc ON cc.book_id = b.id
-       WHERE  b.is_deleted = 0
-       ORDER  BY b.created_at DESC LIMIT 1000`
+       ) cc ON cc.book_id = b.id ${summary.join}
+       WHERE  b.is_deleted = 0 ${bookScope.sql}
+       ORDER  BY b.created_at DESC LIMIT 1000`,
+      bookScope.params
     );
     return { success: true, data: rows };
   } catch (err) {
@@ -127,8 +136,10 @@ async function getAll() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  getById
 // ─────────────────────────────────────────────────────────────────────────────
-async function getById(id) {
+async function getById(id, scope = null) {
   try {
+    const bookScope = physicalBookScopeSql(scope);
+    const summary = physicalBookAssignmentSummary();
     const [rows] = await pool.query(
       `SELECT b.*,
               COALESCE(cc.total_copies,  b.quantity) AS total_copies,
@@ -138,6 +149,7 @@ async function getById(id) {
                 WHEN cc.avail_copies = 0     THEN 'OutOfStock'
                 ELSE 'Available'
               END AS display_status
+              ${summary.columns}
        FROM   books b
        LEFT JOIN (
          SELECT book_id,
@@ -146,9 +158,9 @@ async function getById(id) {
          FROM   book_copies
          WHERE  is_deleted = 0
          GROUP  BY book_id
-       ) cc ON cc.book_id = b.id
-       WHERE  b.id = ? AND b.is_deleted = 0`,
-      [id]
+       ) cc ON cc.book_id = b.id ${summary.join}
+       WHERE  b.id = ? AND b.is_deleted = 0 ${bookScope.sql}`,
+      [id, ...bookScope.params]
     );
     if (!rows.length) return { success: false, error: "Book not found" };
     return { success: true, data: rows[0] };
@@ -160,41 +172,32 @@ async function getById(id) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  filter
-// ─────────────────────────────────────────────────────────────────────────────
-async function filter(status, genre) {
+// ────────────────────────────────────────────────────────────────────────────────
+async function filter(status, genre, scope = null) {
   try {
-    const conditions = ["b.is_deleted = 0"];
-    const params     = [];
-    if (genre === "__NULL__") {
-      conditions.push("b.collection IS NULL OR b.collection = ''");
-    } else if (genre) {
-      conditions.push("b.collection = ?"); 
-      params.push(genre);
-    }
-    if (status && status !== "All") {
-      if (status === "OutOfStock") {
-        conditions.push("cc.avail_copies = 0");
-      } else if (status === "Available") {
-        conditions.push("cc.avail_copies > 0");
-      } else {
-        conditions.push("b.status = ?");
-        params.push(status);
-      }
+    // Predicates come from the shared builder so the list endpoints and the
+    // organization feature's bulk assignment can never drift apart.
+    const filters = sharedBookFilters.physicalBookFilters({ status, collection: genre });
+    const conditions = ["b.is_deleted = 0", ...filters.conditions];
+    const params     = [...filters.params];
+
+    const bookScope = physicalBookScopeSql(scope);
+    // The scope fragment is empty for unscoped callers (super_admin /
+    // legacy) — push it only when present or the WHERE clause breaks.
+    if (bookScope.sql) {
+      conditions.push(bookScope.sql.replace(/^AND /, ""));
+      params.push(...bookScope.params);
     }
 
+    const summary = physicalBookAssignmentSummary();
     const [rows] = await pool.query(
       `SELECT b.*,
               COALESCE(cc.total_copies,  b.quantity) AS total_copies,
               COALESCE(cc.avail_copies,  b.quantity) AS available_copies
-        FROM   books b
-        LEFT JOIN (
-          SELECT book_id,
-                 COUNT(*)                    AS total_copies,
-                 SUM(status = 'Available')   AS avail_copies
-          FROM   book_copies WHERE is_deleted = 0 GROUP BY book_id
-        ) cc ON cc.book_id = b.id
-        WHERE  ${conditions.join(" AND ")}
-        ORDER  BY b.created_at DESC`,
+              ${summary.columns}
+       FROM   books b ${sharedBookFilters.BOOK_COPIES_JOIN} ${summary.join}
+       WHERE  ${conditions.join(" AND ")}
+       ORDER  BY b.created_at DESC`,
       params
     );
     return { success: true, data: rows };
@@ -206,27 +209,23 @@ async function filter(status, genre) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  search
-// ─────────────────────────────────────────────────────────────────────────────
-async function search(query) {
+// ────────────────────────────────────────────────────────────────────────────────
+async function search(query, scope = null) {
   try {
-    const like = `%${query}%`;
+    const filters = sharedBookFilters.physicalBookFilters({ search: query });
+    const bookScope = physicalBookScopeSql(scope);
+    const summary = physicalBookAssignmentSummary();
     const [rows] = await pool.query(
       `SELECT b.*,
               COALESCE(cc.total_copies,  b.quantity) AS total_copies,
               COALESCE(cc.avail_copies,  b.quantity) AS available_copies
-       FROM   books b
-       LEFT JOIN (
-         SELECT book_id,
-                COUNT(*)                    AS total_copies,
-                SUM(status = 'Available')   AS avail_copies
-         FROM   book_copies WHERE is_deleted = 0 GROUP BY book_id
-       ) cc ON cc.book_id = b.id
+              ${summary.columns}
+       FROM   books b ${sharedBookFilters.BOOK_COPIES_JOIN} ${summary.join}
        WHERE  b.is_deleted = 0
-         AND (b.title LIKE ? OR b.author LIKE ? OR b.authors LIKE ?
-              OR b.isbn  LIKE ? OR b.genre LIKE ?
-              OR b.accessionNumber LIKE ? OR b.callNumber LIKE ?)
+         AND  ${filters.conditions.join(" AND ")}
+         ${bookScope.sql}
        ORDER  BY b.created_at DESC`,
-      [like, like, like, like, like, like, like]
+      [...filters.params, ...bookScope.params]
     );
     return { success: true, data: rows };
   } catch (err) {
@@ -417,13 +416,27 @@ async function updateWithCopies(id, bookData, copies) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  delete (soft) — also soft-deletes all book_copies
 // ─────────────────────────────────────────────────────────────────────────────
-async function deleteBook(id) {
+async function deleteBook(id, scope = null) {
   try {
-    const TrashModel = require("./Trash");
-    const [book] = await pool.query("SELECT * FROM books WHERE id = ? AND is_deleted = 0", [id]);
+    const bookScope = physicalBookScopeSql(scope);
+    const [book] = await pool.query(
+      `SELECT b.* FROM books b WHERE b.id = ? AND b.is_deleted = 0 ${bookScope.sql}`,
+      [id, ...bookScope.params]
+    );
     if (book.length === 0) {
       return { success: false, error: "Book not found" };
     }
+
+    // Snapshot the book's school onto the trash entry (scope the trash list).
+    const [schoolRow] = await pool.query(
+      `SELECT d.school_id
+       FROM book_category_assignments a
+       JOIN categories c  ON c.id = a.category_id AND c.deleted_at IS NULL
+       JOIN departments d ON d.id = c.department_id
+       WHERE a.book_id = ?
+       LIMIT 1`,
+      [id]
+    );
 
     // Soft-delete all copies first
     await pool.query(
@@ -432,7 +445,8 @@ async function deleteBook(id) {
     );
 
     // Then move book to trash
-    const result = await TrashModel.softDelete("book", Number(id));
+    const TrashModel = require("./Trash");
+    const result = await TrashModel.softDelete("book", Number(id), null, schoolRow[0]?.school_id ?? null);
     return result;
   } catch (error) {
     console.error("[BookModel.deleteBook]", error.message);

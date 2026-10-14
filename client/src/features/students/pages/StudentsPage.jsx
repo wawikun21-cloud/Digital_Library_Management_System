@@ -23,7 +23,7 @@ import StudentFormModal from "../components/StudentFormModal";
 import StudentImportModal from "../components/StudentImportModal";
 
 export default function StudentsPage() {
-  const { hasPermissionAction } = useAuth();
+  const { hasPermissionAction, user: currentUser } = useAuth();
 
   // ── Per-action permission gates (server enforces the same) ──
   const canCreate = hasPermissionAction("manage_students", "create");
@@ -117,6 +117,7 @@ export default function StudentsPage() {
         <StudentFormModal
           mode={editStudent ? "edit" : "add"}
           student={editStudent}
+          currentUser={currentUser}
           onClose={closeModal}
           onCreate={createMember}
           onUpdate={updateMember}
@@ -130,6 +131,7 @@ export default function StudentsPage() {
           onClose={() => setIsImportOpen(false)}
           showToast={showToast}
           onImported={fetchData}
+          currentUser={currentUser}
         />
       )}
 

@@ -1,17 +1,21 @@
 // ─────────────────────────────────────────────────────────
 //  components/layout/Sidebar.jsx
 //
-//  Sidebar navigation with:
+//  Floating "rail" sidebar:
+//   - Collapsed: a slim rounded pill of 44px icon tiles that floats
+//     inside the page frame; hovering expands it to show labels.
 //   - Permission-based item visibility (each item declares `permission`)
 //   - Expandable group menus (Dashboard, Attendance, Settings)
-//   - Section grouping (labels + dividers) → scannable, not tight
+//   - Sections are separated by hairlines when collapsed and by small
+//     labels when expanded → scannable, not tight
 //
 //  items without `permission` → visible to everyone
 //  items with `permission`   → visible only when the resolved
 //                              permissions include it
 //
 //  The catalog and the visibility rules live in ./navItems.js so the
-//  BottomNav answers the same question the same way.
+//  BottomNav answers the same question the same way. All visuals live
+//  in styles/shell.css (`.rail*` classes).
 // ─────────────────────────────────────────────────────────
 import { useState, useEffect, useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
@@ -28,11 +32,11 @@ import {
   isGroupLinkVisible,
 } from "./navItems.js";
 
-const SIDEBAR_WIDTHS = { COLLAPSED: 58, EXPANDED: 220 };
-const BRAND_HEIGHT   = 66;
+// Keep in sync with RAIL_W_* in Layout.jsx.
+const SIDEBAR_WIDTHS = { COLLAPSED: 72, EXPANDED: 252, DRAWER: 264 };
 
 // ─────────────────────────────────────────────────────────
-//  Sidebar — desktop + mobile asides
+//  Sidebar — desktop rail + mobile drawer
 // ─────────────────────────────────────────────────────────
 export default function Sidebar({
   collapsed, darkMode, onToggleTheme, mobileOpen, onMobileClose, userRole,
@@ -51,15 +55,14 @@ export default function Sidebar({
 
   return (
     <>
-      {/* ── Desktop sidebar ─────────────────────────────── */}
+      {/* ── Desktop rail ────────────────────────────────── */}
       <aside
-        className="fixed top-0 left-0 h-screen z-50 hidden lg:flex flex-col overflow-hidden transition-all duration-300"
-        style={{ width: desktopWidth, background: "var(--bg-sidebar)", borderRight: "1px solid var(--border-sidebar)" }}
+        className={`rail hidden lg:flex${effectiveCollapsed ? " rail--collapsed" : ""}`}
+        style={{ width: desktopWidth }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         aria-label="Main navigation"
         role="navigation"
-        aria-expanded={!effectiveCollapsed}
       >
         <Inner
           collapsed={effectiveCollapsed}
@@ -69,19 +72,19 @@ export default function Sidebar({
         />
       </aside>
 
-      {/* ── Mobile sidebar ──────────────────────────────── */}
+      {/* ── Mobile drawer ───────────────────────────────── */}
       <aside
         className={[
-          "fixed top-0 left-0 h-screen z-50 flex flex-col overflow-hidden lg:hidden",
-          "transition-transform duration-300 ease-in-out",
-          mobileOpen ? "translate-x-0" : "-translate-x-full",
+          "rail rail--drawer lg:hidden",
+          mobileOpen ? "translate-x-0" : "-translate-x-[120%]",
         ].join(" ")}
-        style={{ width: 240, background: "var(--bg-sidebar)", borderRight: "1px solid var(--border-sidebar)" }}
+        style={{ width: SIDEBAR_WIDTHS.DRAWER }}
+        data-open={mobileOpen ? "true" : "false"}
       >
         <button
           onClick={onMobileClose}
-          className="absolute top-4 right-3 p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-          style={{ color: "var(--text-on-sidebar)" }}
+          className="absolute top-4 right-3 z-10 p-1.5 rounded-xl transition-colors"
+          style={{ color: "var(--rail-icon)" }}
           aria-label="Close menu"
         >
           <X size={16} />
@@ -98,7 +101,7 @@ export default function Sidebar({
 }
 
 // ─────────────────────────────────────────────────────────
-//  Inner — sidebar contents
+//  Inner — rail contents
 // ─────────────────────────────────────────────────────────
 function Inner({ collapsed, darkMode, onToggleTheme, user }) {
   const location = useLocation();
@@ -135,24 +138,26 @@ function Inner({ collapsed, darkMode, onToggleTheme, user }) {
 
   const toggleGroup = (label) => setOpenGroups((g) => ({ ...g, [label]: !g[label] }));
 
+  const roleLabel =
+    role === ROLES.LIBRARIAN   ? "📚 Librarian"   :
+    role === ROLES.STAFF       ? "🧑‍💼 Staff"       :
+    role === ROLES.SUPER_ADMIN ? "⚡ Super Admin" :
+    role === ROLES.STUDENT     ? "🎓 Student"     : "⚙️ Admin";
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* ── Brand ────────────────────────────────────── */}
-      <div
-        className="flex items-center shrink-0 overflow-hidden border-b border-[var(--border-sidebar)]"
-        style={{ minHeight: BRAND_HEIGHT, padding: "10px 12px" }}
-      >
+      <div className="rail-brand">
         <Logo variant={collapsed ? "collapsed" : "expanded"} />
       </div>
 
       {/* ── Nav items ────────────────────────────────── */}
-      <nav
-        className="sidebar-nav flex-1 flex flex-col gap-1 py-2 overflow-y-auto overflow-x-hidden"
-      >
-        {sections.map((sec) => (
+      <nav className="sidebar-nav rail-nav">
+        {sections.map((sec, i) => (
           <NavSection
             key={sec.id}
             section={sec}
+            isFirst={i === 0}
             collapsed={collapsed}
             user={user}
             openGroups={openGroups}
@@ -161,48 +166,29 @@ function Inner({ collapsed, darkMode, onToggleTheme, user }) {
         ))}
       </nav>
 
-      {/* ── Role badge (expanded only) ──────────────── */}
-      {!collapsed && (
-        <div
-          style={{
-            padding: "6px 12px 2px",
-            opacity: 0.55,
-            fontSize: "10px",
-            fontWeight: 600,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            color: "var(--text-on-sidebar)",
-          }}
-        >
-          {role === ROLES.LIBRARIAN ? "📚 Librarian" : role === ROLES.STAFF ? "🧑‍💼 Staff" : role === ROLES.SUPER_ADMIN ? "⚡ Super Admin" : role === ROLES.STUDENT ? "🎓 Student" : "⚙️ Admin"}
-        </div>
-      )}
+      {/* ── Footer: role + theme toggle ──────────────── */}
+      <div className="rail-footer">
+        {!collapsed && <div className="rail-role">{roleLabel}</div>}
 
-      {/* ── Theme toggle ─────────────────────────────── */}
-      <div
-        className="flex flex-col gap-2 p-2 shrink-0"
-        style={{ borderTop: "1px solid var(--border-sidebar)" }}
-      >
         <button
+          type="button"
           onClick={onToggleTheme}
           title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-          className={[
-            "flex items-center gap-2.5 w-full rounded-lg transition-colors duration-150",
-            collapsed ? "justify-center py-2 px-0" : "px-2.5 py-2",
-          ].join(" ")}
-          style={{ background: "rgba(255,255,255,0.04)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(238,162,58,0.1)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
+          aria-label={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          className="rail-item"
+          style={{ cursor: "pointer", border: 0, background: "transparent", width: collapsed ? 44 : "100%" }}
         >
-          <span className="t-track">
-            <span className={`t-thumb ${darkMode ? "t-thumb-on" : ""}`} />
-            <span className="t-icon t-sun"><Sun size={10} /></span>
-            <span className="t-icon t-moon"><Moon size={10} /></span>
-          </span>
-          {!collapsed && (
-            <span className="text-[12.5px] font-semibold whitespace-nowrap" style={{ color: "var(--text-on-sidebar)" }}>
-              {darkMode ? "Dark Mode" : "Light Mode"}
-            </span>
+          {collapsed ? (
+            <span className="rail-icon">{darkMode ? <Sun size={18} /> : <Moon size={18} />}</span>
+          ) : (
+            <>
+              <span className="t-track">
+                <span className={`t-thumb ${darkMode ? "t-thumb-on" : ""}`} />
+                <span className="t-icon t-sun"><Sun size={10} /></span>
+                <span className="t-icon t-moon"><Moon size={10} /></span>
+              </span>
+              <span className="truncate">{darkMode ? "Dark Mode" : "Light Mode"}</span>
+            </>
           )}
         </button>
       </div>
@@ -211,26 +197,19 @@ function Inner({ collapsed, darkMode, onToggleTheme, user }) {
 }
 
 // ─────────────────────────────────────────────────────────
-//  NavSection — a labelled, divided group of nav items
+//  NavSection — a labelled (expanded) or hairline-divided
+//  (collapsed) group of nav items
 // ─────────────────────────────────────────────────────────
-function NavSection({ section, collapsed, user, openGroups, onToggleGroup }) {
+function NavSection({ section, isFirst, collapsed, user, openGroups, onToggleGroup }) {
   const { label, items } = section;
 
   return (
-    <div className="mb-1.5">
-      {/* ── Divider + label (expanded only) ──────────── */}
-      {!collapsed && (
-        <>
-          <span
-            className="block px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest"
-            style={{ color: "var(--text-on-sidebar)", opacity: 0.5 }}
-          >
-            {label}
-          </span>
-        </>
-      )}
+    <div>
+      {collapsed
+        ? (!isFirst && <div className="rail-divider" aria-hidden="true" />)
+        : <span className="rail-section-label">{label}</span>}
 
-      <div className="flex flex-col gap-1 px-2">
+      <div className="flex flex-col gap-1">
         {items.map((item) =>
           item.isGroup ? (
             <GroupMenu
@@ -260,24 +239,11 @@ function NavItem({ item, collapsed }) {
       to={to}
       end={end ?? to === "/dashboard"}
       title={collapsed ? label : undefined}
-      className={({ isActive }) => [
-        "flex items-center rounded-lg text-sm font-medium",
-        "overflow-hidden whitespace-nowrap select-none transition-colors duration-150 px-3 py-2",
-        isActive ? "text-white" : "hover:text-amber-400",
-      ].join(" ")}
-      style={({ isActive }) => ({
-        color: isActive ? "#fff" : "var(--text-on-sidebar)",
-        background: isActive ? "rgba(238,162,58,0.18)" : "transparent",
-      })}
+      aria-label={collapsed ? label : undefined}
+      className={({ isActive }) => `rail-item${isActive ? " is-active" : ""}`}
     >
-      {({ isActive }) => (
-        <>
-          <span className="shrink-0 flex items-center justify-center" style={{ width: 18, minWidth: 18 }}>
-            <Icon size={18} style={{ color: isActive ? "#f0d807" : undefined }} />
-          </span>
-          {!collapsed && <span className="ml-3 truncate">{label}</span>}
-        </>
-      )}
+      <span className="rail-icon"><Icon size={18} /></span>
+      {!collapsed && <span className="truncate">{label}</span>}
     </NavLink>
   );
 }
@@ -299,61 +265,46 @@ function GroupMenu({ item, collapsed, open, canLink, onToggle }) {
   const isSelfActive = canLink && location.pathname === to;
   const isHighlighted = isSelfActive || anyChildActive;
 
-  const header = (
+  const headerContent = (
     <>
-      <span className="shrink-0 flex items-center justify-center" style={{ width: 18, minWidth: 18 }}>
-        <Icon size={18} style={{ color: isHighlighted ? "#f0d807" : undefined }} />
-      </span>
-      {!collapsed && <span className="ml-3 truncate" style={{ fontSize: 11.5 }}>{label}</span>}
+      <span className="rail-icon"><Icon size={18} /></span>
+      {!collapsed && <span className="truncate">{label}</span>}
     </>
   );
 
   return (
     <div>
-      <div
-        className="flex items-center rounded-lg overflow-hidden"
-        style={{ background: isHighlighted ? "rgba(238,162,58,0.18)" : "transparent" }}
-      >
+      <div className={`rail-row${isHighlighted ? " is-active" : ""}`}>
         {canLink ? (
           <NavLink
             to={to}
             end
             title={collapsed ? label : undefined}
-            className="flex items-center flex-1 overflow-hidden whitespace-nowrap select-none transition-colors duration-150 px-3 py-2 text-sm font-medium"
-            style={({ isActive }) => ({
-              color: isActive || anyChildActive ? "#fff" : "var(--text-on-sidebar)",
-            })}
+            aria-label={collapsed ? label : undefined}
+            className={({ isActive }) => `rail-item${isActive || anyChildActive ? " is-active" : ""}`}
           >
-            {({ isActive }) => (
-              <>
-                <span className="shrink-0 flex items-center justify-center" style={{ width: 18, minWidth: 18 }}>
-                  <Icon size={18} style={{ color: isActive || anyChildActive ? "#f0d807" : undefined }} />
-                </span>
-                {!collapsed && <span className="ml-3 truncate" style={{ fontSize: 11.5 }}>{label}</span>}
-              </>
-            )}
+            {headerContent}
           </NavLink>
         ) : (
           <div
             title={collapsed ? label : undefined}
-            className="flex items-center flex-1 overflow-hidden whitespace-nowrap select-none px-3 py-2 text-sm font-medium"
-            style={{ color: isHighlighted ? "#fff" : "var(--text-on-sidebar)" }}
+            className={`rail-item${isHighlighted ? " is-active" : ""}`}
           >
-            {header}
+            {headerContent}
           </div>
         )}
 
         {!collapsed && (
           <button
+            type="button"
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
-            aria-label="Toggle submenu"
-            className="shrink-0 flex items-center justify-center rounded-md transition-colors duration-150 hover:bg-white/10"
-            style={{ width: 28, height: 28, marginRight: 4, color: "var(--text-on-sidebar)" }}
+            aria-label={`Toggle ${label} submenu`}
+            aria-expanded={open}
+            className="rail-chev"
           >
             <ChevronDown
-              size={13}
+              size={14}
               style={{
-                opacity: 0.7,
                 transition: "transform 250ms ease",
                 transform: open ? "rotate(180deg)" : "rotate(0deg)",
               }}
@@ -365,44 +316,24 @@ function GroupMenu({ item, collapsed, open, canLink, onToggle }) {
       {/* ── Submenu ── */}
       {!collapsed && (
         <div
-          style={{
-            overflow: "hidden",
-            maxHeight: open ? `${children.length * 36}px` : "0px",
-            transition: "max-height 280ms ease",
-            padding: "2px 4px 3px",
-          }}
+          className="rail-sub"
+          style={{ maxHeight: open ? `${children.length * 40 + 8}px` : "0px" }}
         >
-          {children.map(({ to: cTo, label: cLabel, Icon: CIcon, end: cEnd }) => (
-            <NavLink
-              key={cTo}
-              to={cTo}
-              end={cEnd ?? false}
-              title={cLabel}
-              className={({ isActive }) => [
-                "flex items-center rounded-lg font-medium select-none transition-colors duration-150",
-                isActive ? "text-white" : "hover:text-amber-400",
-              ].join(" ")}
-              style={({ isActive }) => ({
-                paddingLeft: 30,
-                paddingRight: 8,
-                paddingTop: 7,
-                paddingBottom: 7,
-                color: isActive ? "#fff" : "var(--text-on-sidebar)",
-                background: isActive ? "rgba(238,162,58,0.12)" : "transparent",
-              })}
-            >
-              {({ isActive }) => (
-                <>
-                  <span className="shrink-0 flex items-center justify-center" style={{ width: 12, minWidth: 12, marginRight: 8 }}>
-                    <CIcon size={13} style={{ color: isActive ? "#f7e013" : undefined, opacity: isActive ? 1 : 0.7 }} />
-                  </span>
-                  <span style={{ fontSize: 11.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {cLabel}
-                  </span>
-                </>
-              )}
-            </NavLink>
-          ))}
+          <div className="flex flex-col gap-0.5 py-1">
+            {children.map(({ to: cTo, label: cLabel, Icon: CIcon, end: cEnd }) => (
+              <NavLink
+                key={cTo}
+                to={cTo}
+                end={cEnd ?? false}
+                title={cLabel}
+                tabIndex={open ? 0 : -1}
+                className={({ isActive }) => `rail-item${isActive ? " is-active" : ""}`}
+              >
+                <span className="rail-icon" style={{ width: 14 }}><CIcon size={14} /></span>
+                <span className="truncate">{cLabel}</span>
+              </NavLink>
+            ))}
+          </div>
         </div>
       )}
     </div>

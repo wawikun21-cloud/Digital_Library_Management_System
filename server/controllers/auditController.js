@@ -1,17 +1,17 @@
-// ─────────────────────────────────────────────────────────
+﻿// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  controllers/auditController.js
 //  Admin-only endpoints for the Audit Trail feature.
 //
-//  GET  /api/audit              — paginated + filtered list
-//  GET  /api/audit/stats        — summary counts / breakdowns
-//  GET  /api/audit/export       — CSV download (filtered)
-//  GET  /api/audit/:id          — single entry detail
-// ─────────────────────────────────────────────────────────
+//  GET  /api/audit              â€” paginated + filtered list
+//  GET  /api/audit/stats        â€” summary counts / breakdowns
+//  GET  /api/audit/export       â€” CSV download (filtered)
+//  GET  /api/audit/:id          â€” single entry detail
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const AuditLog = require("../models/AuditLog");
 const { successResponse, errorResponse } = require("../utils/responseFormatter");
 
-// ── GET /api/audit ────────────────────────────────────────
+// â”€â”€ GET /api/audit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const getLogs = async (req, res) => {
   try {
     const {
@@ -25,6 +25,7 @@ const getLogs = async (req, res) => {
     } = req.query;
 
     const { rows, total } = await AuditLog.getAll({
+      scope:       req.schoolScope,
       page        : Number(page),
       limit       : Math.min(Number(limit), 200),   // cap at 200 per page
       entity_type,
@@ -50,10 +51,10 @@ const getLogs = async (req, res) => {
   }
 };
 
-// ── GET /api/audit/stats ──────────────────────────────────
+// â”€â”€ GET /api/audit/stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const getStats = async (req, res) => {
   try {
-    const stats = await AuditLog.getStats();
+    const stats = await AuditLog.getStats(req.schoolScope);
     res.json(successResponse(stats));
   } catch (err) {
     console.error("[AuditController] getStats:", err.message);
@@ -61,13 +62,13 @@ const getStats = async (req, res) => {
   }
 };
 
-// ── GET /api/audit/export ─────────────────────────────────
-// Streams a CSV file — no pagination limit.
+// â”€â”€ GET /api/audit/export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Streams a CSV file â€” no pagination limit.
 const exportCsv = async (req, res) => {
   try {
     const { entity_type, action, user_username, date_from, date_to } = req.query;
 
-    const rows = await AuditLog.exportAll({ entity_type, action, user_username, date_from, date_to });
+    const rows = await AuditLog.exportAll({ entity_type, action, user_username, date_from, date_to, scope: req.schoolScope });
 
     // Build CSV content
     const headers = ["id", "user_username", "entity_type", "entity_id", "action", "ip_address", "created_at"];
@@ -96,10 +97,10 @@ const exportCsv = async (req, res) => {
   }
 };
 
-// ── GET /api/audit/:id ────────────────────────────────────
+// â”€â”€ GET /api/audit/:id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const getById = async (req, res) => {
   try {
-    const entry = await AuditLog.getById(req.params.id);
+    const entry = await AuditLog.getById(req.params.id, req.schoolScope);
     if (!entry) return res.status(404).json(errorResponse("Audit log entry not found", 404));
     res.json(successResponse(entry));
   } catch (err) {

@@ -1,25 +1,24 @@
-const toolsRepo = require("./tools.repository");
-const auditService = require("../../services/auditService");
+﻿const toolsRepo = require("./tools.repository");
 
-async function listTools(filters) {
-  return toolsRepo.listTools(filters);
+async function listTools(filters, scope = null) {
+  return toolsRepo.listTools(filters, null, scope);
 }
 
-async function getTool(id) {
-  return toolsRepo.findById(id);
+async function getTool(id, scope = null) {
+  return toolsRepo.findById(id, scope);
 }
 
-async function createTool(userId, toolData) {
-  const id = await toolsRepo.create({ ...toolData, created_by: userId });
-  return { id };
+async function createTool(userId, toolData, scope = null) {
+  const id = await toolsRepo.create({ ...toolData, created_by: userId }, scope);
+  return id;
 }
 
-async function updateTool(id, updates) {
-  return toolsRepo.update(id, updates);
+async function updateTool(id, updates, scope = null) {
+  return toolsRepo.update(id, updates, scope);
 }
 
-async function deleteTool(id) {
-  return toolsRepo.remove(id);
+async function deleteTool(id, scope = null) {
+  return toolsRepo.remove(id, scope);
 }
 
 async function listActiveByCategory(category) {
@@ -32,7 +31,6 @@ async function listCategories(activeOnly = false) {
 
 async function incrementDownload(id) {
   await toolsRepo.incrementDownload(id);
-  return true;
 }
 
 async function getToolStats() {

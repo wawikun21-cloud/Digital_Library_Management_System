@@ -17,7 +17,10 @@ const User = {
 
   async findById(id) {
     const [rows] = await pool.query(
-      "SELECT id, username, role, avatar_url, created_at FROM users WHERE id = ? LIMIT 1",
+      `SELECT id, username, role, avatar_url, created_at,
+              full_name, is_active,
+              school_id, department_id, must_change_password
+       FROM users WHERE id = ? LIMIT 1`,
       [id]
     );
     return rows[0] || null;
@@ -53,6 +56,8 @@ const User = {
       const hashed = await bcrypt.hash(password, 10);
       fields.push("password = ?");
       values.push(hashed);
+      // A self-service password change satisfies the must-change prompt.
+      fields.push("must_change_password = 0");
     }
     if (avatar_url !== undefined) {
       fields.push("avatar_url = ?");

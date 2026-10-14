@@ -1,4 +1,4 @@
-import { Plus, ShieldCheck, AlertTriangle, RotateCw } from "lucide-react";
+import { Plus, AlertTriangle, RotateCw } from "lucide-react";
 import { useRolesManager } from "../hooks/useRolesManager";
 import { useAuth } from "../../../hooks/useAuth";
 import RolesTable from "../components/RolesTable";
@@ -45,12 +45,8 @@ export default function RolesPage() {
       {/* ── Header ──────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="flex items-center gap-2.5 text-[22px] font-bold" style={{ color: "var(--text-primary)" }}>
-            <ShieldCheck size={22} style={{ color: "var(--accent-amber)" }} aria-hidden="true" />
-            Roles &amp; Permissions
-          </h1>
+          <h1 className="flex items-center gap-2.5 text-[22px] font-bold" style={{ color: "var(--text-primary)" }}></h1>
           <p className="mt-0.5 text-[13px]" style={{ color: "var(--text-secondary)" }}>
-            Manage roles and assign permissions
           </p>
         </div>
         {canManageRoles && (

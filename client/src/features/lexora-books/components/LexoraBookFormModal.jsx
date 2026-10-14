@@ -6,12 +6,14 @@ import {
 import {
   fetchCategories, createCategory, setBookCategories,
   fetchTags, createTag, setBookTags,
+  fetchResourceTypes, createResourceType, deleteResourceType,
   uploadBookPdf, removeBookPdf, uploadBookCover, removeBookCover, uploadBookThumbnail, uploadBookPages,
   createLexoraBook, updateLexoraBook,
   deleteCategory, deleteTag,
   fetchBookPages, deleteBookPage, reorderBookPages, replaceBookPage,
 } from "../../../services/api/lexoraBooksApi"
 import BookTocEditor from "./BookTocEditor"
+import LexoraResourceTypePicker from "./LexoraResourceTypePicker"
 import LexoraBookReaderSettings from "./LexoraBookReaderSettings"
 import { Field, IconBtn, inputCls } from "./FormControls"
 
@@ -37,7 +39,7 @@ const SECTIONS = [
   { id: "cover", label: "Cover" },
   { id: "details", label: "Details" },
   { id: "contents", label: "Table of contents" },
-  { id: "organize", label: "Categories & tags" },
+  { id: "organize", label: "Organization" },
   { id: "publish", label: "Visibility" },
   { id: "reader", label: "Reader settings" },
 ]
@@ -49,6 +51,7 @@ export default function LexoraBookFormModal({ isOpen, onClose, book, onSaved }) 
   const [errors, setErrors] = useState({})
   const [categories, setCategories] = useState([])
   const [tags, setTags] = useState([])
+  const [resourceTypes, setResourceTypes] = useState([])
   const [deletingTaxonomy, setDeletingTaxonomy] = useState("")
   const [pdfFile, setPdfFile] = useState(null)
   const [coverFile, setCoverFile] = useState(null)
@@ -147,9 +150,12 @@ export default function LexoraBookFormModal({ isOpen, onClose, book, onSaved }) 
   }, [pageFiles])
 
   async function loadExtras() {
-    const [catsRes, tagsRes] = await Promise.all([fetchCategories(), fetchTags()])
+    const [catsRes, tagsRes, typesRes] = await Promise.all([
+      fetchCategories(), fetchTags(), fetchResourceTypes(),
+    ])
     if (catsRes.success) setCategories(catsRes.data || [])
     if (tagsRes.success) setTags(tagsRes.data || [])
+    if (typesRes.success) setResourceTypes(typesRes.data || [])
   }
 
   const updateField = useCallback((field, value) => {
@@ -194,6 +200,35 @@ export default function LexoraBookFormModal({ isOpen, onClose, book, onSaved }) 
   }
   const handleCreateCategory = makeCreator(createCategory, setCategories, "category_ids")
   const handleCreateTag = makeCreator(createTag, setTags, "tag_ids")
+
+  /** Resource type is single-valued: creating one also selects it. */
+  const handleCreateResourceType = async (name) => {
+    const res = await createResourceType(name)
+    if (!res.success) {
+      setErrors((prev) => ({ ...prev, resource_type: res.error || "Could not create resource type." }))
+      return false
+    }
+    setResourceTypes((prev) => [...prev, res.data])
+    updateField("resource_type", res.data.name)
+    return true
+  }
+
+  /** Deleting a type still used by books is refused by the server. */
+  const handleDeleteResourceType = async (type) => {
+    if (!window.confirm(`Delete resource type "${type.name}"?`)) return
+    setDeletingTaxonomy(`resource-type-${type.id}`)
+    setErrors((prev) => ({ ...prev, resource_type: undefined }))
+    try {
+      const res = await deleteResourceType(type.id)
+      if (!res.success) throw new Error(res.error)
+      setResourceTypes((prev) => prev.filter((entry) => entry.id !== type.id))
+      if (form.resource_type === type.name) updateField("resource_type", "")
+    } catch (error) {
+      setErrors((prev) => ({ ...prev, resource_type: error.message || "Could not delete resource type." }))
+    } finally {
+      setDeletingTaxonomy("")
+    }
+  }
 
   const makeDeleter = (remove, setList, key, noun) => async (item) => {
     if (!window.confirm(`Delete ${noun} "${item.name}"? It will also be removed from every book that uses it.`)) return
@@ -403,7 +438,7 @@ export default function LexoraBookFormModal({ isOpen, onClose, book, onSaved }) 
     basics: !!form.title.trim() && !!form.source_type &&
       (form.source_type === "pdf" ? !!(form.pdf_url || pdfFile) : pageFiles.length + existingPages.length > 0),
     cover: !!(form.cover_url || coverFile),
-    organize: form.category_ids.length + form.tag_ids.length > 0,
+    organize: !!form.resource_type || form.category_ids.length + form.tag_ids.length > 0,
     reader: true,
   }
   const statusText = saving ? "Saving book…" : uploading ? "Uploading files…"
@@ -631,8 +666,19 @@ export default function LexoraBookFormModal({ isOpen, onClose, book, onSaved }) 
               />
             </Section>
 
-            <Section id="organize" title="Categories & tags" desc="Help readers find this book. Pick existing ones or type to create new.">
+            <Section id="organize" title="Organization" desc="Classify the book: pick a resource type, then add categories and tags to help readers find it.">
               {errors.organize && <p role="alert" className="mb-3 text-xs text-red-400">{errors.organize}</p>}
+              <LexoraResourceTypePicker
+                id="bf-resource_type"
+                types={resourceTypes}
+                value={form.resource_type || ""}
+                onChange={(name) => updateField("resource_type", name)}
+                onCreate={handleCreateResourceType}
+                onDelete={handleDeleteResourceType}
+                creating={saving}
+                deletingId={deletingTaxonomy}
+                error={errors.resource_type}
+              />
               <ChipPicker id="bf-categories" label="Categories" noun="category" items={categories}
                 selected={form.category_ids} onChange={(ids) => updateField("category_ids", ids)}
                 onCreate={handleCreateCategory} onDelete={handleDeleteCategory} deletingId={deletingTaxonomy} />

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../hooks/useAuth";
-import { fetchCurrentUser } from "../../users/api/usersApi";
+import { fetchCurrentUser } from "../../users";
 
 export function useStudentPortal() {
   const { user, role, isStudent } = useAuth();

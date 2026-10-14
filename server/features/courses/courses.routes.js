@@ -6,9 +6,10 @@ const {
   resolvePermissions,
   requirePermissionAction,
 } = require('../../features/roles');
+const { resolveSchoolScope } = require('../organization');
 const { courseThumbnailUpload } = require('../../middleware/courseThumbnailUpload');
 
-router.use(requireAuth, resolvePermissions);
+router.use(requireAuth, resolvePermissions, resolveSchoolScope);
 
 // Static paths first so they are never shadowed by /:id
 router.get('/library', requirePermissionAction('view_course_library', 'view'), CoursesController.listLibraryCourses);

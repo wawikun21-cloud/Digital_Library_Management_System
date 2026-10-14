@@ -71,10 +71,8 @@ export default function ToolsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <h1 className="text-xl sm:text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-            Tools Management
           </h1>
           <p className="text-[12px] sm:text-[13px]" style={{ color: "var(--text-secondary)" }}>
-            Manage downloadable tools for students
           </p>
         </div>
         {canCreate && (

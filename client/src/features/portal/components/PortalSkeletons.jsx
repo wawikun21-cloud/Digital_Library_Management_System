@@ -1,4 +1,4 @@
-import { heroBoxStyle, HERO_MIN_HEIGHT_CLASS } from "../constants/studentsUi";
+import { heroBoxStyle, HERO_MIN_HEIGHT_CLASS } from "../constants/portalUi";
 
 function Block({ className, style }) {
   return <div className={`animate-pulse rounded-xl ${className}`} style={{ background: "var(--bg-hover)", ...style }} />;

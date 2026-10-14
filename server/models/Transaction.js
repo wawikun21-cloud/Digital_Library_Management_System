@@ -1,8 +1,18 @@
 // ─────────────────────────────────────────────────────────
 //  models/Transaction.js
+//
+//  CONSOLIDATION + SCOPING:
+//    • lookupStudent reads student USERS (students table retired)
+//      and is school-scoped — a scoped operator cannot find a
+//      student patron of another school ("not found", no leak).
+//      searchFaculty is deliberately UNSCOPED (faculty may borrow
+//      at any school — patron rule).
+//    • The loans list scopes through the borrowed book's category
+//      assignments (bookAccess physical scope).
 // ─────────────────────────────────────────────────────────
 
 const { pool } = require("../config/db");
+const { physicalBookScopeSql } = require("../features/organization/bookAccess.service");
 
 // Returns today's date as "YYYY-MM-DD" in local server time.
 function localDateStr(date = new Date()) {
@@ -37,10 +47,13 @@ const SELECT_FULL = `
 
 const TransactionModel = {
 
-  async getAll() {
+  /** Loans list — scoped through the borrowed book's scope. */
+  async getAll(scope = null) {
     try {
+      const bookScope = physicalBookScopeSql(scope);
       const [rows] = await pool.query(
-        `${SELECT_FULL} ORDER BY t.borrow_date DESC`
+        `${SELECT_FULL} ${bookScope.sql} ORDER BY t.borrow_date DESC`,
+        bookScope.params
       );
       return { success: true, data: rows };
     } catch (error) {
@@ -49,10 +62,11 @@ const TransactionModel = {
     }
   },
 
-  async getById(id) {
+  async getById(id, scope = null) {
     try {
+      const bookScope = physicalBookScopeSql(scope);
       const [rows] = await pool.query(
-        `${SELECT_FULL} AND t.id = ?`, [id]
+        `${SELECT_FULL} ${bookScope.sql} AND t.id = ?`, [...bookScope.params, id]
       );
       if (!rows.length) return { success: false, error: "Transaction not found" };
       return { success: true, data: rows[0] };
@@ -78,16 +92,17 @@ const TransactionModel = {
     }
   },
 
-  async getActiveBorrows() {
+  async getActiveBorrows(scope = null) {
     try {
+      const bookScope = physicalBookScopeSql(scope);
       const [rows] = await pool.query(`
         SELECT t.*, b.title AS book_title, b.author AS book_author,
                b.accessionNumber AS book_accession
         FROM borrowed_books t
         LEFT JOIN books b ON t.book_id = b.id
-        WHERE t.status = 'Borrowed'
+        WHERE t.status = 'Borrowed' ${bookScope.sql}
         ORDER BY t.due_date ASC
-      `);
+      `, bookScope.params);
       return { success: true, data: rows };
     } catch (error) {
       console.error("[TransactionModel.getActiveBorrows]", error.message);
@@ -95,15 +110,16 @@ const TransactionModel = {
     }
   },
 
-  async getOverdueBorrows() {
+  async getOverdueBorrows(scope = null) {
     try {
+      const bookScope = physicalBookScopeSql(scope);
       const [rows] = await pool.query(`
         SELECT t.*, b.title AS book_title, b.author AS book_author
         FROM borrowed_books t
         LEFT JOIN books b ON t.book_id = b.id
-        WHERE t.status = 'Borrowed' AND t.due_date < CURDATE()
+        WHERE t.status = 'Borrowed' AND t.due_date < CURDATE() ${bookScope.sql}
         ORDER BY t.due_date ASC
-      `);
+      `, bookScope.params);
       return { success: true, data: rows };
     } catch (error) {
       console.error("[TransactionModel.getOverdueBorrows]", error.message);
@@ -111,29 +127,43 @@ const TransactionModel = {
     }
   },
 
-  // ── Look up student by ID number ──────────────────────
-  async lookupStudent(studentIdNumber) {
+  // ── Look up student patron by ID number ─────────────────
+  // Reads student USERS (students table retired) and is
+  // school-scoped: an out-of-scope student is simply "not found".
+  async lookupStudent(studentIdNumber, scope = null) {
     try {
+      const exactParams = [studentIdNumber];
+      let exactScope = "";
+      if (scope && scope.scoped && scope.schoolId != null) {
+        exactScope = "AND (school_id = ? OR school_id IS NULL)";
+        exactParams.push(scope.schoolId);
+      }
       const [exact] = await pool.query(
-        `SELECT student_id_number, student_name, first_name, last_name,
+        `SELECT student_id_number, full_name AS student_name, full_name,
                 student_course, student_yr_level, student_contact, student_email
-         FROM students
-         WHERE student_id_number = ? AND is_active = 1
+         FROM users
+         WHERE student_id_number = ? AND role = 'student' AND is_active = 1
+         ${exactScope}
          LIMIT 1`,
-        [studentIdNumber]
+        exactParams
       );
       if (exact.length) return { success: true, data: exact[0], multiple: false };
 
+      const likeParams = [`%${studentIdNumber}%`, `%${studentIdNumber}%`, `%${studentIdNumber}%`];
+      let likeScope = "";
+      if (scope && scope.scoped && scope.schoolId != null) {
+        likeScope = "AND (school_id = ? OR school_id IS NULL)";
+        likeParams.push(scope.schoolId);
+      }
       const [rows] = await pool.query(
-        `SELECT student_id_number, student_name, first_name, last_name,
+        `SELECT student_id_number, full_name AS student_name, full_name,
                 student_course, student_yr_level, student_contact, student_email
-         FROM students
-         WHERE (student_id_number LIKE ? OR student_name LIKE ?
-                OR first_name LIKE ? OR last_name LIKE ?)
-           AND is_active = 1
+         FROM users
+         WHERE (student_id_number LIKE ? OR full_name LIKE ? OR username LIKE ?)
+           AND role = 'student' AND is_active = 1
+         ${likeScope}
          LIMIT 10`,
-        [`%${studentIdNumber}%`, `%${studentIdNumber}%`,
-         `%${studentIdNumber}%`, `%${studentIdNumber}%`]
+        likeParams
       );
 
       if (!rows.length) return { success: false, error: "Student not found" };
@@ -160,9 +190,10 @@ const TransactionModel = {
   },
 
   // ── Search available books ────────────────────────────
-  async searchBooks(query) {
+  async searchBooks(query, scope = null) {
     try {
       const t = `%${query}%`;
+      const bookScope = physicalBookScopeSql(scope);
       const [rows] = await pool.query(`
         SELECT
           b.id, b.title, b.author, b.accessionNumber,
@@ -190,9 +221,10 @@ const TransactionModel = {
         WHERE
           (b.title LIKE ? OR b.accessionNumber LIKE ? OR cc.accession_list LIKE ?)
           AND COALESCE(cc.avail_copies, b.quantity) > 0
+          ${bookScope.sql}
         ORDER BY b.title ASC
         LIMIT 10`,
-        [t, t, t]
+        [t, t, t, ...bookScope.params]
       );
       return { success: true, data: rows };
     } catch (error) {
@@ -355,7 +387,7 @@ const TransactionModel = {
   },
 
   // ── Update transaction metadata (borrower details / dates) ──
-  async update(id, data) {
+  async update(id, data, scope = null) {
     try {
       const {
         borrower_name, borrower_id_number, borrower_contact,
@@ -363,8 +395,13 @@ const TransactionModel = {
         borrow_date, due_date,
       } = data;
 
+      // School scope: the loan must belong to the caller's school.
+      const checkScope = physicalBookScopeSql(scope);
       const [existing] = await pool.query(
-        "SELECT id FROM borrowed_books WHERE id = ?", [id]
+        `SELECT t.id FROM borrowed_books t
+         LEFT JOIN books b ON t.book_id = b.id
+         WHERE t.id = ? ${checkScope.sql} LIMIT 1`,
+        [id, ...checkScope.params]
       );
       if (!existing.length) return { success: false, error: "Transaction not found" };
 
@@ -390,13 +427,21 @@ const TransactionModel = {
   },
 
   // ── Extend due date ───────────────────────────────────
-  async extend(id, days = 1) {
+  async extend(id, days = 1, scope = null) {
     try {
+      const checkScope = physicalBookScopeSql(scope);
       const [rows] = await pool.query(
-        "SELECT * FROM borrowed_books WHERE id = ?", [id]
+        `SELECT t.id FROM borrowed_books t
+         LEFT JOIN books b ON t.book_id = b.id
+         WHERE t.id = ? ${checkScope.sql} LIMIT 1`,
+        [id, ...checkScope.params]
       );
       if (!rows.length)                  return { success: false, error: "Transaction not found" };
-      if (rows[0].status === "Returned") return { success: false, error: "Cannot extend a returned book" };
+
+      const [statusRows] = await pool.query(
+        "SELECT status FROM borrowed_books WHERE id = ?", [id]
+      );
+      if (statusRows[0].status === "Returned") return { success: false, error: "Cannot extend a returned book" };
 
       await pool.query(
         `UPDATE borrowed_books
@@ -418,10 +463,22 @@ const TransactionModel = {
   // FIX: original never restored books.quantity on return — stock leaked forever.
   // FIX: now wrapped in DB transaction to keep copies + quantity in sync.
   // FIX: final SELECT now includes FINE_SQL so computed_fine is populated.
-  async returnBook(id) {
+  async returnBook(id, scope = null) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+
+      const checkScope = physicalBookScopeSql(scope);
+      const [scoped] = await conn.query(
+        `SELECT t.id FROM borrowed_books t
+         LEFT JOIN books b ON t.book_id = b.id
+         WHERE t.id = ? ${checkScope.sql} LIMIT 1`,
+        [id, ...checkScope.params]
+      );
+      if (!scoped.length) {
+        await conn.rollback();
+        return { success: false, error: "Transaction not found" };
+      }
 
       const [transaction] = await conn.query(
         "SELECT * FROM borrowed_books WHERE id = ? FOR UPDATE", [id]
@@ -474,10 +531,22 @@ const TransactionModel = {
 
   // ── Delete transaction ────────────────────────────────
   // Restores book stock (if still borrowed) then soft-deletes via TrashModel.
-  async delete(id) {
+  async delete(id, scope = null) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+
+      const checkScope = physicalBookScopeSql(scope);
+      const [scoped] = await conn.query(
+        `SELECT t.id FROM borrowed_books t
+         LEFT JOIN books b ON t.book_id = b.id
+         WHERE t.id = ? ${checkScope.sql} LIMIT 1`,
+        [id, ...checkScope.params]
+      );
+      if (!scoped.length) {
+        await conn.rollback();
+        return { success: false, error: "Transaction not found" };
+      }
 
       const [transaction] = await conn.query(
         "SELECT * FROM borrowed_books WHERE id = ?", [id]
@@ -504,12 +573,23 @@ const TransactionModel = {
         );
       }
 
+      // Snapshot the borrowed book's school onto the trash entry.
+      const [schoolRow] = await conn.query(
+        `SELECT d.school_id
+         FROM book_category_assignments a
+         JOIN categories c  ON c.id = a.category_id AND c.deleted_at IS NULL
+         JOIN departments d ON d.id = c.department_id
+         WHERE a.book_id = ?
+         LIMIT 1`,
+        [txn.book_id]
+      );
+
       await conn.commit();
       conn.release();
 
       // Soft-delete via TrashModel
       const TrashModel = require("./Trash");
-      return TrashModel.softDelete("transaction", Number(id));
+      return TrashModel.softDelete("transaction", Number(id), null, schoolRow[0]?.school_id ?? null);
     } catch (error) {
       await conn.rollback();
       console.error("[TransactionModel.delete]", error.message);
@@ -520,12 +600,14 @@ const TransactionModel = {
     }
   },
 
-  async getStats() {
+  async getStats(scope = null) {
     try {
-      const [[{ total }]]    = await pool.query("SELECT COUNT(*) AS total FROM borrowed_books");
-      const [[{ active }]]   = await pool.query("SELECT COUNT(*) AS active FROM borrowed_books WHERE status = 'Borrowed'");
-      const [[{ returned }]] = await pool.query("SELECT COUNT(*) AS returned FROM borrowed_books WHERE status = 'Returned'");
-      const [[{ overdue }]]  = await pool.query("SELECT COUNT(*) AS overdue FROM borrowed_books WHERE status = 'Borrowed' AND due_date < CURDATE()");
+      const bookScope = physicalBookScopeSql(scope);
+      const join = `FROM borrowed_books t LEFT JOIN books b ON t.book_id = b.id WHERE 1=1 ${bookScope.sql}`;
+      const [[{ total }]]    = await pool.query(`SELECT COUNT(*) AS total ${join}`, bookScope.params);
+      const [[{ active }]]   = await pool.query(`SELECT COUNT(*) AS active ${join} AND t.status = 'Borrowed'`, bookScope.params);
+      const [[{ returned }]] = await pool.query(`SELECT COUNT(*) AS returned ${join} AND t.status = 'Returned'`, bookScope.params);
+      const [[{ overdue }]]  = await pool.query(`SELECT COUNT(*) AS overdue ${join} AND t.status = 'Borrowed' AND t.due_date < CURDATE()`, bookScope.params);
       return { success: true, data: { total, active, returned, overdue } };
     } catch (error) {
       console.error("[TransactionModel.getStats]", error.message);
@@ -534,9 +616,13 @@ const TransactionModel = {
   },
 
   // ── Mark fine as paid ─────────────────────────────────
-  async payFine(id) {
+  async payFine(id, scope = null) {
     try {
-      const [rows] = await pool.query("SELECT * FROM borrowed_books WHERE id = ?", [id]);
+      const checkScope = physicalBookScopeSql(scope);
+      const [rows] = await pool.query(
+        `${SELECT_FULL} ${checkScope.sql} AND t.id = ? LIMIT 1`,
+        [...checkScope.params, id]
+      );
       if (!rows.length) return { success: false, error: "Transaction not found" };
 
       const t = rows[0];

@@ -615,6 +615,10 @@ async function migrateSchema(conn) {
     `ALTER TABLE lexora_books ADD INDEX idx_program        (program)`,
     `ALTER TABLE lexora_books ADD INDEX idx_resource_type  (resource_type)`,
 
+    // resource_type stores a name from lexora_book_resource_types (up to
+    // 100 chars there), so widen the existing 50-char column to match.
+    `ALTER TABLE lexora_books MODIFY COLUMN resource_type VARCHAR(100) NULL`,
+
     // ── lexora_books flipbook feature columns ───────────
     `ALTER TABLE lexora_books ADD COLUMN slug VARCHAR(500) DEFAULT NULL AFTER title`,
     `ALTER TABLE lexora_books ADD COLUMN short_description TEXT DEFAULT NULL AFTER slug`,
@@ -701,6 +705,29 @@ async function migrateSchema(conn) {
       CONSTRAINT fk_lexora_tag_book FOREIGN KEY (book_id) REFERENCES lexora_books(id) ON DELETE CASCADE,
       CONSTRAINT fk_lexora_tag_tag FOREIGN KEY (tag_id) REFERENCES lexora_book_tags(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // ── lexora_book_resource_types ────────────────────────
+    // Managed vocabulary for the single-valued lexora_books.resource_type
+    // column (shown as a badge on the book card). Unlike categories/tags
+    // there is no relation table: the book stores the type's name.
+    `CREATE TABLE IF NOT EXISTS lexora_book_resource_types (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      slug VARCHAR(100) NOT NULL,
+      created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_lexora_resource_type_slug (slug),
+      UNIQUE KEY uq_lexora_resource_type_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // Seed the two starting types only while the table is empty, so a
+    // type deleted from the management UI stays deleted across restarts.
+    `INSERT IGNORE INTO lexora_book_resource_types (name, slug)
+     SELECT * FROM (
+       SELECT 'Open Source' AS name, 'open-source' AS slug
+       UNION ALL SELECT 'Premium', 'premium'
+     ) AS defaults
+     WHERE NOT EXISTS (SELECT 1 FROM lexora_book_resource_types)`,
 
     // ── lexora_book_pages (image-page books) ─────────────
     // The media-access check answers "is this image one of the book's pages?"
@@ -864,6 +891,140 @@ async function migrateSchema(conn) {
     // Legacy databases may carry the role/permission tables from an earlier
     // abandoned attempt with a different shape — reconcile before seeding.
     `ALTER TABLE roles ADD COLUMN is_system TINYINT(1) NOT NULL DEFAULT 1`,
+
+    // ══════════════════════════════════════════════════════
+    //  School Organization — School → Department → Category
+    // ══════════════════════════════════════════════════════
+
+    // ── schools ────────────────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS schools (
+      id          INT AUTO_INCREMENT PRIMARY KEY,
+      code        VARCHAR(50)  NOT NULL,
+      name        VARCHAR(255) NOT NULL,
+      description TEXT NULL,
+      status      ENUM('active','inactive') NOT NULL DEFAULT 'active',
+      is_default  TINYINT(1)   NOT NULL DEFAULT 0,
+      created_by  INT NULL,
+      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_schools_code (code),
+      UNIQUE KEY uq_schools_name (name),
+      INDEX idx_schools_status (status),
+      CONSTRAINT fk_school_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // ── departments (flat, belong to a school) ─────────────
+    `CREATE TABLE IF NOT EXISTS departments (
+      id          INT AUTO_INCREMENT PRIMARY KEY,
+      school_id   INT NOT NULL,
+      name        VARCHAR(255) NOT NULL,
+      code        VARCHAR(50)  NOT NULL,
+      description TEXT NULL,
+      is_active   TINYINT(1)   NOT NULL DEFAULT 1,
+      created_by  INT NULL,
+      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_departments_school_name (school_id, name),
+      UNIQUE KEY uq_departments_school_code (school_id, code),
+      INDEX idx_departments_school (school_id),
+      CONSTRAINT fk_department_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE RESTRICT,
+      CONSTRAINT fk_department_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // ── categories (belong to a department) ────────────────
+    `CREATE TABLE IF NOT EXISTS categories (
+      id            INT AUTO_INCREMENT PRIMARY KEY,
+      department_id INT NOT NULL,
+      name          VARCHAR(255) NOT NULL,
+      description   TEXT NULL,
+      is_active     TINYINT(1)   NOT NULL DEFAULT 1,
+      created_by    INT NULL,
+      created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      deleted_at    DATETIME NULL,
+      UNIQUE KEY uq_categories_department_name (department_id, name),
+      INDEX idx_categories_department (department_id),
+      CONSTRAINT fk_category_department FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE RESTRICT,
+      CONSTRAINT fk_category_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // ── book ↔ category assignments (physical books) ───────
+    `CREATE TABLE IF NOT EXISTS book_category_assignments (
+      id          INT AUTO_INCREMENT PRIMARY KEY,
+      book_id     INT NOT NULL,
+      category_id INT NOT NULL,
+      assigned_by INT NULL,
+      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_book_category (book_id, category_id),
+      INDEX idx_bca_category (category_id),
+      CONSTRAINT fk_bca_book     FOREIGN KEY (book_id)     REFERENCES books(id)     ON DELETE CASCADE,
+      CONSTRAINT fk_bca_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // ── lexora book ↔ category assignments (digital books)
+    `CREATE TABLE IF NOT EXISTS lexora_book_assignments (
+      id             INT AUTO_INCREMENT PRIMARY KEY,
+      lexora_book_id INT NOT NULL,
+      category_id    INT NOT NULL,
+      assigned_by    INT NULL,
+      created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_lexora_category (lexora_book_id, category_id),
+      INDEX idx_lba_category (category_id),
+      CONSTRAINT fk_lba_book     FOREIGN KEY (lexora_book_id) REFERENCES lexora_books(id) ON DELETE CASCADE,
+      CONSTRAINT fk_lba_category FOREIGN KEY (category_id)    REFERENCES categories(id)   ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    // ── users: school scope + student fields ───────────────
+    `ALTER TABLE users ADD COLUMN school_id     INT NULL`,
+    `ALTER TABLE users ADD COLUMN department_id INT NULL`,
+    `ALTER TABLE users ADD INDEX idx_users_school (school_id)`,
+    `ALTER TABLE users ADD INDEX idx_users_department (department_id)`,
+    `ALTER TABLE users ADD CONSTRAINT fk_user_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE SET NULL`,
+    `ALTER TABLE users ADD CONSTRAINT fk_user_department FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL`,
+
+    // ── users: student profile fields (students table retired)
+    `ALTER TABLE users ADD COLUMN student_course      VARCHAR(100) NULL`,
+    `ALTER TABLE users ADD COLUMN student_yr_level    VARCHAR(20)  NULL`,
+    `ALTER TABLE users ADD COLUMN student_email       VARCHAR(100) NULL`,
+    `ALTER TABLE users ADD COLUMN student_contact     VARCHAR(100) NULL`,
+    `ALTER TABLE users ADD COLUMN senior_high_school  VARCHAR(255) NULL`,
+    `ALTER TABLE users ADD COLUMN strand              VARCHAR(100) NULL`,
+    `ALTER TABLE users ADD COLUMN school_address      VARCHAR(255) NULL`,
+    `ALTER TABLE users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0`,
+    // student_id_number must be unique for attendance/RFID identity.
+    // NOTE: on a legacy database with duplicate/blank values this ALTER is
+    // reported as a warning by the loop below and must be resolved manually
+    // before the students→users migration (see plan §7.1).
+    `ALTER TABLE users ADD UNIQUE KEY uk_users_student_id_number (student_id_number)`,
+
+    // ── courses / tools / faculty / trash: school scope ────
+    `ALTER TABLE courses ADD COLUMN school_id INT NULL`,
+    `ALTER TABLE courses ADD INDEX idx_courses_school (school_id)`,
+    `ALTER TABLE courses ADD CONSTRAINT fk_course_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE SET NULL`,
+    `ALTER TABLE tools ADD COLUMN school_id INT NULL`,
+    `ALTER TABLE tools ADD INDEX idx_tools_school (school_id)`,
+    `ALTER TABLE tools ADD CONSTRAINT fk_tool_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE SET NULL`,
+    `ALTER TABLE faculty ADD COLUMN school_id INT NULL`,
+    `ALTER TABLE faculty ADD COLUMN department_id INT NULL`,
+    `ALTER TABLE faculty ADD INDEX idx_faculty_school (school_id)`,
+    `ALTER TABLE faculty ADD INDEX idx_faculty_department (department_id)`,
+    `ALTER TABLE faculty ADD CONSTRAINT fk_faculty_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE SET NULL`,
+    `ALTER TABLE faculty ADD CONSTRAINT fk_faculty_department FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL`,
+    `ALTER TABLE trash_log ADD COLUMN school_id INT NULL`,
+    `ALTER TABLE trash_log ADD INDEX idx_trash_school (school_id)`,
+
+    // ── Attendance schema alignment (the model writes attendance_date /
+    //    attendance_day_of_week / duration_minutes; older databases lack
+    //    them — additive + backfilled so no history is lost) ──
+    `ALTER TABLE attendance ADD COLUMN attendance_date DATE NULL AFTER student_yr_level`,
+    `ALTER TABLE attendance ADD COLUMN attendance_day_of_week VARCHAR(10) NULL AFTER attendance_date`,
+    `ALTER TABLE attendance ADD COLUMN duration_minutes INT NULL AFTER check_out_time`,
+    `UPDATE attendance SET attendance_date = DATE(check_in_time) WHERE attendance_date IS NULL`,
+    `UPDATE attendance SET attendance_day_of_week = DAYNAME(check_in_time) WHERE attendance_day_of_week IS NULL`,
+    `UPDATE attendance SET duration_minutes = duration WHERE duration_minutes IS NULL AND duration IS NOT NULL`,
+
+    // ── users.student_school_year (migrated from the students table) ──
+    `ALTER TABLE users ADD COLUMN student_school_year VARCHAR(50) NULL`,
   ];
 
   await dropLegacyPermissionTables(conn);
@@ -1026,6 +1187,42 @@ async function seedPermissions(conn) {
     }
     await markBatch(SEED_BATCHES.ROLE_GRANTS);
     console.log("  ✅ Seed batch: v1_role_grants");
+  }
+
+  // ── v2_organization ─────────────────────────────────────
+  // Adds manage_organization (granted to super_admin + admin) and seeds the
+  // single default school. Batch-guarded like every other batch.
+  if (!(await batchApplied(SEED_BATCHES.ORGANIZATION))) {
+    const orgPerm = PERMISSION_CATALOG.find((p) => p.name === "manage_organization");
+    if (orgPerm) {
+      await conn.query(
+        `INSERT INTO permissions (name, display_name, category, actions, is_active)
+         VALUES (?, ?, ?, ?, 1)
+         ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), category = VALUES(category)`,
+        [orgPerm.name, orgPerm.display_name, orgPerm.category, JSON.stringify(orgPerm.actions)]
+      );
+      for (const roleName of ["super_admin", "admin"]) {
+        await conn.query(
+          "INSERT IGNORE INTO role_permissions (role_name, permission_name, actions) VALUES (?, ?, NULL)",
+          [roleName, orgPerm.name]
+        );
+      }
+    }
+
+    // Default school — the legacy single-institution record. Created
+    // unconditionally (INSERT IGNORE on the unique code) so existing
+    // installs get exactly one; super_admin renames it later.
+    const [schoolRows] = await conn.query(
+      `INSERT IGNORE INTO schools (code, name, description, is_default)
+       VALUES ('DEFAULT_SCHOOL', ?, 'Default school seeded during organization setup', 1)`,
+      [process.env.DEFAULT_SCHOOL_NAME || "Main Campus"]
+    );
+    if (schoolRows.affectedRows > 0) {
+      console.log(`  🏫 Default school seeded: ${process.env.DEFAULT_SCHOOL_NAME || "Main Campus"}`);
+    }
+
+    await markBatch(SEED_BATCHES.ORGANIZATION);
+    console.log("  ✅ Seed batch: v2_organization");
   }
 
   console.log("✅ Permission catalog + default role grants ready");

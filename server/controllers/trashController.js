@@ -14,7 +14,7 @@ const TrashController = {
   async getAll(req, res) {
     try {
       const { entityType, search } = req.query;
-      const result = await TrashModel.getAll({ entityType, search });
+      const result = await TrashModel.getAll({ entityType, search }, req.schoolScope);
       if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
       res.json(successResponse(result.data));
     } catch (err) {
@@ -26,7 +26,7 @@ const TrashController = {
   /** POST /api/trash/restore/:trashLogId */
   async restore(req, res) {
     try {
-      const result = await TrashModel.restore(Number(req.params.trashLogId));
+      const result = await TrashModel.restore(Number(req.params.trashLogId), req.schoolScope);
       if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
       
       // Log audit trail
@@ -56,7 +56,7 @@ const TrashController = {
       }
       const logEntry = trashLogResult[0][0];
       
-      const result = await TrashModel.permanentDelete(trashLogId);
+      const result = await TrashModel.permanentDelete(trashLogId, req.schoolScope);
       if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
       
       // Log audit trail
@@ -80,7 +80,7 @@ const TrashController = {
   async permanentDeleteAll(req, res) {
     try {
       const { entityType } = req.query;
-      const result = await TrashModel.permanentDeleteAll(entityType || null);
+      const result = await TrashModel.permanentDeleteAll(entityType || null, req.schoolScope);
       if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
       
       // Log audit trail for bulk action

@@ -1,19 +1,21 @@
 /**
  * features/students/hooks/useStudents.js
  *
- * Student list + stats + CRUD. Extracted from the component body of the
- * former pages/Students.jsx, including the local + server duplicate-ID
- * checks on create.
+ * Student list + stats + CRUD over student USERS (role='student').
+ * The students table is retired: every call goes through the
+ * students feature's API wrapper, which pins role='student' and
+ * lets the server apply the default-credential rule.
  */
 
 import { useState, useEffect, useCallback } from "react";
 import {
   getAllStudents,
+  getStudentStats,
   createStudent,
   updateStudent,
   deleteStudent,
   checkStudentIdExists,
-} from "../../../services/api/studentsApi";
+} from "../api/studentsApi";
 
 export function useStudents({ showToast }) {
   const [students, setStudents]   = useState([]);
@@ -46,7 +48,7 @@ export function useStudents({ showToast }) {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   /**
-   * Create a student.
+   * Create a student user.
    * @returns {Promise<"created"|"duplicate"|"failed">}
    */
   const createMember = useCallback(async (formData) => {
@@ -76,7 +78,7 @@ export function useStudents({ showToast }) {
 
       const response = await createStudent(formData);
       if (response.success) {
-        showToast("Student created successfully");
+        showToast("Student created. Default login: their student ID as username and password.");
         fetchData();
         return "created";
       }
@@ -124,7 +126,7 @@ export function useStudents({ showToast }) {
   /** On-blur duplicate check for the form's ID field. */
   const checkIdExists = useCallback(async (idNumber) => {
     if (!idNumber || idNumber.trim() === "") return false;
-    const result = await checkStudentIdExists(idNumber);
+    const result = await checkStudentIdExists(idNumber.trim());
     return result.exists || false;
   }, []);
 

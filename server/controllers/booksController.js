@@ -56,9 +56,9 @@ const getBooks = async (req, res) => {
   try {
     const { status, genre, search } = req.query;
     let result;
-    if (search)             result = await BookModel.search(search);
-    else if (status||genre) result = await BookModel.filter(status, genre);
-    else                    result = await BookModel.getAll();
+    if (search)             result = await BookModel.search(search, req.schoolScope);
+    else if (status||genre) result = await BookModel.filter(status, genre, req.schoolScope);
+    else                    result = await BookModel.getAll(req.schoolScope);
 
     if (!result.success) return res.status(400).json(errorResponse(result.error, 400));
     res.json(successResponse(result.data));
@@ -71,7 +71,7 @@ const getBooks = async (req, res) => {
 // ── GET /api/books/:id ────────────────────────────────────────────────────────
 const getBookById = async (req, res) => {
   try {
-    const result = await BookModel.getById(req.params.id);
+    const result = await BookModel.getById(req.params.id, req.schoolScope);
     if (!result.success) return res.status(404).json(errorResponse(result.error, 404));
     res.json(successResponse(result.data));
   } catch (error) {
@@ -154,7 +154,7 @@ const updateBook = async (req, res) => {
       return res.status(400).json(errorResponse("Validation failed", 400, validation.errors));
     }
 
-    const oldResult = await BookModel.getById(req.params.id);
+    const oldResult = await BookModel.getById(req.params.id, req.schoolScope);
     const oldData   = oldResult.success ? oldResult.data : null;
 
     const copies = Array.isArray(req.body.copies) ? req.body.copies : null;
@@ -240,12 +240,12 @@ const updateBook = async (req, res) => {
 // ── DELETE /api/books/:id ─────────────────────────────────────────────────────
 const deleteBook = async (req, res) => {
   try {
-    const oldResult = await BookModel.getById(req.params.id);
+    const oldResult = await BookModel.getById(req.params.id, req.schoolScope);
     const oldData   = oldResult.success
       ? { title: oldResult.data.title, author: oldResult.data.author }
       : null;
 
-    const result = await BookModel.delete(req.params.id);
+    const result = await BookModel.delete(req.params.id, req.schoolScope);
     if (!result.success) return res.status(404).json(errorResponse(result.error, 404));
 
     // ── Audit: DELETE ─────────────────────────────────

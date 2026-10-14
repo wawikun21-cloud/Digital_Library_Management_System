@@ -10,12 +10,11 @@
  */
 
 import { useCallback, useState } from "react";
-import { Library, RefreshCw } from "lucide-react";
 import { useWebSocket } from "../../../hooks/useWebsocket";
 import { useDashboard } from "../hooks/useDashboard";
 import { useIsAdmin } from "../hooks/useIsAdmin";
 import { SCHOOL_YEARS } from "../constants/schoolCalendar";
-import KpiStatsSection from "../components/dashboard/KpiStatsSection";
+import DashboardHeroCard from "../components/dashboard/DashboardHeroCard";
 import DashboardFilterBar from "../components/dashboard/DashboardFilterBar";
 import MostBorrowedBooks from "../components/dashboard/MostBorrowedBooks";
 import AttendanceChart from "../components/dashboard/AttendanceChart";
@@ -44,28 +43,14 @@ export default function AnalyticsDashboardPage() {
   useWebSocket({ isAdmin, onStatsUpdate: handleStatsUpdate });
 
   return (
-    <main className="flex flex-col gap-4 lg:gap-5" aria-label="Library Analytics Dashboard">
+    <section className="flex flex-col gap-4 lg:gap-5" aria-label="Library Analytics Dashboard">
 
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-           <h1 className="flex items-center gap-2.5 text-[18px] font-bold" style={{ color: "var(--text-primary)" }}>
-            <Library size={22} style={{ color: "var(--accent-amber)" }} />
-            Library Analytics Dashboard
-          </h1>
-          <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
-            Real-time statistics, charts, and actionable library insights
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={refresh}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-all hover:opacity-90 active:scale-[.98]"
-            style={{ background: "var(--accent-amber)", boxShadow: "0 2px 8px rgba(238,162,58,.3)" }}>
-            <RefreshCw size={14} /> Refresh All
-          </button>
-        </div>
-      </div>
-
-      <KpiStatsSection kpiStats={kpiStats} loading={loading.kpiStats} error={errors.kpiStats} />
+      <DashboardHeroCard
+        kpiStats={kpiStats}
+        loading={loading.kpiStats}
+        error={errors.kpiStats}
+        onRefresh={refresh}
+      />
 
       <DashboardFilterBar
         schoolYear={schoolYear} onSchoolYear={sy => { setSchoolYear(sy); setMonth("All"); }}
@@ -94,6 +79,6 @@ export default function AnalyticsDashboardPage() {
         loading={loading.holdingsBreakdown}
         error={errors.holdingsBreakdown}
       />
-    </main>
+    </section>
   );
 }

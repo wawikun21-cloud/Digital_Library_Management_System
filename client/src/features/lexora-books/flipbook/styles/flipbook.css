@@ -1,74 +1,22 @@
 .flipbook-root {
-  --flipbook-toolbar-bg: rgba(26, 26, 46, 0.9);
+  --flipbook-toolbar-bg: rgba(10, 22, 34, 0.78);
   --flipbook-btn-color: #ffffff;
   --flipbook-btn-hover-bg: rgba(255,255,255,0.12);
   --flipbook-accent: #ee9f2a;
-  --flipbook-bg: #1a1a2e;
-  --flipbook-panel-bg: rgba(0,0,0,0.8);
+  /* Navy stage with the same warm/teal glow as the dashboard hero card */
+  --flipbook-bg:
+    radial-gradient(760px 420px at 12% -10%, rgba(238, 162, 58, 0.16), transparent 60%),
+    radial-gradient(720px 460px at 100% 105%, rgba(50, 102, 127, 0.38), transparent 60%),
+    linear-gradient(160deg, #10263a 0%, #0a1724 100%);
+  --flipbook-panel-bg: rgba(8, 18, 29, 0.88);
   --flipbook-panel-border: rgba(255,255,255,0.1);
   --flipbook-text-primary: #ffffff;
   --flipbook-text-muted: rgba(255,255,255,0.5);
-
-  /* ── Copy & capture panel ─────────────────────────────────
-     The reading surface stays dark, but this overlay follows the
-     app theme (design tokens live in styles/index.css) so its
-     text is readable in light and dark mode. The values below
-     are the dark defaults; [data-theme="light"] overrides them. */
-  --flipbook-capture-bg: rgba(0, 0, 0, 0.8);
-  --flipbook-capture-border: rgba(255, 255, 255, 0.1);
-  --flipbook-capture-title: #ffffff;
-  --flipbook-capture-muted: rgba(255, 255, 255, 0.5);
-  --flipbook-capture-field-bg: rgba(255, 255, 255, 0.05);
-  --flipbook-capture-field-text: rgba(255, 255, 255, 0.7);
-  --flipbook-capture-btn-bg: rgba(255, 255, 255, 0.15);
-  --flipbook-capture-btn-bg-hover: rgba(255, 255, 255, 0.25);
-  --flipbook-capture-btn-text: #ffffff;
-  --flipbook-capture-close: rgba(255, 255, 255, 0.5);
-  --flipbook-capture-close-hover-bg: rgba(255, 255, 255, 0.1);
-  --flipbook-capture-success: #6ee7b7;
-  --flipbook-capture-warning: #fcd34d;
-  --flipbook-capture-danger: #fca5a5;
-  --flipbook-capture-thumb-track: rgba(255, 255, 255, 0.05);
-  --flipbook-capture-thumb: rgba(255, 255, 255, 0.2);
-
   position: relative;
   overflow: hidden;
   border-radius: 12px;
   user-select: none;
   -webkit-user-select: none;
-}
-
-/* Light theme: the panel reads as app chrome instead of part of the
-   dark reading surface. Mirrors --bg-surface / --text-primary /
-   --border / --accent-danger from styles/index.css. */
-[data-theme="light"] .flipbook-root {
-  --flipbook-capture-bg: rgba(255, 255, 255, 0.94);
-  --flipbook-capture-border: #dde8ef;
-  --flipbook-capture-title: #132f45;
-  --flipbook-capture-muted: #405b6b;
-  --flipbook-capture-field-bg: #f0f6fa;
-  --flipbook-capture-field-text: #132f45;
-  --flipbook-capture-btn-bg: rgba(19, 47, 69, 0.08);
-  --flipbook-capture-btn-bg-hover: rgba(19, 47, 69, 0.16);
-  --flipbook-capture-btn-text: #132f45;
-  --flipbook-capture-close: #405b6b;
-  --flipbook-capture-close-hover-bg: rgba(19, 47, 69, 0.08);
-  --flipbook-capture-success: #205733;
-  --flipbook-capture-warning: #b45309;
-  --flipbook-capture-danger: #cc1f1f;
-  --flipbook-capture-thumb-track: #f0f6fa;
-  --flipbook-capture-thumb: #dde8ef;
-}
-
-/* The capture panel's scrollbars follow the same theme variables so
-   they stay visible on the light panel surface. */
-.styled-scroll--capture::-webkit-scrollbar-track {
-  background: var(--flipbook-capture-thumb-track);
-  border-radius: 2px;
-}
-.styled-scroll--capture::-webkit-scrollbar-thumb {
-  background: var(--flipbook-capture-thumb);
-  border-radius: 2px;
 }
 
 .flipbook-root canvas {

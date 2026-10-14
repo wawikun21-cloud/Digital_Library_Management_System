@@ -10,7 +10,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Search, X, CheckCircle2, Loader2 } from "lucide-react";
 import useDebounce from "../../../hooks/useDebounce";
-import { getAllStudents } from "../../../services/api/studentsApi";
+import { getAllStudents } from "../../students";
 import Avatar from "./Avatar";
 import { getFullName } from "../utils/studentName";
 
@@ -121,10 +121,10 @@ export default function RfidStudentSearch({ value, onChange, selectedStudent, on
             {searchResults.map((student, idx) => {
               const name = student.display_name ||
                 [student.first_name, student.last_name].filter(Boolean).join(" ") ||
-                student.student_name;
+                student.student_name || student.full_name;
               return (
                 <button
-                  key={student.student_id_number}
+                  key={student.student_id_number || student.id}
                   onClick={() => onSelectStudent(student)}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors"
                   onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-hover)"; }}
@@ -194,8 +194,8 @@ export default function RfidStudentSearch({ value, onChange, selectedStudent, on
           <div className="grid grid-cols-2"
             style={{ background: "rgba(45,122,71,0.03)" }}>
             {[
-              { label: "First Name",  value: selectedStudent.first_name        || "—" },
-              { label: "Last Name",   value: selectedStudent.last_name         || "—" },
+              { label: "First Name",  value: selectedStudent.first_name || fullName.split(" ")[0] || "—" },
+              { label: "Last Name",   value: selectedStudent.last_name || fullName.split(" ").slice(1).join(" ") || "—" },
               { label: "Course",      value: selectedStudent.student_course    || "—" },
               { label: "Year Level",  value: selectedStudent.student_yr_level  || "—" },
             ].map(({ label, value }, i) => (

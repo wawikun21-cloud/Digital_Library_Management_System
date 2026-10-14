@@ -22,7 +22,7 @@ function getCourseListFilters(req, status = req.query.status) {
 }
 
 async function sendCourseList(req, res, filters) {
-  const { data, total } = await coursesService.listCourses(filters);
+      const { data, total } = await coursesService.listCourses(filters, req.schoolScope);
   res.status(200).json({
     success: true,
     data,
@@ -82,7 +82,7 @@ const CoursesController = {
 
   async getCourse(req, res) {
     try {
-      const course = await coursesService.getCourse(req.params.id);
+    const course = await coursesService.getCourse(req.params.id, req.schoolScope);
       if (!course) {
         return res.status(404).json({ success: false, error: 'Course not found' });
       }
@@ -103,7 +103,7 @@ const CoursesController = {
       if (!title || String(title).trim().length < 3) {
         return res.status(400).json({ success: false, error: 'Title is required and must be at least 3 characters' });
       }
-      const result = await coursesService.createCourse(userId, req.body);
+    const result = await coursesService.createCourse(userId, req.body, req.schoolScope);
       await auditService.logAction(req, {
         entity_type: 'course',
         entity_id: result.id,
@@ -128,8 +128,8 @@ const CoursesController = {
       if (title !== undefined && String(title).trim().length < 3) {
         return res.status(400).json({ success: false, error: 'Title must be at least 3 characters' });
       }
-      const old = await coursesService.getCourse(req.params.id);
-      const affected = await coursesService.updateCourse(userId, req.params.id, req.body);
+      const old = await coursesService.getCourse(req.params.id, req.schoolScope);
+      const affected = await coursesService.updateCourse(userId, req.params.id, req.body, req.schoolScope);
       if (!affected) {
         return res.status(404).json({ success: false, error: 'Course not found' });
       }
@@ -153,8 +153,8 @@ const CoursesController = {
       if (!userId) {
         return res.status(401).json({ success: false, error: 'Not authenticated' });
       }
-      const old = await coursesService.getCourse(req.params.id);
-      const affected = await coursesService.deleteCourse(userId, req.params.id);
+      const old = await coursesService.getCourse(req.params.id, req.schoolScope);
+      const affected = await coursesService.deleteCourse(userId, req.params.id, req.schoolScope);
       if (!affected) {
         return res.status(404).json({ success: false, error: 'Course not found' });
       }
@@ -178,7 +178,7 @@ const CoursesController = {
       if (!userId) {
         return res.status(401).json({ success: false, error: 'Not authenticated' });
       }
-      const affected = await coursesService.archiveCourse(userId, req.params.id);
+    const affected = await coursesService.archiveCourse(userId, req.params.id, req.schoolScope);
       if (!affected) {
         return res.status(404).json({ success: false, error: 'Course not found' });
       }
@@ -202,7 +202,7 @@ const CoursesController = {
       if (!userId) {
         return res.status(401).json({ success: false, error: 'Not authenticated' });
       }
-      const affected = await coursesService.publishCourse(userId, req.params.id);
+    const affected = await coursesService.publishCourse(userId, req.params.id, req.schoolScope);
       if (!affected) {
         return res.status(404).json({ success: false, error: 'Course not found' });
       }

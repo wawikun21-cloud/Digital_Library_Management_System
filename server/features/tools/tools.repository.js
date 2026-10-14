@@ -9,7 +9,13 @@ const TOOL_CATEGORIES = [
   "documents",
 ];
 
-async function listTools(filters = {}, userId) {
+/** School-scope predicate (alias `t`): unassigned tools stay visible (legacy fallback). */
+function scopeSql(scope) {
+  if (!scope || !scope.scoped || scope.schoolId == null) return { sql: "", params: [] };
+  return { sql: " AND (t.school_id IS NULL OR t.school_id = ?)", params: [scope.schoolId] };
+}
+
+async function listTools(filters = {}, userId, scope = null) {
   const { search, category, is_active, page = 1, limit = 20, sort = "created_at", order = "desc" } = filters;
   const offset = (page - 1) * limit;
 
@@ -45,6 +51,11 @@ async function listTools(filters = {}, userId) {
     countValues.push(activeVal ? 1 : 0);
     whereClause += " AND t.is_active = ?";
   }
+
+  const scopeFragment = scopeSql(scope);
+  whereClause += scopeFragment.sql;
+  values.push(...scopeFragment.params);
+  countValues.push(...scopeFragment.params);
 
   const sql = `
     SELECT
@@ -105,28 +116,73 @@ async function create(toolData) {
   return result.insertId;
 }
 
-async function update(id, updates) {
-  const allowedFields = ["title", "description", "thumbnail_url", "file_path", "file_size", "file_type", "category", "is_active", "created_by", "download_count"];
+async function findById(id, scope = null) {
+  const scopeFragment = scopeSql(scope);
+  const [rows] = await pool.execute(
+    `SELECT t.*, u.username AS creator_name
+     FROM tools t
+     LEFT JOIN users u ON t.created_by = u.id
+     WHERE t.id = ?${scopeFragment.sql}`,
+    [id, ...scopeFragment.params]
+  );
+  return rows[0];
+}
+
+async function create(toolData, scope = null) {
+  const {
+    title, description, thumbnail_url, file_path, file_size,
+    file_type, category, is_active, created_by, school_id,
+  } = toolData;
+
+  // School assignment: a scoped caller's tools are pinned to their own
+  // school ("first touch assigns" for legacy content).
+  let schoolId = school_id ?? null;
+  if (scope && scope.scoped && scope.schoolId != null) {
+    if (schoolId != null && Number(schoolId) !== Number(scope.schoolId)) {
+      return null;
+    }
+    schoolId = scope.schoolId;
+  }
+
+  const [result] = await pool.execute(
+    `INSERT INTO tools
+      (title, description, thumbnail_url, file_path, file_size, file_type, category, is_active, created_by, school_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [title, description || null, thumbnail_url || null, file_path || null, file_size || 0, file_type || null, category || "general", is_active ? 1 : 0, created_by, schoolId]
+  );
+  return result.insertId;
+}
+
+async function update(id, updates, scope = null) {
+  const allowedFields = ["title", "description", "thumbnail_url", "file_path", "file_size", "file_type", "category", "is_active", "created_by", "download_count", "school_id"];
   const fields = [];
   const values = [];
 
   for (const [key, val] of Object.entries(updates)) {
     if (allowedFields.includes(key)) {
+      let value = val;
+      if (key === "is_active") value = val ? 1 : 0;
+      // A scoped caller may only assign their own school.
+      if (key === "school_id" && scope && scope.scoped && scope.schoolId != null) {
+        if (value != null && Number(value) !== Number(scope.schoolId)) return false;
+        value = scope.schoolId;
+      }
       fields.push(`\`${key}\` = ?`);
-      if (key === "is_active") values.push(val ? 1 : 0);
-      else values.push(val);
+      values.push(value);
     }
   }
 
   if (fields.length === 0) return false;
 
-  values.push(id);
-  await pool.execute(`UPDATE tools SET ${fields.join(", ")} WHERE id = ?`, values);
-  return true;
+  const scopeFragment = scopeSql(scope);
+  values.push(id, ...scopeFragment.params);
+  const [result] = await pool.execute(`UPDATE tools SET ${fields.join(", ")} WHERE id = ?${scopeFragment.sql}`, values);
+  return result.affectedRows > 0;
 }
 
-async function remove(id) {
-  const [result] = await pool.execute("DELETE FROM tools WHERE id = ?", [id]);
+async function remove(id, scope = null) {
+  const scopeFragment = scopeSql(scope);
+  const [result] = await pool.execute(`DELETE FROM tools WHERE id = ?${scopeFragment.sql}`, [id, ...scopeFragment.params]);
   return result.affectedRows > 0;
 }
 

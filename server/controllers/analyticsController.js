@@ -1,18 +1,18 @@
-// ─────────────────────────────────────────────────────────
+﻿// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  controllers/analyticsController.js
 //
 //  FIXES IN THIS FILE:
 //
-//  Bug B (404 root cause) — The route that serves getBookStats must be
+//  Bug B (404 root cause) â€” The route that serves getBookStats must be
 //    registered as router.get('/stats', ...) in server/routes/analytics.js.
 //    The previous analyticsApi.js called /api/analytics/book-stats which
 //    did not match that registration, causing the 404.
-//    This file is correct — only analyticsApi.js needed the URL change.
+//    This file is correct â€” only analyticsApi.js needed the URL change.
 //    The comment on getBookStats below documents the correct path.
 //
-//  Bug C — parseFilters() now extracts genre, collection, dateFrom, dateTo
+//  Bug C â€” parseFilters() now extracts genre, collection, dateFrom, dateTo
 //    so filter values sent by the frontend actually reach the service layer.
-// ─────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const analyticsService = require("../services/analyticsService");
 const { successResponse, errorResponse } = require("../utils/responseFormatter");
@@ -42,15 +42,15 @@ function parseFilters(query) {
 const AnalyticsController = {
 
   /**
-   * GET /api/analytics/stats          ← registered as router.get('/stats', ...)
+   * GET /api/analytics/stats          â† registered as router.get('/stats', ...)
    *
-   * KPI numbers — totals, out of stock, borrowed, returned, overdue.
+   * KPI numbers â€” totals, out of stock, borrowed, returned, overdue.
    * The frontend calls /api/analytics/stats (fixed from the broken /book-stats).
    */
   getBookStats: async (req, res) => {
     try {
       const filters = parseFilters(req.query);
-      const result  = await analyticsService.getBookStats(filters);
+    const result  = await analyticsService.getBookStats(filters, req.schoolScope);
       if (!result.success) return res.status(500).json(errorResponse(result.error, 500));
       res.json(successResponse(result.data));
     } catch (err) {
@@ -65,7 +65,7 @@ const AnalyticsController = {
   getMostBorrowed: async (req, res) => {
     try {
       const filters = parseFilters(req.query);
-      const result  = await analyticsService.getMostBorrowed(filters);
+    const result  = await analyticsService.getMostBorrowed(filters, req.schoolScope);
       if (!result.success) return res.status(500).json(errorResponse(result.error, 500));
       res.json(successResponse(result.data));
     } catch (err) {
@@ -80,7 +80,7 @@ const AnalyticsController = {
   getAttendance: async (req, res) => {
     try {
       const filters = parseFilters(req.query);
-      const result  = await analyticsService.getAttendance(filters);
+    const result  = await analyticsService.getAttendance(filters, req.schoolScope);
       if (!result.success) return res.status(500).json(errorResponse(result.error, 500));
       res.json(successResponse(result.data));
     } catch (err) {
@@ -95,7 +95,7 @@ const AnalyticsController = {
   getFines: async (req, res) => {
     try {
       const filters = parseFilters(req.query);
-      const result  = await analyticsService.getFines(filters);
+    const result  = await analyticsService.getFines(filters, req.schoolScope);
       if (!result.success) return res.status(500).json(errorResponse(result.error, 500));
       res.json(successResponse(result.data));
     } catch (err) {
@@ -110,7 +110,7 @@ const AnalyticsController = {
   getOverdue: async (req, res) => {
     try {
       const filters = parseFilters(req.query);
-      const result  = await analyticsService.getOverdue(filters);
+    const result  = await analyticsService.getOverdue(filters, req.schoolScope);
       if (!result.success) return res.status(500).json(errorResponse(result.error, 500));
       res.json(successResponse(result.data));
     } catch (err) {
@@ -125,7 +125,7 @@ const AnalyticsController = {
   getBooksByStatus: async (req, res) => {
     try {
       const filters = parseFilters(req.query);
-      const result  = await analyticsService.getBooksByStatus(filters);
+    const result  = await analyticsService.getBooksByStatus(filters, req.schoolScope);
       if (!result.success) return res.status(500).json(errorResponse(result.error, 500));
       res.json(successResponse(result.data));
     } catch (err) {
@@ -140,7 +140,7 @@ const AnalyticsController = {
   getHoldingsBreakdown: async (req, res) => {
     try {
       const filters = parseFilters(req.query);
-      const result  = await analyticsService.getHoldingsBreakdown(filters);
+    const result  = await analyticsService.getHoldingsBreakdown(filters, req.schoolScope);
       if (!result.success) return res.status(500).json(errorResponse(result.error, 500));
       res.json(successResponse({
         data:      result.data,

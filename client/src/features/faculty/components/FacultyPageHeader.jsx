@@ -5,7 +5,7 @@
  * former pages/Faculty.jsx.
  */
 
-import { Users, Upload, Plus } from "lucide-react";
+import { Upload, Plus } from "lucide-react";
 
 export default function FacultyPageHeader({ canImport, canCreate, onImportClick, onAddClick }) {
   return (
@@ -13,11 +13,8 @@ export default function FacultyPageHeader({ canImport, canCreate, onImportClick,
       <div>
         <h1 className="flex items-center gap-2.5 text-[22px] font-bold"
           style={{ color: "var(--text-primary)" }}>
-          <Users size={22} style={{ color: "var(--accent-amber)" }} />
-          Faculty Management
         </h1>
         <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
-          Manage faculty members, departments, and bulk import functionality
         </p>
       </div>
 

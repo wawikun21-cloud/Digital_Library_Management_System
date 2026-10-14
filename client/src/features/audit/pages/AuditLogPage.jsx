@@ -38,7 +38,6 @@ export default function AuditLogPage() {
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "12px", marginBottom: "24px" }}>
           <div>
             <h1 style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
-              Audit Trail
               {newBadge > 0 && (
                 <button onClick={handleRefresh} style={{
                   background: "var(--accent-amber)", color: "#fff", border: "none",
@@ -50,7 +49,6 @@ export default function AuditLogPage() {
               )}
             </h1>
             <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "2px 0 0" }}>
-              Immutable history of all admin and staff actions across the library system.
             </p>
           </div>
 

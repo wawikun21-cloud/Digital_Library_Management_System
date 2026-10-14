@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   getAllFaculty, createFaculty, updateFaculty, deleteFaculty,
-} from "../../../services/api/studentsApi";
+} from "../api/facultyApi";
 
 export function useFaculty({ showToast }) {
   const [faculty, setFaculty]     = useState([]);

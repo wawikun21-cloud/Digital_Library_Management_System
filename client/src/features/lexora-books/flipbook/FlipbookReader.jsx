@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useFlipbookEngine } from "./hooks/useFlipbookEngine"
 import "./styles/flipbook.css"
+import { useFlipbookEngine } from "./hooks/useFlipbookEngine"
 import FlipbookToolbar   from "./FlipbookToolbar"
 import FlipbookThumbnails from "./FlipbookThumbnails"
 import FlipbookTOC       from "./FlipbookTOC"
@@ -41,11 +41,6 @@ export default function FlipbookReader({
   onBookmark,
   bookId,
   isBookmarked,
-  // Creator-set reader restrictions (see features/lexora-books/
-  // utils/readerPermissions.js). Both default to allowed so callers
-  // that do not pass them keep the previous behaviour.
-  allowTextCopy = true,
-  allowScreenshot = true,
 }) {
   const [pdfTableOfContent, setPdfTableOfContent] = useState([])
   const { state, actions, effectiveViewMode, pdfDocRef } = useFlipbookEngine({
@@ -111,10 +106,6 @@ export default function FlipbookReader({
   const hasPdf = !!pdfUrl
   const hasTOC = tocItems.length > 0
 
-  // With both actions disabled the capture panel is unreachable, so its
-  // toolbar button is hidden as well.
-  const canCapture = allowTextCopy || allowScreenshot
-
   // Pages the user actually sees right now — the capture target for both
   // text copy and screenshots. Double view shows the spread [current, +1].
   const capturePages = useMemo(() => {
@@ -136,8 +127,8 @@ export default function FlipbookReader({
 
   if (!state.bookReady) {
     return (
-      <div className={`relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl ${className}`}
-        style={{ ...cssVars, background: "var(--flipbook-bg, #1a1a2e)", minHeight: "400px" }}>
+      <div className={`flipbook-root relative flex h-full min-h-0 flex-col items-center justify-center overflow-hidden rounded-xl ${className}`}
+        style={{ ...cssVars, background: "var(--flipbook-bg, #0a1724)", minHeight: "400px" }}>
         <FlipbookLoading />
       </div>
     )
@@ -145,8 +136,8 @@ export default function FlipbookReader({
 
   if (state.totalPages === 0) {
     return (
-      <div className={`relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl ${className}`}
-        style={{ ...cssVars, background: "var(--flipbook-bg, #1a1a2e)", minHeight: "400px" }}>
+      <div className={`flipbook-root relative flex h-full min-h-0 flex-col items-center justify-center overflow-hidden rounded-xl ${className}`}
+        style={{ ...cssVars, background: "var(--flipbook-bg, #0a1724)", minHeight: "400px" }}>
         <FlipbookError message={state.error || "No pages to display."} />
       </div>
     )
@@ -157,7 +148,7 @@ export default function FlipbookReader({
       className={`flipbook-root relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl ${className}`}
       style={{
         ...cssVars,
-        background: "var(--flipbook-bg, #1a1a2e)",
+        background: "var(--flipbook-bg, #0a1724)",
         minHeight: 0,
       }}
     >
@@ -180,7 +171,6 @@ export default function FlipbookReader({
           state={state} actions={actions}
           theme={theme} viewMode={effectiveViewMode}
           hasPdf={hasPdf} hasTOC={hasTOC} hasCover={actualMode === "pageflip"}
-          canCapture={canCapture}
         />
       )}
 
@@ -215,18 +205,14 @@ export default function FlipbookReader({
           pages={pages}
           pageNumbers={capturePages}
           viewMode={effectiveViewMode}
-          allowTextCopy={allowTextCopy}
-          allowScreenshot={allowScreenshot}
           onClose={actions.toggleCapture}
         />
       )}
 
       {state.bookReady && state.totalPages > 0 && (
-        <div className="pointer-events-none absolute bottom-16 left-1/2 -translate-x-1/2 text-center">
-          <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.25)" }}>
-            Click edges or drag to flip · Arrow keys to navigate
-          </p>
-        </div>
+        <p className="reader-hint" aria-hidden="true">
+          Click edges or drag to flip · Arrow keys to navigate
+        </p>
       )}
     </div>
   )

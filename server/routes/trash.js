@@ -15,8 +15,9 @@ const {
   resolvePermissions,
   requirePermissionAction,
 } = require("../features/roles");
+const { resolveSchoolScope } = require("../features/organization");
 
-router.use(requireAuth, resolvePermissions);
+router.use(requireAuth, resolvePermissions, resolveSchoolScope);
 
 /** GET  /api/trash                          — list trash */
 router.get("/", requirePermissionAction("manage_trash", "view"), TrashController.getAll);

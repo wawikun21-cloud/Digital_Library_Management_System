@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { ArrowLeft, Loader2, AlertCircle } from "lucide-react"
 import FlipbookReader, { FlipbookBookmark } from "../flipbook"
-import { resolveReaderPermissions } from "../utils/readerPermissions"
 import {
   fetchLexoraBookReader,
   addBookmark,
@@ -31,6 +30,27 @@ function parseTableOfContents(value) {
   return value.filter((entry) =>
     entry && typeof entry.title === "string" && Number.isSafeInteger(Number(entry.page_number)) &&
     Number(entry.page_number) > 0)
+}
+
+// Same frame + big rounded card as the dashboard shell (no sidebar: the
+// reader is a focus mode). Every state — loading, error, no access, reading —
+// renders inside it so the page never flashes a different look.
+function ReaderFrame({ children }) {
+  return (
+    <div className="reader-shell">
+      <div className="reader-card">{children}</div>
+    </div>
+  )
+}
+
+function ReaderMessage({ icon, text, action }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+      {icon}
+      <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{text}</p>
+      {action}
+    </div>
+  )
 }
 
 export default function LexoraBookReader() {
@@ -134,25 +154,6 @@ export default function LexoraBookReader() {
     return () => { cancelled = true }
   }, [bookId, isAuthenticated, canRead, requestedPage, startAtBeginning])
 
-  // The server enforces view_lexora_books:read on the reader payload; this
-  // keeps the UI from rendering a book the user may not open.
-  if (!loading && !canRead) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3"
-        style={{ background: "var(--bg-main)", color: "var(--text-secondary)" }}>
-        <AlertCircle size={28} />
-        <p className="text-sm">You do not have access to this book.</p>
-        <button
-          onClick={() => navigate("/lexora-books")}
-          className="rounded-lg border px-3 py-2 text-xs font-medium"
-          style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}
-        >
-          Back to catalog
-        </button>
-      </div>
-    )
-  }
-
   const sourcePages = useMemo(() => {
     if (!book) return []
     if (book.source_type === "images" && book.pages?.length) {
@@ -162,14 +163,6 @@ export default function LexoraBookReader() {
   }, [book])
 
   const pdfUrl = book?.source_type === "pdf" ? book.pdf_url : null
-
-  // Book flags come from the reader payload as booleans; managers bypass
-  // the restriction. Plain call — not a hook, so no memo needed.
-  const readerPermissions = resolveReaderPermissions({
-    allowTextCopy: book?.allow_text_copy,
-    allowScreenshot: book?.allow_screenshot,
-    canManage: hasPermissionAction("manage_lexora_books", "edit"),
-  })
 
   const tableOfContent = useMemo(() => {
     if (!book) return []
@@ -221,59 +214,79 @@ export default function LexoraBookReader() {
     setIsBookmarked(exists)
   }, [currentPage, bookmarks])
 
+  // The server enforces view_lexora_books:read on the reader payload; this
+  // keeps the UI from rendering a book the user may not open. (Placed after
+  // all hooks so the hook order never changes between renders.)
+  if (!loading && !canRead) {
+    return (
+      <ReaderFrame>
+        <ReaderMessage
+          icon={<AlertCircle size={28} style={{ color: "var(--text-muted)" }} />}
+          text="You do not have access to this book."
+          action={
+            <button onClick={() => navigate("/lexora-books")} className="reader-pill">
+              Back to catalog
+            </button>
+          }
+        />
+      </ReaderFrame>
+    )
+  }
+
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--accent-amber)" }} />
-      </div>
+      <ReaderFrame>
+        <div className="flex flex-1 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--accent-amber)" }} />
+        </div>
+      </ReaderFrame>
     )
   }
 
   if (error || !book) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
-        <AlertCircle className="h-10 w-10" style={{ color: "var(--text-muted)" }} />
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{error || "Book not found"}</p>
-        <button
-          onClick={() => navigate("/lexora-books")}
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium"
-          style={{ background: "var(--accent-amber)", color: "#fff" }}
-        >
-          <ArrowLeft size={14} /> Back to Books
-        </button>
-      </div>
+      <ReaderFrame>
+        <ReaderMessage
+          icon={<AlertCircle className="h-10 w-10" style={{ color: "var(--text-muted)" }} />}
+          text={error || "Book not found"}
+          action={
+            <button
+              onClick={() => navigate("/lexora-books")}
+              className="reader-pill flex items-center gap-2"
+              style={{ background: "var(--accent-amber)", borderColor: "transparent", color: "#fff" }}
+            >
+              <ArrowLeft size={14} /> Back to Books
+            </button>
+          }
+        />
+      </ReaderFrame>
     )
   }
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
-      {/* Reader header */}
-      <div
-        className="flex items-center justify-between gap-3 border-b px-4 py-3"
-        style={{ background: "var(--bg-surface)", borderColor: "var(--border)", flexShrink: 0 }}
-      >
-        <div className="flex items-center gap-3">
+    <ReaderFrame>
+      <header className="reader-header">
+        <div className="flex min-w-0 items-center gap-3">
           <button
+            type="button"
             onClick={() => navigate(`/lexora-books/${bookId}`)}
-            className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors"
-            style={{ color: "var(--text-secondary)" }}
-            onMouseEnter={(e) => e.target.style.background = "var(--bg-hover)"}
-            onMouseLeave={(e) => e.target.style.background = "transparent"}
+            className="shell-icon-btn"
+            title="Back to book details"
+            aria-label="Back to book details"
           >
-            <ArrowLeft size={14} /> Back
+            <ArrowLeft size={18} />
           </button>
-          <div>
-            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-              {book.title}
-            </h2>
-            <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-              {book.source_type === "pdf" ? "PDF" : "Image"} book
-              {savingProgress && " · Saving…"}
+          <div className="min-w-0">
+            <h1 className="reader-title" title={book.title}>{book.title}</h1>
+            <p className="reader-sub">
+              <span className="reader-chip">{book.source_type === "pdf" ? "PDF" : "Image"}</span>
+              <span>book</span>
+              {savingProgress && <span className="reader-saving">Saving…</span>}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="reader-actions flex shrink-0 items-center gap-2">
           {isAuthenticated && bookmarks.length > 0 && (
             <select
               aria-label="Open a saved bookmark"
@@ -282,12 +295,7 @@ export default function LexoraBookReader() {
                 const page = Number(event.target.value)
                 if (page > 0) setCurrentPage(page - 1)
               }}
-              className="max-w-36 rounded-lg border px-2 py-1.5 text-[11px]"
-              style={{
-                background: "var(--bg-surface)",
-                borderColor: "var(--border)",
-                color: "var(--text-secondary)",
-              }}
+              className="reader-pill"
             >
               <option value="">Bookmarks ({bookmarks.length})</option>
               {bookmarks.map((bookmark) => (
@@ -304,28 +312,21 @@ export default function LexoraBookReader() {
             />
           )}
           <button
+            type="button"
             onClick={() => setMode((m) => m === MODE_3D ? MODE_CSS : MODE_3D)}
-            className="rounded-lg px-3 py-1.5 text-[11px] font-medium border"
-            style={{
-              background: "var(--bg-surface)",
-              borderColor: "var(--border)",
-              color: "var(--text-secondary)",
-            }}
+            className="reader-pill"
           >
             {mode === MODE_3D ? "CSS Mode" : "3D Mode"}
           </button>
         </div>
-      </div>
+      </header>
 
       {readerActionError && (
-        <p role="alert" className="border-b px-4 py-2 text-xs text-red-500"
-          style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
-          {readerActionError}
-        </p>
+        <p role="alert" className="reader-alert">{readerActionError}</p>
       )}
 
-      {/* Flipbook */}
-      <div className="min-h-0 flex-1" style={{ background: "var(--bg-primary)" }}>
+      {/* Reading surface */}
+      <div className="reader-stage">
         <FlipbookReader
           pdfUrl={pdfUrl}
           pages={sourcePages}
@@ -341,11 +342,9 @@ export default function LexoraBookReader() {
           defaultZoom={1}
           maxZoom={3}
           minZoom={0.5}
-          allowTextCopy={readerPermissions.allowTextCopy}
-          allowScreenshot={readerPermissions.allowScreenshot}
-          className="h-full"
+          className="h-full !rounded-none"
         />
       </div>
-    </div>
+    </ReaderFrame>
   )
 }

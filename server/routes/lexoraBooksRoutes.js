@@ -25,6 +25,7 @@ const {
   resolvePermissions,
   requirePermissionAction,
 } = require("../features/roles");
+const { resolveSchoolScope } = require("../features/organization");
 
 /** Clamps client paging input; returns { page, pageSize } or null. */
 function parsePaging(query) {
@@ -110,8 +111,13 @@ router.get("/public/:id", async (req, res) => {
 });
 
 // ── Reader data (public with in-handler role checks) ───────
+//
+//  resolveSchoolScope is session-OPTIONAL here: anonymous readers
+//  of public books carry no scope, while a logged-in reader is
+//  additionally scope-checked against the book's category
+//  assignments (bookAccess) before any reader data is served.
 
-router.get("/:id/reader", async (req, res) => {
+router.get("/:id/reader", resolveSchoolScope, async (req, res) => {
   try {
     const bookResult = await LexoraBookModel.getById(req.params.id);
     if (!bookResult.success) return res.status(404).json({ success: false, error: bookResult.error });
@@ -123,6 +129,13 @@ router.get("/:id/reader", async (req, res) => {
     const isPublic = book.status === "published" && book.visibility === "public";
     if (!isPublic && !isManager && !isOwner) {
       return res.status(user ? 403 : 401).json({ success: false, error: "Access denied" });
+    }
+
+    // ── School scope (defense in depth after the public/role checks) ──
+    const { bookAccess } = require("../features/organization");
+    const access = await bookAccess.isLexoraBookAccessible(req.schoolScope, book.id);
+    if (access.success && !access.accessible) {
+      return res.status(404).json({ success: false, error: "Book not found" });
     }
 
     let pages = [];
@@ -183,7 +196,7 @@ router.get("/:id/reader", async (req, res) => {
 
 // ── Everything below requires an authenticated caller with
 //    resolved permissions attached to the request. ──────────
-router.use(requireAuth, resolvePermissions);
+router.use(requireAuth, resolvePermissions, resolveSchoolScope);
 
 // ── Admin CRUD ─────────────────────────────────────────────
 
@@ -294,6 +307,26 @@ router.delete("/categories/:id",
 router.put("/:id/categories",
   requirePermissionAction("manage_lexora_books", "edit"),
   lexoraCtrl.setBookCategories
+);
+
+// ── Resource Types ────────────────────────────────────────
+
+router.get("/resource-types/all", requirePermissionAction("manage_lexora_books", "view"), lexoraCtrl.getResourceTypes);
+
+router.post("/resource-types",
+
+  requirePermissionAction("manage_lexora_books", "create"),
+
+  lexoraCtrl.createResourceType
+
+);
+
+router.delete("/resource-types/:id",
+
+  requirePermissionAction("manage_lexora_books", "delete"),
+
+  lexoraCtrl.deleteResourceType
+
 );
 
 // ── Tags ───────────────────────────────────────────────────

@@ -25,6 +25,9 @@ function toDateInput(value) {
  * One implementation shared by the initial state and the Reset button —
  * they used to be two copies of the same 20-key literal, which drifted
  * whenever a field was added to one and not the other.
+ *
+ * Student profile fields are intentionally absent: students are created
+ * and edited on the Students page (role='student' users), never here.
  */
 export function toUserFormValues(initialData) {
   if (!initialData) return { ...EMPTY_USER_FORM };
@@ -32,7 +35,7 @@ export function toUserFormValues(initialData) {
   return {
     ...EMPTY_USER_FORM,
     username: initialData.username || "",
-    role: initialData.role || ROLES.STUDENT,
+    role: initialData.role || ROLES.STAFF,
     full_name: initialData.full_name || "",
     email: initialData.email || "",
     position_title: initialData.position_title || "",
@@ -42,11 +45,8 @@ export function toUserFormValues(initialData) {
     birthdate: toDateInput(initialData.birthdate),
     address: initialData.address || "",
     employment_status: initialData.employment_status || "",
-    student_id_number: initialData.student_id_number || "",
-    student_course: initialData.student_course || "",
-    student_yr_level: initialData.student_yr_level || "",
-    student_email: initialData.student_email || "",
-    student_contact: initialData.student_contact || "",
+    school_id: initialData.school_id ?? null,
+    department_id: initialData.department_id ?? null,
     is_active: initialData.is_active ?? 1,
   };
 }

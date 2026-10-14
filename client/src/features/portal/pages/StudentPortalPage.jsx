@@ -35,9 +35,14 @@ export default function StudentPortalPage() {
 
   return (
     <div className="flex flex-col gap-10">
-      {/* Full-bleed hero: cancels the layout <main> padding so it fills the whole section.
-          Rises in once its real content lands (carousel/fallback replace the skeleton). */}
-      <div className={`-mx-4 -mt-4 sm:-mx-6 sm:-mt-6 lg:-mx-7 lg:-mt-7 ${home.loading ? "" : "portal-hero-rise"}`}>
+      {/* Hero card: sits inside the body card's own padding (no negative-margin
+          bleed) and shares the sections' max width so the page has one column
+          edge. overflow-hidden + radius clips the carousel, fallback and skeleton
+          alike. Rises in once its real content lands. */}
+      <div
+        className={`mx-auto w-full max-w-7xl overflow-hidden rounded-[22px] lg:rounded-[28px] ${home.loading ? "" : "portal-hero-rise"}`}
+        style={{ border: "1px solid var(--border)", boxShadow: "var(--shadow-lg)" }}
+      >
         {home.loading ? (
           <HeroSkeleton />
         ) : home.slides.length > 0 ? (

@@ -9,7 +9,6 @@ import FlipbookPageJump from "./FlipbookPageJump"
 export default function FlipbookToolbar({
   state, actions, theme, viewMode,
   hasPdf = false, hasTOC = false, hasCover = false,
-  canCapture = true,
 }) {
   const [isVisible, setIsVisible] = useState(true)
   const idleTimerRef = useRef(null)
@@ -31,13 +30,32 @@ export default function FlipbookToolbar({
     if (state.isDragging) setIsVisible(true)
   }, [state.isDragging])
 
+  // Wake the toolbar on any movement, touch or key press anywhere over the
+  // reader — not only when the pointer happens to be on the (invisible)
+  // toolbar itself, which made it undiscoverable once it had faded out.
+  const toolbarRef = useRef(null)
+  useEffect(() => {
+    const root = toolbarRef.current?.closest(".flipbook-root") ?? toolbarRef.current?.parentElement
+    if (!root) return undefined
+    const wake = () => resetIdleTimer()
+    const events = ["mousemove", "pointerdown", "touchstart", "keydown"]
+    events.forEach((name) => root.addEventListener(name, wake, { passive: true }))
+    window.addEventListener("keydown", wake)
+    return () => {
+      events.forEach((name) => root.removeEventListener(name, wake))
+      window.removeEventListener("keydown", wake)
+    }
+  }, [resetIdleTimer])
+
   const toolbarStyle = {
-    backgroundColor: theme?.toolbarBg || "rgba(26, 26, 46, 0.85)",
+    backgroundColor: theme?.toolbarBg || "var(--flipbook-toolbar-bg, rgba(10, 22, 34, 0.78))",
     color: theme?.btnColor || "#ffffff",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
     borderColor: theme?.panelBorder || "rgba(255,255,255,0.1)",
     opacity: isVisible ? 1 : 0,
+    // A faded-out toolbar must not swallow clicks meant for the page edges.
+    pointerEvents: isVisible ? "auto" : "none",
     transition: "opacity 0.3s ease",
   }
 
@@ -74,7 +92,8 @@ export default function FlipbookToolbar({
 
   return (
     <div
-      className="absolute bottom-4 left-1/2 z-50 flex items-center gap-1 rounded-2xl border px-3 py-2 shadow-xl"
+      ref={toolbarRef}
+      className="absolute bottom-4 left-1/2 z-50 flex max-w-[calc(100%-16px)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-2xl border px-3 py-2 shadow-xl styled-scroll"
       style={toolbarStyle}
       onMouseMove={resetIdleTimer}
       onMouseEnter={() => setIsVisible(true)}
@@ -140,18 +159,14 @@ export default function FlipbookToolbar({
         </button>
       )}
 
-      {/* Hidden entirely when the book's creator disabled both copy and
-          screenshot — there is no panel to open. */}
-      {canCapture && (
-        <button
-          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${btnHoverClass} ${state.showCapture ? "bg-white/15" : ""}`}
-          style={btnStyle}
-          onClick={actions.toggleCapture}
-          title="Copy text & screenshot"
-        >
-          <Camera size={16} />
-        </button>
-      )}
+      <button
+        className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${btnHoverClass} ${state.showCapture ? "bg-white/15" : ""}`}
+        style={btnStyle}
+        onClick={actions.toggleCapture}
+        title="Copy text & screenshot"
+      >
+        <Camera size={16} />
+      </button>
 
       <div className="mx-1 h-5 w-px" style={{ background: "rgba(255,255,255,0.15)" }} />
 

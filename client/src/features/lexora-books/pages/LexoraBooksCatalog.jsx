@@ -158,11 +158,9 @@ export default function LexoraBooksCatalog() {
         <div>
           <h1 className="text-[22px] font-bold flex items-center gap-2.5"
             style={{ color: "var(--text-primary)" }}>
-            <BookOpen size={22} style={{ color: "var(--accent-amber)" }} />
-            Lexora Books
+
           </h1>
           <p className="text-[13px] mt-0.5" style={{ color: "var(--text-secondary)" }}>
-            Browse the digital book collection
           </p>
         </div>
         {isAuthenticated && (

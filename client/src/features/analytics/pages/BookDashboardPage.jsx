@@ -64,14 +64,6 @@ export default function BookDashboardPage() {
 
       {/* ── Page Header + Inline Filters ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 7 }}>
-            <BookOpen size={17} color={C.amber} /> School Library Book Dashboard
-          </h1>
-          <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--text-secondary)" }}>
-            Monitor library catalog, circulation, and inventory
-          </p>
-        </div>
 
         <BookFilterControls
           globalFilter={globalFilter}

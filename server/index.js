@@ -33,7 +33,7 @@ const lexoraBooksRoutes  = require("./routes/lexoraBooksRoutes");
 const lexoraMediaAccess  = require("./middleware/lexoraMediaAccess");
 const transactionRoutes  = require("./routes/transactions");
 const attendanceRoutes   = require("./routes/attendance");
-const studentsRoutes     = require("./routes/students");
+const facultyRoutes      = require("./routes/faculty");
 const analyticsRoutes    = require("./routes/analytics");
 const searchRoutes       = require("./routes/search");
 const trashRoutes        = require("./routes/trash");
@@ -48,6 +48,9 @@ const toolsRoutes        = require("./features/tools/tools.routes");
 
 // ── Roles & permissions feature (router + guards) ─────────
 const rolesFeature = require("./features/roles");
+
+// ── Organization feature (schools / departments / categories) ─
+const organizationFeature = require("./features/organization");
 
 // ── Analytics controller (for the /api/books/stats shortcut) ──
 const AnalyticsController = require("./controllers/analyticsController");
@@ -172,7 +175,7 @@ app.use("/api/lexora-books", lexoraBooksRoutes);
 app.use("/api/lexora-books", bookIntelligenceRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/attendance",   attendanceRoutes);
-app.use("/api/students",     studentsRoutes);
+app.use("/api/faculty",      facultyRoutes);
 app.use("/api/analytics",    analyticsRoutes);
 app.use("/api/search",       searchRoutes);
 app.use("/api/suggestions",  searchRoutes);   // convenience alias
@@ -182,6 +185,7 @@ app.use("/api/rfid",         rfidRoutes);
 app.use("/api/courses",      coursesBuilderRoutes);
 app.use("/api/courses",      coursesRoutes);
 app.use("/api/users",        usersRoutes);
+app.use("/api/organization", organizationFeature.router);
 app.use("/api/portal",       portalRoutes);
 app.use("/api/tools",        toolsRoutes);
 app.use("/api/roles",        rolesFeature.router);

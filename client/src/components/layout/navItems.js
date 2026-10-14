@@ -25,7 +25,8 @@ import {
   BarChart3, BookOpen, ClipboardList, Trash2,
   ChevronDown, Library, Users, User, Globe, UserCheck,
   LayoutDashboard, GraduationCap, Settings, Package,
-  ShieldCheck, KeyRound,
+  ShieldCheck, KeyRound, BookMarked, Layers,
+  School, Building2, Tag,
 } from "lucide-react";
 import { ROLES } from "../../constants/roles.js";
 import { hasPermission } from "../../utils/permissionUtils";
@@ -38,6 +39,7 @@ import { hasPermission } from "../../utils/permissionUtils";
 const SECTIONS = [
   { id: "OVERVIEW",     label: "Overview" },
   { id: "CATALOG",      label: "Catalog" },
+  { id: "ORGANIZATION", label: "Organization" },
   { id: "TRANSACTIONS", label: "Transactions" },
   { id: "ATTENDANCE",   label: "Attendance" },
   { id: "PEOPLE",       label: "People" },
@@ -75,10 +77,22 @@ export const NAV_ITEMS = [
   // ── Catalog ───────────────────────────────────────────
   { section: "CATALOG", to: "/dashboard/books",        label: "Books",            Icon: BookOpen, permission: "manage_books", end: true },
   { section: "CATALOG", to: "/lexora-books",           label: "Lexora E-Books",    Icon: Globe, permission: "view_lexora_books" },
-  { section: "CATALOG", to: "/dashboard/lexora-books", label: "Manage Lexora Books", Icon: Globe, permission: "manage_lexora_books" },
+  { section: "CATALOG", to: "/dashboard/lexora-books", label: "Manage Lexora Books", Icon: BookMarked, permission: "manage_lexora_books" },
   { section: "CATALOG", to: "/dashboard/courses",      label: "Courses",            Icon: Library, permission: "manage_courses", end: true },
-  { section: "CATALOG", to: "/dashboard/course-library", label: "Course Library",  Icon: BookOpen, permission: "view_course_library" },
+  { section: "CATALOG", to: "/dashboard/course-library", label: "Course Library",  Icon: Layers, permission: "view_course_library" },
   { section: "CATALOG", to: "/dashboard/tools", label: "Tools", Icon: Package, permission: "manage_tools" },
+
+  // ── Organization ────────────────────────────────────────
+  // Overview is the section landing: the whole hierarchy tree with
+  // links into the management pages below it.
+  { section: "ORGANIZATION", to: "/dashboard/organization", label: "Overview", Icon: LayoutDashboard, permission: "manage_organization" },
+  // Schools is the one role-gated item here: "create/manage schools"
+  // is a super-admin capability, not an action inside
+  // manage_organization (admins hold that permission for
+  // departments/categories). The page itself re-checks the role.
+  { section: "ORGANIZATION", to: "/dashboard/organization/schools", label: "Schools", Icon: School, roles: [ROLES.SUPER_ADMIN] },
+  { section: "ORGANIZATION", to: "/dashboard/organization/departments", label: "Departments", Icon: Building2, permission: "manage_organization" },
+  { section: "ORGANIZATION", to: "/dashboard/organization/categories", label: "Categories", Icon: Tag, permission: "manage_organization" },
 
 
   // ── Transactions ──────────────────────────────────────

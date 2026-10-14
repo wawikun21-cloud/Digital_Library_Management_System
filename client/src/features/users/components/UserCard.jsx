@@ -45,6 +45,12 @@ export default function UserCard({ user, onEdit, onDeactivate, onReactivate, onR
         <p className="mt-2 break-all text-[13px]" style={{ color: "var(--text-secondary)" }}>{user.email}</p>
       )}
 
+      {/* School scope — mirrors UserTable's columns on small screens. */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[12px]" style={{ color: "var(--text-muted)" }}>
+        <span>{user.school_name || <span className="rp-badge rp-badge--muted">Unassigned school</span>}</span>
+        {user.department_name && <span>· {user.department_name}</span>}
+      </div>
+
       <div className="mt-3 flex items-center justify-between gap-2">
         <span className={`rp-badge ${isActive ? "rp-badge--ok" : "rp-badge--off"}`}>
           {isActive ? "Active" : "Inactive"}

@@ -1,5 +1,5 @@
 import { GraduationCap } from "lucide-react";
-import { heroBoxStyle, HERO_MIN_HEIGHT_CLASS } from "../constants/studentsUi";
+import { heroBoxStyle, HERO_MIN_HEIGHT_CLASS } from "../constants/portalUi";
 
 /** Shown when no hero slides are active. Shares the carousel's height contract. */
 export default function HeroFallback() {

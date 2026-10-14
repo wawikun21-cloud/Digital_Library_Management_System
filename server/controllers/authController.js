@@ -54,6 +54,11 @@ async function login(req, res) {
       avatar_url: user.avatar_url || null,
       full_name:  user.full_name || null,
       is_active:  user.is_active !== undefined ? user.is_active : 1,
+      // School scope is carried for the UI; server enforcement re-reads
+      // it fresh from the database on every scoped request.
+      school_id:  user.school_id ?? null,
+      department_id: user.department_id ?? null,
+      must_change_password: user.must_change_password === 1,
     };
 
     // ── Audit: successful LOGIN ─────────────────────────
@@ -185,6 +190,9 @@ async function updateProfile(req, res) {
       avatar_url: updated.avatar_url || null,
       full_name:  updated.full_name || null,
       is_active:  updated.is_active !== undefined ? updated.is_active : 1,
+      school_id:  updated.school_id ?? null,
+      department_id: updated.department_id ?? null,
+      must_change_password: updated.must_change_password === 1,
     };
 
     // Same payload login and /me return: without it the client's cached user

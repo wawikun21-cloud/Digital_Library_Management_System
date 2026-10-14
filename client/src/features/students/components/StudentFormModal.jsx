@@ -1,13 +1,17 @@
 /**
  * features/students/components/StudentFormModal.jsx
  *
- * Add / edit student. Owns its form state, the ID blur-check and the
- * duplicate-ID wiring. Extracted from the former pages/Students.jsx.
+ * Add / edit student (a user with role='student'). Owns its form
+ * state, the ID blur-check and the duplicate-ID wiring. School and
+ * Department selectors scope the student; the server applies
+ * default credentials (username = password = student ID).
  */
 
 import { useState } from "react";
 import { GraduationCap, XCircle, AlertCircle, ChevronDown } from "lucide-react";
+import { ROLES } from "../../../constants/roles";
 import ModalAnimations from "../../../components/ui/ModalAnimations";
+import { SchoolSelect, DepartmentSelect } from "../../organization";
 import { FORM_FIELDS, EMPTY_FORM } from "../constants/studentsUi";
 import { currentSchoolYear } from "../utils/studentFilters";
 
@@ -28,19 +32,28 @@ const seedForm = (student) => {
       senior_high_school: "",
       strand: "",
       school_address: "",
+      school_id: null,
+      department_id: null,
     };
   }
   return {
     ...student,
+    school_id: student.school_id ?? null,
+    department_id: student.department_id ?? null,
     student_school_year: student.student_school_year || currentSchoolYear(),
   };
 };
 
-export default function StudentFormModal({ mode, student, onClose, onCreate, onUpdate, onCheckId }) {
+export default function StudentFormModal({ mode, student, currentUser, onClose, onCreate, onUpdate, onCheckId }) {
   const isEditMode = mode === "edit";
   const [formData, setFormData] = useState(() => seedForm(student));
   const [idExists, setIdExists] = useState(false);
   const [idChecking, setIdChecking] = useState(false);
+
+  const isSuperAdmin = currentUser?.role === ROLES.SUPER_ADMIN;
+  const ownSchoolId = currentUser?.school_id ?? null;
+  const schoolFixed = !isSuperAdmin && ownSchoolId != null;
+  const schoolValue = schoolFixed ? ownSchoolId : formData.school_id ?? null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -83,6 +96,23 @@ export default function StudentFormModal({ mode, student, onClose, onCreate, onU
         </div>
 
         <form onSubmit={handleSubmit}>
+          {/* ── School organization ─────────────────────── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+            <SchoolSelect
+              value={schoolValue}
+              onChange={(schoolId) => setFormData({ ...formData, school_id: schoolId, department_id: null })}
+              fixedSchoolId={schoolFixed ? ownSchoolId : null}
+              disabled={isEditMode && !isSuperAdmin}
+              required
+            />
+            <DepartmentSelect
+              schoolId={schoolValue}
+              value={formData.department_id}
+              onChange={(departmentId) => setFormData({ ...formData, department_id: departmentId })}
+              disabled={!schoolValue}
+            />
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {FORM_FIELDS.map(({ label, key, type, required, placeholder, options }) => (
               <div key={key}>
@@ -146,6 +176,13 @@ export default function StudentFormModal({ mode, student, onClose, onCreate, onU
               </div>
             ))}
           </div>
+
+          {!isEditMode && (
+            <p className="mt-4 rounded-lg px-3 py-2 text-[12px]" style={{ background: "var(--bg-subtle)", color: "var(--text-muted)" }}>
+              The student logs in with their <strong>student ID number</strong> as both username and password,
+              and is prompted to change it on first login.
+            </p>
+          )}
 
           {/* ── Modal footer ──────────────────────────── */}
           <div className="flex items-center justify-end gap-2.5 mt-6 pt-4"
