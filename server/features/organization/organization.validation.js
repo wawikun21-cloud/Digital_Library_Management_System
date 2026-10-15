@@ -25,6 +25,9 @@ function validateSchoolPayload(body) {
   if (body.status !== undefined && !["active", "inactive"].includes(body.status)) {
     return "Status must be 'active' or 'inactive'";
   }
+  if (body.feature_set !== undefined && !["library", "lexora", "both"].includes(body.feature_set)) {
+    return "Feature set must be 'library', 'lexora', or 'both'";
+  }
   return null;
 }
 

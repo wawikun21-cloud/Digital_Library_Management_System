@@ -18,17 +18,33 @@
 const { pool } = require("../../config/db");
 const { isScoped } = require("./schoolScope");
 
+// Lock-down switch (post-migration): when true, books with NO category
+// assignments are invisible to scoped callers — only assigned-and-
+// matching books are visible. Default OFF keeps the legacy fallback so
+// unassigned books stay visible; enable only after every book has been
+// assigned (the bulk assignment-by-filter endpoint exists for exactly
+// this), because strict also hides unassigned books from the admins
+// who would otherwise find and assign them.
+const STRICT_BOOKS = process.env.ORG_STRICT_BOOKS === "true";
+
 // ── SQL fragments ─────────────────────────────────────────
 
 /** Physical books — caller's model must alias the books table as `b`. */
 function physicalBookScopeSql(scope) {
   if (!isScoped(scope)) return { sql: "", params: [] };
-  return {
-    sql: `AND (
+  // School license gate: a 'lexora'-only school has no physical-library
+  // surface, so every physical read vanishes (AND FALSE) — the books list,
+  // search, public-search and /copies/public all hit this fragment.
+  if (scope.featureSet === "lexora") return { sql: "AND FALSE", params: [] };
+  // ORG_STRICT_BOOKS drops the "unassigned books stay visible" branch.
+  const legacyFallback = STRICT_BOOKS ? "" : `
       NOT EXISTS (
         SELECT 1 FROM book_category_assignments a WHERE a.book_id = b.id
       )
-      OR EXISTS (
+      OR`;
+  return {
+    sql: `AND (${legacyFallback}
+      EXISTS (
         SELECT 1
         FROM book_category_assignments a
         JOIN categories c  ON c.id = a.category_id AND c.deleted_at IS NULL
@@ -45,12 +61,19 @@ function physicalBookScopeSql(scope) {
 /** Digital books — caller's model must alias lexora_books as `lb`. */
 function lexoraBookScopeSql(scope) {
   if (!isScoped(scope)) return { sql: "", params: [] };
-  return {
-    sql: `AND (
+  // School license gate: a 'library'-only school has no Lexora surface,
+  // so every lexora read vanishes (AND FALSE) — the public catalog,
+  // details, reader, media and the manage list all hit this fragment.
+  if (scope.featureSet === "library") return { sql: "AND FALSE", params: [] };
+  // ORG_STRICT_BOOKS drops the "unassigned books stay visible" branch.
+  const legacyFallback = STRICT_BOOKS ? "" : `
       NOT EXISTS (
         SELECT 1 FROM lexora_book_assignments a WHERE a.lexora_book_id = lb.id
       )
-      OR EXISTS (
+      OR`;
+  return {
+    sql: `AND (${legacyFallback}
+      EXISTS (
         SELECT 1
         FROM lexora_book_assignments a
         JOIN categories c  ON c.id = a.category_id AND c.deleted_at IS NULL

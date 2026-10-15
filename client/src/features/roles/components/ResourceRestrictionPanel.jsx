@@ -13,11 +13,21 @@ import "./rolesUi.css";
 export default function ResourceRestrictionPanel({
   entityStates,
   visibleTypes,
+  featureSet = "both",
   onScopeToggle,
   onRecordToggle,
   onSearch,
 }) {
   const shownTypes = ENTITY_TYPES.filter((t) => visibleTypes.includes(t) && entityStates?.[t]);
+  // An entity type is license-bound to the disabled surface of the user's
+  // school (e.g. lexora_books for a library-only school). Restrictions for
+  // that surface are meaningless, so the toggle is disabled with a hint.
+  const licenseDisabled = (entityType) => {
+    if (featureSet === "both") return false;
+    if (featureSet === "library" && entityType === "lexora_books") return true;
+    if (featureSet === "lexora" && entityType === "books") return true;
+    return false;
+  };
 
   return (
     <div className="space-y-4">
@@ -50,29 +60,38 @@ export default function ResourceRestrictionPanel({
           return String(e.label || "").toLowerCase().includes(q);
         });
 
-        return (
-          <section key={entityType} className="rp-card overflow-hidden">
-            <div
-              className="flex items-center justify-between gap-3 px-3 py-2.5"
-              style={{ background: "var(--bg-hover)" }}
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <h4 className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                  {config.label}
-                </h4>
-                <span
-                  className={`rp-badge ${isDenied ? "rp-badge--off" : isSelected ? "rp-badge--accent" : "rp-badge--ok"}`}
-                >
-                  {isDenied ? "Denied" : isSelected ? "Only selected" : "All"}
-                </span>
+          return (
+            <section key={entityType} className="rp-card overflow-hidden">
+              <div
+                className="flex items-center justify-between gap-3 px-3 py-2.5"
+                style={{ background: "var(--bg-hover)" }}
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <h4 className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                    {config.label}
+                  </h4>
+                  {licenseDisabled(entityType) && (
+                    <span
+                      className="rp-badge rp-badge--muted"
+                      title="Unavailable for this school's license"
+                    >
+                      Licensed off
+                    </span>
+                  )}
+                  <span
+                    className={`rp-badge ${isDenied ? "rp-badge--off" : isSelected ? "rp-badge--accent" : "rp-badge--ok"}`}
+                  >
+                    {isDenied ? "Denied" : isSelected ? "Only selected" : "All"}
+                  </span>
+                </div>
+                <Toggle
+                  checked={!isDenied}
+                  onCheckedChange={() => onScopeToggle(entityType)}
+                  size="sm"
+                  disabled={licenseDisabled(entityType)}
+                  aria-label={`Toggle access to all ${config.label}`}
+                />
               </div>
-              <Toggle
-                checked={!isDenied}
-                onCheckedChange={() => onScopeToggle(entityType)}
-                size="sm"
-                aria-label={`Toggle access to all ${config.label}`}
-              />
-            </div>
 
             <div className="space-y-2 p-3">
               {isDenied ? (

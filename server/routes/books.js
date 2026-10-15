@@ -16,8 +16,11 @@
 //
 //  School scoping: resolveSchoolScope is mounted after the guard;
 //  every authenticated query is filtered by the book's category
-//  assignments server-side (bookAccess). The PUBLIC routes are
-//  deliberately unscoped (anonymous visitors have no scope).
+//  assignments server-side (bookAccess). The PUBLIC routes apply
+//  scope SESSION-OPTIONALLY too — anonymous visitors (no session)
+//  keep the fully public surface, while a logged-in caller is
+//  filtered by their school/department scope, so public results
+//  never exceed what that caller may open.
 // ─────────────────────────────────────────────────────────
 
 const express          = require("express");
@@ -32,12 +35,12 @@ const {
   resolvePermissions,
   requirePermissionAction,
 } = require("../features/roles");
-const { resolveSchoolScope } = require("../features/organization");
+const { resolveSchoolScope, bookAccess } = require("../features/organization");
 
 // ── PUBLIC routes (no auth) — must precede router.use ──────
 
-// GET /api/books/public-search  (public — no auth)
-router.get("/public-search", async (req, res) => {
+// GET /api/books/public-search  (public — session-aware scope)
+router.get("/public-search", resolveSchoolScope, async (req, res) => {
   try {
     const { title, author } = req.query;
 
@@ -58,6 +61,13 @@ router.get("/public-search", async (req, res) => {
     }
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    // School scope (empty fragment for anonymous / super_admin / legacy
+    // callers, so their results are unchanged). Both WHERE clauses are
+    // guaranteed non-empty — the route 400s without title or author.
+    const { physicalBookScopeSql, lexoraBookScopeSql } = bookAccess;
+    const physicalScope = physicalBookScopeSql(req.schoolScope);
+    const lexoraScope   = lexoraBookScopeSql(req.schoolScope);
 
     const [nemcoRows] = await require("../config/db").pool.query(
       `SELECT
@@ -80,10 +90,10 @@ router.get("/public-search", async (req, res) => {
            SUM(status = 'Available') AS avail_copies
          FROM book_copies WHERE is_deleted = 0 GROUP BY book_id
        ) cc ON cc.book_id = b.id
-       ${whereClause}
+       ${whereClause} ${physicalScope.sql}
        ORDER BY b.title ASC
        LIMIT 50`,
-      params
+      [...params, ...physicalScope.params]
     );
 
     const lexConditions = [];
@@ -100,18 +110,18 @@ router.get("/public-search", async (req, res) => {
 
     const [lexoraRows] = await require("../config/db").pool.query(
       `SELECT
-         id, title, author, year,
-         source AS source_url, collection, resource_type, program,
-         subject_course, format,
+         lb.id, lb.title, lb.author, lb.year,
+         lb.source AS source_url, lb.collection, lb.resource_type, lb.program,
+         lb.subject_course, lb.format,
          NULL AS shelf, 'Available' AS status, NULL AS cover, NULL AS isbn,
          NULL AS edition, NULL AS total_copies, NULL AS available_copies,
          NULL AS sublocation,
          'lexora' AS source
-       FROM lexora_books
-       ${lexWhere}
-       ORDER BY title ASC
+       FROM lexora_books lb
+       ${lexWhere} ${lexoraScope.sql}
+       ORDER BY lb.title ASC
        LIMIT 50`,
-      lexParams
+      [...lexParams, ...lexoraScope.params]
     );
 
     const combined = [...nemcoRows, ...lexoraRows].sort((a, b) =>
@@ -125,8 +135,8 @@ router.get("/public-search", async (req, res) => {
   }
 });
 
-// GET /api/books/:id/copies/public  (public — no auth)
-router.get("/:id/copies/public", async (req, res) => {
+// GET /api/books/:id/copies/public  (public — session-aware scope)
+router.get("/:id/copies/public", resolveSchoolScope, async (req, res) => {
   try {
     const { pool } = require("../config/db");
     const bookId   = req.params.id;
@@ -136,6 +146,12 @@ router.get("/:id/copies/public", async (req, res) => {
       [bookId]
     );
     if (!book) {
+      return res.status(404).json({ success: false, error: "Book not found" });
+    }
+
+    // School scope: copies of another school's book are not readable.
+    const access = await bookAccess.isPhysicalBookAccessible(req.schoolScope, book.id);
+    if (access.success && !access.accessible) {
       return res.status(404).json({ success: false, error: "Book not found" });
     }
 

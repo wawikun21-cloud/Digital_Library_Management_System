@@ -286,7 +286,7 @@ const RolesRepository = {
   // ── Users (for the specific-user editor target) ──────────
   async findUserById(id) {
     const [rows] = await pool.query(
-      "SELECT id, username, role, full_name, is_active FROM users WHERE id = ? LIMIT 1",
+      "SELECT id, username, role, full_name, is_active, school_id FROM users WHERE id = ? LIMIT 1",
       [id]
     );
     return rows[0] || null;
@@ -341,6 +341,22 @@ const RolesRepository = {
 
   async resolveRoleEntityPermissions(roleName) {
     return this.getRoleEntityPermissions(roleName);
+  },
+
+  /**
+   * School module license for the auth payload (UI cache only).
+   * Server enforcement re-reads this fresh per request via
+   * resolveSchoolScope; this exists so the sidebar/nav can hide a
+   * feature whose school license excludes it without a server round-trip.
+   * NULL / missing → 'both'.
+   */
+  async getSchoolFeatureSet(schoolId) {
+    if (!schoolId) return null;
+    const [rows] = await pool.query(
+      "SELECT feature_set FROM schools WHERE id = ? LIMIT 1",
+      [schoolId]
+    );
+    return rows.length ? rows[0].feature_set : null;
   },
 };
 

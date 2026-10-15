@@ -430,6 +430,10 @@ const LexoraBookModel = {
       ...filters,
       status: "published",
       visibility: "public",
+      // School scope flows through getAll when the caller resolved one
+      // (session-optional on the public routes); anonymous callers pass
+      // null and keep the fully public surface.
+      scope: filters.scope ?? null,
     });
   },
 

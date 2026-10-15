@@ -48,6 +48,11 @@ const SECTIONS = [
 ];
 
 // ─────────────────────────────────────────────────────────
+//  AttendancePage / StudentsPage / FacultyPage — separate
+//  top-level sections, not children of the Attendance group.
+// ─────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────
 //  NAV_ITEMS
 //
 //  `permission` on a group is the guard of the group's OWN route
@@ -69,18 +74,25 @@ export const NAV_ITEMS = [
     isGroup: true,
     permission: "view_dashboard",
     children: [
-      { to: "/dashboard/attendance/dashboard", label: "Attendance", Icon: LayoutDashboard, permission: "view_dashboard" },
-      { to: "/dashboard/books/dashboard",      label: "Book",       Icon: BookOpen, permission: "view_dashboard" },
+      { to: "/dashboard/attendance/dashboard", label: "Attendance", Icon: LayoutDashboard, permission: "view_dashboard", featureSet: "library" },
+      { to: "/dashboard/books/dashboard",      label: "Book",       Icon: BookOpen, permission: "view_dashboard", featureSet: "library" },
     ],
   },
 
   // ── Catalog ───────────────────────────────────────────
-  { section: "CATALOG", to: "/dashboard/books",        label: "Books",            Icon: BookOpen, permission: "manage_books", end: true },
-  { section: "CATALOG", to: "/lexora-books",           label: "Lexora E-Books",    Icon: Globe, permission: "view_lexora_books" },
-  { section: "CATALOG", to: "/dashboard/lexora-books", label: "Manage Lexora Books", Icon: BookMarked, permission: "manage_lexora_books" },
-  { section: "CATALOG", to: "/dashboard/courses",      label: "Courses",            Icon: Library, permission: "manage_courses", end: true },
-  { section: "CATALOG", to: "/dashboard/course-library", label: "Course Library",  Icon: Layers, permission: "view_course_library" },
-  { section: "CATALOG", to: "/dashboard/tools", label: "Tools", Icon: Package, permission: "manage_tools" },
+  // `featureSet` binds a nav item to a school's module license
+  // ('library' → physical books only; 'lexora' → digital only; 'both' → both).
+  // The sidebar hides an item whose featureSet the user's school license
+  // excludes; the backend independently 404s the route regardless.
+  { section: "CATALOG", to: "/dashboard/books",        label: "Books",            Icon: BookOpen, permission: "manage_books", end: true, featureSet: "library" },
+  { section: "CATALOG", to: "/lexora-books",             label: "Lexora E-Books",    Icon: Globe, permission: "view_lexora_books", featureSet: "lexora" },
+  { section: "CATALOG", to: "/dashboard/lexora-books",   label: "Manage Lexora Books", Icon: BookMarked, permission: "manage_lexora_books", featureSet: "lexora" },
+  // Courses — Operational feature for  Lexora
+  { section: "CATALOG", to: "/dashboard/courses",        label: "Courses",            Icon: Library, permission: "manage_courses", end: true, featureSet: "lexora" },
+  // Course Library — digital-only course content
+  { section: "CATALOG", to: "/dashboard/course-library", label: "Course Library",  Icon: Layers, permission: "view_course_library", featureSet: "lexora" },
+  // Tools —  operational feature for Lexora Only
+  { section: "CATALOG", to: "/dashboard/tools",          label: "Tools",            Icon: Package, permission: "manage_tools", featureSet: "lexora" },
 
   // ── Organization ────────────────────────────────────────
   // Overview is the section landing: the whole hierarchy tree with
@@ -96,25 +108,20 @@ export const NAV_ITEMS = [
 
 
   // ── Transactions ──────────────────────────────────────
-  { section: "TRANSACTIONS", to: "/dashboard/borrowed", label: "Borrowed", Icon: ClipboardList, permission: "manage_transactions" },
+  { section: "TRANSACTIONS", to: "/dashboard/borrowed", label: "Borrowed", Icon: ClipboardList, permission: "manage_transactions", featureSet: "library" },
 
   // ── Attendance ────────────────────────────────────────
-  {
-    section: "ATTENDANCE",
-    label: "Attendance",
-    to: "/dashboard/attendance",
-    Icon: Users,
-    isGroup: true,
-    // The parent link's own route guard. The group still opens for a user
-    // holding only a child's permission (e.g. use_kiosk) — then the header
-    // renders without the link and only the reachable children show.
-    permission: "manage_attendance",
-    children: [
-      { to: "/dashboard/students",          label: "Students",          Icon: User, permission: "manage_students" },
-      { to: "/dashboard/faculty",           label: "Faculty",           Icon: UserCheck, permission: "manage_faculty" },
-      { to: "/dashboard/attendance/kiosk",  label: "Kiosk Attendance",  Icon: UserCheck, permission: "use_kiosk" },
-    ],
-  },
+  // AttendancePage, StudentsPage, FacultyPage, and KioskAttendancePage
+  // are separate top-level sections (not children under an Attendance group).
+  // AttendancePage and KioskAttendancePage are library-only surfaces.
+  { section: "ATTENDANCE", to: "/dashboard/attendance",      label: "Attendance",      Icon: Users, permission: "manage_attendance", featureSet: "library" },
+  { section: "ATTENDANCE", to: "/dashboard/attendance/kiosk",  label: "Kiosk Attendance", Icon: UserCheck, permission: "use_kiosk", featureSet: "library" },
+
+  // ── People ────────────────────────────────────────────
+  // Students is a shared operational feature accessible to all license types
+  { section: "PEOPLE",     to: "/dashboard/students",          label: "Students",        Icon: User, permission: "manage_students" },
+  // Faculty is a library-only feature (library schools manage faculty; lexora schools don't)
+  { section: "PEOPLE",     to: "/dashboard/faculty",           label: "Faculty",         Icon: UserCheck, permission: "manage_faculty", featureSet: "library" },
 
 
   // ── System ────────────────────────────────────────────
@@ -159,12 +166,26 @@ export const NAV_ITEMS = [
  */
 export function isItemVisibleForUser(item, user) {
   if (item.permission) {
-    return hasPermission(user, item.permission);
-  }
-  if (item.roles) {
+    if (!hasPermission(user, item.permission)) return false;
+  } else if (item.roles) {
     const role = user?.role;
-    return role ? item.roles.includes(role) : item.roles.includes(ROLES.ADMIN);
+    if (!(role ? item.roles.includes(role) : item.roles.includes(ROLES.ADMIN))) return false;
   }
+  // School module-license gate (sidebar hide). `featureSet` tags an item as
+  // belonging to the physical-library ('library') or Lexora ('lexora') surface.
+  // A school licensed for only one surface hides the other. super_admin and
+  // legacy/anonymous users carry feature_set 'both' (or none), so this is a
+  // no-op for them — the backend enforces the real boundary.
+  if (!isFeatureAllowed(item, user)) return false;
+  return true;
+}
+
+/** True unless the item is license-bound to a surface this school lacks. */
+function isFeatureAllowed(item, user) {
+  if (!item.featureSet) return true;
+  const license = user?.feature_set || "both"; // missing → legacy 'both' default
+  if (item.featureSet === "library" && license === "lexora") return false;
+  if (item.featureSet === "lexora" && license === "library") return false;
   return true;
 }
 
@@ -175,9 +196,10 @@ function visibleChildren(item, user) {
 
 /**
  * May the group's own parent link render? It is a route like any other,
- * guarded by the group's `permission` in App.jsx.
+ * guarded by the group's `permission` in App.jsx AND by the school license.
  */
 export function isGroupLinkVisible(item, user) {
+  if (!isFeatureAllowed(item, user)) return false;
   if (item.permission) return hasPermission(user, item.permission);
   return true;
 }

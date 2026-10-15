@@ -1,8 +1,11 @@
-import { Loader2, ChevronLeft, ChevronRight, X, RotateCcw, ShieldCheck, Info } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, X, RotateCcw, ShieldCheck, Info, School } from "lucide-react";
 import PermissionGrid from "./PermissionGrid";
 import ResourceRestrictionPanel from "./ResourceRestrictionPanel";
 import { getInitials, getAvatarColor } from "../utils/roleUtils";
 import "./rolesUi.css";
+
+/** Human-readable label for a school's module license. */
+const LICENSE_LABEL = { library: "Library Only", lexora: "Lexora Only", both: "Both" };
 
 function headerTitle(drawerMode, editRole, editUser) {
   if (drawerMode === "editRole") return `Edit: ${editRole?.display_name || editRole?.name || ""}`;
@@ -181,6 +184,27 @@ export default function PermissionsDrawer({
             {/* ── User editor ────────────────────────────────── */}
             {drawerMode === "editUser" && (
               <div className="space-y-5">
+                {/* Read-only school license (set in Organization > Schools).
+                    Reflects which entity types are relevant for this user. */}
+                <div
+                  className="flex items-center gap-2.5 rounded-lg border px-3 py-2 text-xs"
+                  style={{ borderColor: "var(--border-light)", color: "var(--text-secondary)" }}
+                  aria-label={`School license: ${LICENSE_LABEL[editUser?.feature_set] || "Both"}`}
+                >
+                  <School size={14} aria-hidden="true" style={{ color: "var(--text-primary)" }} />
+                  <span style={{ color: "var(--text-primary)" }}>School license:</span>
+                  <span className="font-medium" style={{ color: "var(--text-primary)" }}>
+                    {LICENSE_LABEL[editUser?.feature_set] || "Both"}
+                  </span>
+                  {editUser?.feature_set && editUser.feature_set !== "both" && (
+                    <span className="rp-badge rp-badge--muted" style={{ marginLeft: "auto" }}>
+                      {editUser.feature_set === "library"
+                        ? "Lexora restrictions unavailable"
+                        : "Library restrictions unavailable"}
+                    </span>
+                  )}
+                </div>
+
                 <div>
                   <label
                     htmlFor="drawer-role-select"
@@ -241,6 +265,7 @@ export default function PermissionsDrawer({
               <ResourceRestrictionPanel
                 entityStates={entityStates}
                 visibleTypes={visibleEntityTypes}
+                featureSet={editUser?.feature_set || "both"}
                 onScopeToggle={onScopeToggle}
                 onRecordToggle={onRecordToggle}
                 onSearch={onEntitySearch}

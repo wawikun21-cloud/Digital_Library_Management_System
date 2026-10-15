@@ -63,13 +63,14 @@ const OrganizationRepository = {
 
   async createSchool(schoolData, createdBy) {
     const [result] = await pool.query(
-      `INSERT INTO schools (code, name, description, status, created_by)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO schools (code, name, description, status, feature_set, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [
         schoolData.code,
         schoolData.name,
         schoolData.description || null,
         schoolData.status || "active",
+        schoolData.feature_set || "both",
         createdBy ?? null,
       ]
     );
@@ -79,7 +80,7 @@ const OrganizationRepository = {
   async updateSchool(id, schoolData) {
     const fields = [];
     const params = [];
-    for (const key of ["code", "name", "description", "status"]) {
+    for (const key of ["code", "name", "description", "status", "feature_set"]) {
       if (schoolData[key] !== undefined) {
         fields.push(`${key} = ?`);
         params.push(schoolData[key] || null);

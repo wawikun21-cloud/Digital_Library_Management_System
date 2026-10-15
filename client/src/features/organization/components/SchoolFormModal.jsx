@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import Modal from "../../../components/ui/Modal";
 import { validateSchoolPayload } from "../validation/organizationValidation";
 
-const EMPTY = { name: "", code: "", description: "", status: "active" };
+const EMPTY = { name: "", code: "", description: "", status: "active", feature_set: "both" };
 
 /**
  * Create / edit a school. Owns its own form state (page stays
@@ -26,6 +26,7 @@ export default function SchoolFormModal({ open, school, onClose, onSubmit }) {
             code: school.code || "",
             description: school.description || "",
             status: school.status || "active",
+            feature_set: school.feature_set || "both",
           }
         : EMPTY
     );
@@ -118,6 +119,40 @@ export default function SchoolFormModal({ open, school, onClose, onSubmit }) {
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>
+            Licensed Features
+          </label>
+          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-secondary)" }}>
+            Controls which surfaces this school's users can access. Existing schools default to "Both".
+          </p>
+          <div className="mt-2 flex gap-3" role="radiogroup">
+            {[
+              { value: "library", label: "Library Only", desc: "Physical library; Lexora hidden" },
+              { value: "lexora",  label: "Lexora Only",   desc: "Digital books; physical library hidden" },
+              { value: "both",    label: "Both",          desc: "Physical library and digital books" },
+            ].map((opt) => {
+              const checked = form.feature_set === opt.value;
+              return (
+                <label key={opt.value} className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="feature_set"
+                    value={opt.value}
+                    checked={checked}
+                    onChange={handleChange}
+                    className="mt-0.5 h-4 w-4 cursor-pointer"
+                  />
+                  <span className="block">
+                    <span className="block text-sm font-medium" style={{ color: "var(--text-primary)" }}>{opt.label}</span>
+                    <span className="block text-[11px]" style={{ color: "var(--text-secondary)" }}>{opt.desc}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 pt-2">

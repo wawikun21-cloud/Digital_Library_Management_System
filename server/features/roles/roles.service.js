@@ -271,10 +271,15 @@ async function getAuthPermissionPayload(user) {
   }
   try {
     const resolved = await resolveUser(user);
+    // School module license ('both'|'library'|'lexora'), cached on the user
+    // object so the nav can hide a disabled feature. super_admin / unscoped
+    // users have no school_id → null → client treats as 'both'.
+    const featureSet = user?.school_id ? await rolesRepo.getSchoolFeatureSet(user.school_id) : null;
     return {
       permissions: resolved.permissions,
       permission_details: resolved.permissionDetails,
       entity_overrides: resolved.entityOverrides,
+      feature_set: featureSet || "both",
     };
   } catch (err) {
     console.error("[RolesService] Failed to resolve permissions:", err.message);
@@ -471,6 +476,10 @@ async function getUserEditorContext(userId) {
 
   const roleDetail = await getRoleDetail(user.role);
 
+  // School module license, for the Roles page's read-only reflect.
+  // super_admin / unscoped users carry no school_id → null → 'both'.
+  const featureSet = user.school_id ? await rolesRepo.getSchoolFeatureSet(user.school_id) : null;
+
   const overrideByName = {};
   for (const row of overrideRows) {
     overrideByName[row.permission_name] = {
@@ -480,7 +489,7 @@ async function getUserEditorContext(userId) {
   }
 
   return {
-    user,
+    user: { ...user, feature_set: featureSet || "both" },
     role: roleDetail?.role ?? null,
     role_grants: roleDetail?.grants ?? [],
     role_actions: roleDetail?.role_actions ?? {},

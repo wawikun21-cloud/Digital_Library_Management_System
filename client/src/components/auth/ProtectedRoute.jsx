@@ -132,9 +132,40 @@ export function PermissionRoute({ permission, children }) {
 }
 
 // ─────────────────────────────────────────────────────────
-//  3. Convenience pre-configured guards
-//     Use these instead of repeating allow arrays everywhere.
+//  2b. LicenseRoute
+//     Checks the logged-in user's school license (feature_set)
+//     against the surface this route belongs to ('library' or
+//     'lexora'). super_admin and legacy/anonymous callers carry
+//     feature_set 'both', so this guard is a no-op for them —
+//     only scoped schools are redirected.
+//
+//     On denial the user lands on /dashboard/unauthorized with a
+//     license message, so the failure is explainable rather than
+//     a silent redirect.
+//
+//  Usage:
+//    <LicenseRoute featureSet="library">
+//      <Books />
+//    </LicenseRoute>
 // ─────────────────────────────────────────────────────────
+export function LicenseRoute({ featureSet, children }) {
+  const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
+
+  // Missing user → ProtectedRoute upstream handles the redirect to /login.
+  // Missing feature_set → legacy/anonymous → 'both' (no restriction).
+  if (!user || !featureSet) return children;
+
+  const license = user.feature_set || "both";
+  const denied =
+    (featureSet === "library" && license === "lexora") ||
+    (featureSet === "lexora" && license === "library");
+
+  if (denied) {
+    return <Navigate to="/dashboard/unauthorized?reason=license" replace />;
+  }
+
+  return children;
+}
 
 /** Only Super Admin can access this route. */
 export function SuperAdminRoute({ children }) {

@@ -20,7 +20,7 @@ export default function FlipbookSearch({ onSearch, onNavigate, onClose }) {
   }, [query, onSearch])
 
   return (
-    <div className="absolute right-0 top-0 z-40 h-full w-80 border-l border-white/10 bg-black/80 backdrop-blur-xl">
+    <div className="absolute right-0 top-0 z-40 h-full w-80 border-l border-white/10 bg-[var(--flipbook-panel-bg,rgba(8,18,29,0.88))] backdrop-blur-xl">
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
         <span className="text-sm font-semibold" style={{ color: "var(--flipbook-text-primary)" }}>Search</span>
         <button

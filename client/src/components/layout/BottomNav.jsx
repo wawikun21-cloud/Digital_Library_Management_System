@@ -5,8 +5,8 @@ import { isItemVisibleForUser } from "./navItems.js";
 
 const NAV = [
   { to: "/dashboard",         label: "Dashboard",     Icon: BarChart3,     permission: "view_dashboard" },
-  { to: "/dashboard/books",    label: "Books",    Icon: BookOpen,      permission: "manage_books" },
-  { to: "/dashboard/borrowed", label: "Borrowed", Icon: ClipboardList, permission: "manage_transactions" },
+  { to: "/dashboard/books",    label: "Books",    Icon: BookOpen,      permission: "manage_books", featureSet: "library" },
+  { to: "/dashboard/borrowed", label: "Borrowed", Icon: ClipboardList, permission: "manage_transactions", featureSet: "library" },
   { to: "/dashboard/deleted",  label: "Deleted",  Icon: Trash2,        permission: "manage_trash" },
 ];
 

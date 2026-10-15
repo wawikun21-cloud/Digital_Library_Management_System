@@ -74,6 +74,7 @@ const OrganizationService = {
           code: schoolData.code.trim(),
           description: schoolData.description || null,
           status: schoolData.status === "inactive" ? "inactive" : "active",
+          feature_set: schoolData.feature_set || "both",
         },
         createdBy
       );
@@ -121,6 +122,7 @@ const OrganizationService = {
         status: schoolData.status !== undefined
           ? (schoolData.status === "inactive" ? "inactive" : "active")
           : undefined,
+        feature_set: schoolData.feature_set !== undefined ? schoolData.feature_set : undefined,
       });
       const school = await OrganizationRepository.getSchoolById(id);
       return { success: true, data: school };

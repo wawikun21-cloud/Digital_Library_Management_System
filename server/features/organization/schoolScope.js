@@ -14,6 +14,9 @@
 //      schoolId,      // null for super_admin and legacy (unassigned) users
 //      departmentId,  // null = all departments within the school
 //      scoped,        // true when school-level restrictions apply
+//      featureSet,   // this school's module license:
+//                     // 'both' (default) | 'library' | 'lexora'
+//                     // null for unscoped callers — treated as 'both'
 //    }
 // ─────────────────────────────────────────────────────────
 
@@ -34,12 +37,16 @@ async function resolveSchoolScope(req, _res, next) {
         schoolId: null,
         departmentId: null,
         scoped: false,
+        featureSet: "both", // super_admin always sees every surface
       };
       return next();
     }
 
     const [rows] = await pool.query(
-      "SELECT role, school_id, department_id FROM users WHERE id = ? LIMIT 1",
+      `SELECT u.role, u.school_id, u.department_id, s.feature_set
+         FROM users u
+         LEFT JOIN schools s ON s.id = u.school_id
+        WHERE u.id = ? LIMIT 1`,
       [sessionUser.id]
     );
 
@@ -54,6 +61,8 @@ async function resolveSchoolScope(req, _res, next) {
       schoolId: user.school_id ?? null,
       departmentId: user.department_id ?? null,
       scoped: user.school_id != null,
+      // NULL / legacy schools → 'both' (no restriction, preserves behavior).
+      featureSet: user.feature_set || "both",
     };
     return next();
   } catch (err) {

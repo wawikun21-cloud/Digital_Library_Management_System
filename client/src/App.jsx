@@ -13,6 +13,7 @@ import { useAuth } from "./hooks/useAuth.js";
 import {
   ProtectedRoute,
   PermissionRoute,
+  LicenseRoute,
   StudentRoute,
 } from "./components/auth/ProtectedRoute.jsx";
 
@@ -176,31 +177,31 @@ export default function App() {
             {/* ── Catalog routes: admin + librarian ──────── */}
             <Route
               path="books"
-              element={<PermissionRoute permission="manage_books"><Page><Books /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="library"><PermissionRoute permission="manage_books"><Page><Books /></Page></PermissionRoute></LicenseRoute>}
             />
             <Route
               path="lexora-books"
-              element={<PermissionRoute permission="manage_lexora_books"><Page><ManageLexoraBooks /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="lexora"><PermissionRoute permission="manage_lexora_books"><Page><ManageLexoraBooks /></Page></PermissionRoute></LicenseRoute>}
             />
             <Route
               path="lexora-books/import"
-              element={<PermissionRoute permission="manage_lexora_books"><Navigate to="/dashboard/lexora-books" replace /></PermissionRoute>}
+              element={<LicenseRoute featureSet="lexora"><PermissionRoute permission="manage_lexora_books"><Navigate to="/dashboard/lexora-books" replace /></PermissionRoute></LicenseRoute>}
             />
             <Route
               path="lexora-books/manage"
-              element={<PermissionRoute permission="manage_lexora_books"><Page><ManageLexoraBooks /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="lexora"><PermissionRoute permission="manage_lexora_books"><Page><ManageLexoraBooks /></Page></PermissionRoute></LicenseRoute>}
             />
 
             {/* ── Book Dashboard: admin only ──────────────── */}
             <Route
               path="books/dashboard"
-              element={<PermissionRoute permission="view_dashboard"><Page><BookDashboard /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="library"><PermissionRoute permission="view_dashboard"><Page><BookDashboard /></Page></PermissionRoute></LicenseRoute>}
             />
 
             {/* ── Admin-only pages ────────────────────────── */}
             <Route
               path="borrowed"
-              element={<PermissionRoute permission="manage_transactions"><Page><Borrowed /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="library"><PermissionRoute permission="manage_transactions"><Page><Borrowed /></Page></PermissionRoute></LicenseRoute>}
             />
             <Route
               path="deleted"
@@ -214,17 +215,17 @@ export default function App() {
             {/* ── Attendance dashboard: admin only ─────────── */}
             <Route
               path="attendance/dashboard"
-              element={<PermissionRoute permission="view_dashboard"><Page><AttendanceDashboard /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="library"><PermissionRoute permission="view_dashboard"><Page><AttendanceDashboard /></Page></PermissionRoute></LicenseRoute>}
             />
 
             {/* ── Admin + Staff pages ──────────────────────── */}
             <Route
               path="attendance"
-              element={<PermissionRoute permission="manage_attendance"><Page><Attendance /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="library"><PermissionRoute permission="manage_attendance"><Page><Attendance /></Page></PermissionRoute></LicenseRoute>}
             />
             <Route
               path="attendance/kiosk"
-              element={<PermissionRoute permission="use_kiosk"><Page><KioskAttendance /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="library"><PermissionRoute permission="use_kiosk"><Page><KioskAttendance /></Page></PermissionRoute></LicenseRoute>}
             />
             <Route
               path="students"
@@ -232,35 +233,35 @@ export default function App() {
             />
             <Route
               path="faculty"
-              element={<PermissionRoute permission="manage_faculty"><Page><Faculty /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="library"><PermissionRoute permission="manage_faculty"><Page><Faculty /></Page></PermissionRoute></LicenseRoute>}
             />
             <Route
               path="courses"
-              element={<PermissionRoute permission="manage_courses"><Page><Courses /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="library"><PermissionRoute permission="manage_courses"><Page><Courses /></Page></PermissionRoute></LicenseRoute>}
             />
             <Route
               path="course-library"
-              element={<PermissionRoute permission="view_course_library"><Page><CourseLibrary /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="lexora"><PermissionRoute permission="view_course_library"><Page><CourseLibrary /></Page></PermissionRoute></LicenseRoute>}
             />
             <Route
               path="courses/create"
-              element={<PermissionRoute permission="manage_courses"><Page><CourseCreate /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="library"><PermissionRoute permission="manage_courses"><Page><CourseCreate /></Page></PermissionRoute></LicenseRoute>}
             />
             <Route
               path="courses/:id"
-              element={<PermissionRoute permission="view_course_library"><Page><CourseDetails /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="lexora"><PermissionRoute permission="view_course_library"><Page><CourseDetails /></Page></PermissionRoute></LicenseRoute>}
             />
             <Route
               path="courses/:id/learn"
-              element={<PermissionRoute permission="view_course_library"><Page><CourseLearnerView /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="lexora"><PermissionRoute permission="view_course_library"><Page><CourseLearnerView /></Page></PermissionRoute></LicenseRoute>}
             />
             <Route
               path="courses/:id/learn/:lessonId"
-              element={<PermissionRoute permission="view_course_library"><Page><CourseLearnerView /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="lexora"><PermissionRoute permission="view_course_library"><Page><CourseLearnerView /></Page></PermissionRoute></LicenseRoute>}
             />
             <Route
               path="courses/:id/builder"
-              element={<PermissionRoute permission="manage_courses"><Page><CourseBuilder /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="library"><PermissionRoute permission="manage_courses"><Page><CourseBuilder /></Page></PermissionRoute></LicenseRoute>}
             />
 
             {/* ── Organization: schools / departments / categories ── */}

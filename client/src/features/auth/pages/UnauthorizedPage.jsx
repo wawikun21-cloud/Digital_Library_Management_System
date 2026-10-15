@@ -8,7 +8,7 @@
  * together in the feature. No behavior change.
  */
 
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { ShieldOff } from "lucide-react";
 import { useLocalStorage } from "../../../hooks/useLocalStorage";
 import { STORAGE_KEYS } from "../../../constants/index.js";
@@ -16,11 +16,15 @@ import { ROLE_DEFAULT_ROUTES } from "../../../constants/roles.js";
 
 export default function UnauthorizedPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user]   = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
 
+  // Detect ?reason=license → school license doesn't cover this surface.
+  const isLicenseDenied = new URLSearchParams(location.search).get("reason") === "license";
+  const role     = user?.role ?? "admin";
+  const fallback = ROLE_DEFAULT_ROUTES[role] ?? "/dashboard";
+
   const handleGoBack = () => {
-    const role     = user?.role ?? "admin";
-    const fallback = ROLE_DEFAULT_ROUTES[role] ?? "/dashboard";
     navigate(fallback, { replace: true });
   };
 
@@ -47,24 +51,25 @@ export default function UnauthorizedPage() {
         <ShieldOff size={36} style={{ color: "#ef4444" }} />
       </span>
 
-      <h1 style={{
-        fontSize:   "28px",
-        fontWeight: "700",
-        color:      "var(--text-primary, #111)",
-        margin:     0,
-      }}>
-        Access Denied
-      </h1>
+       <h1 style={{
+         fontSize:   "28px",
+         fontWeight: "700",
+         color:      "var(--text-primary, #111)",
+         margin:     0,
+       }}>
+         {isLicenseDenied ? "License Restricted" : "Access Denied"}
+       </h1>
 
-      <p style={{
-        fontSize:  "15px",
-        color:     "var(--text-secondary, #6b7280)",
-        maxWidth:  "340px",
-        lineHeight: 1.6,
-        margin:    0,
-      }}>
-        You don't have permission to view this page. Please contact your administrator
-        if you think this is a mistake.
+       <p style={{
+         fontSize:  "15px",
+         color:     "var(--text-secondary, #6b7280)",
+         maxWidth:  "340px",
+         lineHeight: 1.6,
+         margin:    0,
+       }}>
+         {isLicenseDenied
+           ? "Your school's license does not cover this feature. The physical library and attendance tools are not included in your current license tier."
+           : "You don't have permission to view this page. Please contact your administrator if you think this is a mistake."}
       </p>
 
       <button

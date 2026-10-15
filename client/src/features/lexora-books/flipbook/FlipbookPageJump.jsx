@@ -11,6 +11,7 @@ export default function FlipbookPageJump({
   hasCover = false,
   viewMode = "double",
   onNavigate,
+  vertical = false,
 }) {
   const [showInput, setShowInput] = useState(false)
   const [jumpValue, setJumpValue] = useState("")
@@ -39,7 +40,7 @@ export default function FlipbookPageJump({
           max={totalPages}
           value={jumpValue}
           onChange={(e) => setJumpValue(e.target.value)}
-          className="h-7 w-14 rounded-lg bg-white/10 px-2 text-center text-xs text-white outline-none"
+          className={`h-7 rounded-lg bg-white/10 text-center text-xs text-white outline-none ${vertical ? "w-11 px-1" : "w-14 px-2"}`}
           autoFocus
           onBlur={handleJump}
           aria-label="Jump to page"
@@ -50,12 +51,17 @@ export default function FlipbookPageJump({
 
   return (
     <button
-      className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs transition-colors hover:bg-white/10"
+      className={vertical
+        ? "flex w-9 flex-col items-center rounded-lg py-1 text-[11px] leading-tight transition-colors hover:bg-white/10"
+        : "flex items-center gap-1 rounded-lg px-2 py-1 text-xs transition-colors hover:bg-white/10"}
       onClick={() => { setShowInput(true); setJumpValue(String(displayPage)) }}
       title="Jump to page"
+      aria-label={`Page ${displayPage} of ${totalPages}. Jump to page`}
     >
-      <span className="font-medium">{displayPage}</span>
-      <span className="opacity-50">/</span>
+      <span className="font-semibold">{displayPage}</span>
+      {vertical
+        ? <span className="my-0.5 h-px w-4" style={{ background: "rgba(255,255,255,0.3)" }} />
+        : <span className="opacity-50">/</span>}
       <span className="opacity-70">{totalPages}</span>
     </button>
   )

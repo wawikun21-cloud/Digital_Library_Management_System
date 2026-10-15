@@ -18,7 +18,7 @@ export default function FlipbookThumbnails({ state, actions, viewMode, onClose }
   const currentPage = state.currentPage
 
   return (
-    <div className="absolute inset-x-0 bottom-20 z-40 mx-auto w-[90%] max-w-2xl rounded-xl border border-white/10 bg-black/80 p-3 backdrop-blur-xl">
+    <div className="absolute inset-x-0 bottom-4 z-40 mx-auto w-[calc(100%-9rem)] max-w-2xl rounded-xl border border-white/10 bg-[var(--flipbook-panel-bg,rgba(8,18,29,0.88))] p-3 backdrop-blur-xl">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs font-medium" style={{ color: "var(--flipbook-text-muted)" }}>Pages</span>
         <button

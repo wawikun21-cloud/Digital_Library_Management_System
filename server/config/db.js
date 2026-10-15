@@ -1025,6 +1025,12 @@ async function migrateSchema(conn) {
 
     // ── users.student_school_year (migrated from the students table) ──
     `ALTER TABLE users ADD COLUMN student_school_year VARCHAR(50) NULL`,
+
+    // ── schools.feature_set (per-school module license) ─────
+    // 'both' keeps legacy behavior; 'library'/'lexora' restrict the
+    // other surface for this school's scoped users. 1060 (duplicate
+    // column) on re-run is swallowed by the migrateSchema try/catch.
+    `ALTER TABLE schools ADD COLUMN feature_set ENUM('library','lexora','both') NOT NULL DEFAULT 'both'`,
   ];
 
   await dropLegacyPermissionTables(conn);

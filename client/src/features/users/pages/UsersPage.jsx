@@ -28,7 +28,7 @@ import { useToast } from "../../../hooks/useToast";
  * button for it.
  */
 export default function UsersPage() {
-  const { user: currentUser, hasPermissionAction } = useAuth();
+  const { user: currentUser, hasPermissionAction, isSuperAdmin } = useAuth();
   const { toast, success, error: showError, hideToast } = useToast();
   const {
     users,

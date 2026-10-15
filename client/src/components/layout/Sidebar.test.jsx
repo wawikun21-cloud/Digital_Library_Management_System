@@ -24,10 +24,12 @@ beforeEach(() => {
   };
 });
 
-function renderSidebar(role, permissions) {
+function renderSidebar(role, permissions, featureSet) {
+  const userObj = { id: 1, role, permissions };
+  if (featureSet) userObj.feature_set = featureSet;
   globalThis.localStorage.setItem(
     STORAGE_KEYS.LEXORA_USER,
-    JSON.stringify({ id: 1, role, permissions })
+    JSON.stringify(userObj)
   );
   return renderToString(
     React.createElement(
@@ -106,11 +108,14 @@ describe("Sidebar", () => {
     expect(html).toContain('href="/dashboard/users"');
   });
 
-  it("hides unreachable Attendance children but keeps the reachable one", () => {
+  // ── Attendance items are now top-level sections, not group children ─
+  it("shows kiosk but hides Attendance parent for a kiosk-only user", () => {
     const html = renderSidebar("staff", ["use_kiosk"]);
-    expect(html).toContain('href="/dashboard/attendance/kiosk"');
+    // Students and Faculty are in "People" section, permission-gated separately
     expect(html).not.toContain('href="/dashboard/students"');
     expect(html).not.toContain('href="/dashboard/faculty"');
+    // Kiosk Attendance is still visible (top-level, not a group child)
+    expect(html).toContain('href="/dashboard/attendance/kiosk"');
   });
 
   // ── Group parent links follow their own route guard ──────────────
@@ -123,8 +128,10 @@ describe("Sidebar", () => {
   });
 
   it("drops the Attendance parent link for a kiosk-only user", () => {
+    // Attendance page requires manage_attendance; kiosk-only user lacks it
     const html = renderSidebar("staff", ["use_kiosk"]);
     expect(html).not.toContain('href="/dashboard/attendance"');
+    // Kiosk Attendance is a separate top-level item, visible by its own permission
     expect(html).toContain('href="/dashboard/attendance/kiosk"');
   });
 
@@ -132,5 +139,54 @@ describe("Sidebar", () => {
     const html = renderSidebar("librarian", ["manage_books"]);
     expect(html).not.toContain('href="/dashboard/attendance/kiosk"');
     expect(html).not.toContain('href="/dashboard/users"');
+  });
+
+  // ── Feature-license gates ─────────────────────────────────────
+  // A school licensed 'lexora' only should NOT see physical-library
+  // nav items, and vice-versa.
+  it("hides physical-library nav items but keeps shared sections for a lexora-only school", () => {
+    const html = renderSidebar("admin", ALL, "lexora");
+    // Books (physical) must be hidden
+    expect(html).not.toContain('href="/dashboard/books"');
+    // Borrowed (transactions) must be hidden
+    expect(html).not.toContain('href="/dashboard/borrowed"');
+    // Attendance page must NOT be a link (route is LicenseRoute-gated)
+    expect(html).not.toContain('href="/dashboard/attendance"');
+    // Students is a shared feature visible to all license types
+    expect(html).toContain('href="/dashboard/students"');
+    // Faculty is library-only and must be hidden for lexora-only school
+    expect(html).not.toContain('href="/dashboard/faculty"');
+    // Kiosk must be hidden (featureSet: library)
+    expect(html).not.toContain('href="/dashboard/attendance/kiosk"');
+    // Lexora items should still be visible
+    expect(html).toContain('href="/lexora-books"');
+  });
+
+  it("hides lexora-only nav items for a library-only school", () => {
+    const html = renderSidebar("admin", ALL, "library");
+    // Physical-library items should be visible
+    expect(html).toContain('href="/dashboard/books"');
+    expect(html).toContain('href="/dashboard/borrowed"');
+    // Attendance group should be visible (with parent link)
+    expect(html).toContain('href="/dashboard/attendance"');
+    // Students and Faculty should be visible (shared features)
+    expect(html).toContain('href="/dashboard/students"');
+    expect(html).toContain('href="/dashboard/faculty"');
+    // Lexora items must be hidden
+    expect(html).not.toContain('href="/lexora-books"');
+    // Course Library (lexora-only) must be hidden
+    expect(html).not.toContain('href="/dashboard/course-library"');
+  });
+
+  it("shows all items for a both-licensed school", () => {
+    const html = renderSidebar("admin", ALL, "both");
+    expect(html).toContain('href="/dashboard/books"');
+    expect(html).toContain('href="/lexora-books"');
+    expect(html).toContain('href="/dashboard/borrowed"');
+    expect(html).toContain('href="/dashboard/attendance"');
+    expect(html).toContain('href="/dashboard/students"');
+    expect(html).toContain('href="/dashboard/faculty"');
+    expect(html).toContain('href="/dashboard/attendance/kiosk"');
+    expect(html).toContain('href="/dashboard/course-library"');
   });
 });

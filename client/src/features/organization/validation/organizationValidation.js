@@ -9,14 +9,19 @@
 
 const NAME_MAX = 255;
 const CODE_MAX = 50;
+const VALID_FEATURE_SETS = ["library", "lexora", "both"];
 
-export function validateSchoolPayload({ name, code }) {
+export function validateSchoolPayload({ name, code, feature_set }) {
   const errors = {};
   if (!name?.trim()) errors.name = "School name is required";
   else if (name.trim().length > NAME_MAX) errors.name = `Name must be at most ${NAME_MAX} characters`;
 
   if (!code?.trim()) errors.code = "School code is required";
   else if (code.trim().length > CODE_MAX) errors.code = `Code must be at most ${CODE_MAX} characters`;
+
+  if (feature_set !== undefined && !VALID_FEATURE_SETS.includes(feature_set)) {
+    errors.feature_set = "Feature set must be 'library', 'lexora', or 'both'";
+  }
 
   return { errors, isValid: Object.keys(errors).length === 0 };
 }

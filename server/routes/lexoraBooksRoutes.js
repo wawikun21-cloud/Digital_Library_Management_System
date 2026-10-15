@@ -41,8 +41,15 @@ function parsePaging(query) {
 }
 
 // ── Public (read-only) — no auth, registered first ─────────
+//
+//  School scope is SESSION-OPTIONAL on the book routes: an
+//  anonymous visitor keeps the fully public surface, while a
+//  logged-in caller is filtered by their school/department
+//  scope — the same pattern as the reader route below, so the
+//  catalog, details and reader always agree on what a caller
+//  may see.
 
-router.get("/public", async (req, res) => {
+router.get("/public", resolveSchoolScope, async (req, res) => {
   try {
     const { search, category, tag, source_type, program, page: rawPage, pageSize: rawSize } = req.query;
     const paging = parsePaging({ page: rawPage, pageSize: rawSize });
@@ -52,6 +59,7 @@ router.get("/public", async (req, res) => {
       source_type,
       category_slug: category,
       tag_slug: tag,
+      scope: req.schoolScope,
       ...(paging ? { page: paging.page, pageSize: paging.pageSize } : {}),
     });
     if (!result.success) return res.status(400).json({ success: false, error: result.error });
@@ -84,9 +92,9 @@ router.get("/public/tags", async (_req, res) => {
   }
 });
 
-router.get("/public/:id", async (req, res) => {
+router.get("/public/:id", resolveSchoolScope, async (req, res) => {
   try {
-    const result = await require("../models/LexoraBook").getById(req.params.id, { publishedOnly: true })
+    const result = await require("../models/LexoraBook").getById(req.params.id, { publishedOnly: true, scope: req.schoolScope })
     if (!result.success) return res.status(404).json({ success: false, error: result.error })
     const LexoraBook = require("../models/LexoraBook")
     const [categoryResult, tagResult] = await Promise.all([

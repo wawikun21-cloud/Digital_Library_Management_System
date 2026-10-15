@@ -647,7 +647,7 @@ select.reader-pill { max-width: 160px; padding-right: 8px; }
 .reader-hint {
   position: absolute;
   left: 50%;
-  bottom: 84px;
+  bottom: 20px;
   z-index: 30;
   transform: translateX(-50%);
   padding: 6px 14px;
