@@ -18,6 +18,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Check, Loader2, Tag } from "lucide-react";
 import { useAuth } from "../../../hooks/useAuth";
+import { hasPermissionAction } from "../../../utils/permissionUtils";
 import { fetchHierarchy, fetchBookCategories, fetchLexoraBookCategories, setBookCategories, setLexoraBookCategories } from "../api/organizationApi";
 
 export default function BookCategoryAssignment({
@@ -25,9 +26,12 @@ export default function BookCategoryAssignment({
   type = "physical",
   onSelectionChange,
 }) {
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
   const isLexora = type === "lexora";
-  const canManage = hasPermission("manage_organization");
+  // Only users who can edit category assignments should see this control.
+  // super_admin short-circuits; admin has edit; staff/librarian only have
+  // view (granted for school/department dropdowns, not for assignment writes).
+  const canManage = hasPermissionAction(user, "manage_organization", "edit");
   const isSuperAdmin = user?.role === "super_admin";
   const ownSchoolId = user?.school_id ?? null;
   const schoolFixed = !isSuperAdmin && ownSchoolId != null;

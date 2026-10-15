@@ -3,6 +3,7 @@ const path = require("path");
 const { pool } = require("../config/db");
 const LexoraBookModel = require("../models/LexoraBook");
 const { lexoraBookScopeSql } = require("../features/organization/bookAccess.service");
+const { userHasPermission } = require("../features/roles");
 
 // pdf.js issues many Range requests per PDF; avoid 1-2 DB queries for each one.
 // The decision is cached briefly per (book, viewer), so unpublishing/permission
@@ -98,7 +99,7 @@ module.exports = async function lexoraMediaAccess(req, res, next) {
       }
     }
 
-    const isManager = user?.role === "admin" || user?.role === "librarian";
+    const isManager = user ? await userHasPermission(req, "manage_lexora_books") : false;
     const isOwner = user && Number(book.created_by) === Number(user.id);
     const isPublic = book.status === "published" && book.visibility === "public";
 

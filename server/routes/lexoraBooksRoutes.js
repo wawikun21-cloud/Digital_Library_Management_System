@@ -24,6 +24,7 @@ const { requireAuth } = require("../middleware/authMiddleware");
 const {
   resolvePermissions,
   requirePermissionAction,
+  userHasPermission,
 } = require("../features/roles");
 const { resolveSchoolScope } = require("../features/organization");
 
@@ -132,7 +133,7 @@ router.get("/:id/reader", resolveSchoolScope, async (req, res) => {
 
     const book = bookResult.data;
     const user = req.session?.user;
-    const isManager = user?.role === "admin" || user?.role === "librarian";
+    const isManager = user ? await userHasPermission(req, "manage_lexora_books") : false;
     const isOwner = user && Number(book.created_by) === Number(user.id);
     const isPublic = book.status === "published" && book.visibility === "public";
     if (!isPublic && !isManager && !isOwner) {

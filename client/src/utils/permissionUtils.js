@@ -1,4 +1,4 @@
-/**
+import { ROLE_DEFAULT_ROUTES } from "../constants/roles.js";/**
  * Permission checks shared by useAuth, ProtectedRoute, the Sidebar and the
  * feature pages. These read the resolved permission fields the auth
  * responses (`login` / `me` / `getCurrentUser`) put on the user object.
@@ -82,4 +82,37 @@ export function canAccessEntity(user, entityType, entityId) {
   const id = normalizeId(entityId);
   if (entry.scope === "denied") return !entry.entity_ids.map(normalizeId).includes(id);
   return entry.entity_ids.map(normalizeId).includes(id);
+}
+
+const LANDING_CANDIDATES = [
+  { to: "/dashboard",                permission: "view_dashboard" },
+  { to: "/dashboard/books",          permission: "manage_books",         featureSet: "library" },
+  { to: "/dashboard/lexora-books",   permission: "manage_lexora_books",  featureSet: "lexora" },
+  { to: "/dashboard/borrowed",       permission: "manage_transactions",  featureSet: "library" },
+  { to: "/dashboard/attendance",     permission: "manage_attendance",    featureSet: "library" },
+  { to: "/dashboard/students",       permission: "manage_students" },
+  { to: "/dashboard/courses",        permission: "manage_courses",       featureSet: "lexora" },
+  { to: "/dashboard/course-library", permission: "view_course_library",  featureSet: "lexora" },
+  { to: "/dashboard/tools",          permission: "manage_tools",         featureSet: "lexora" },
+];
+
+/**
+ * Role default route if the user can actually open it (permission + school
+ * license); otherwise the first reachable page; otherwise /unauthorized.
+ */
+export function getLandingRoute(user) {
+  if (!user) return "/login";
+  const preferred = ROLE_DEFAULT_ROUTES[user.role] ?? "/dashboard";
+  if (user.role === "student") return preferred; // role-gated portal
+
+  const license = user.feature_set || "both";
+  const reachable = (c) =>
+    hasPermission(user, c.permission) &&
+    (!c.featureSet || license === "both" || license === c.featureSet);
+
+  const pref = LANDING_CANDIDATES.find((c) => c.to === preferred);
+  if (pref && reachable(pref)) return preferred;
+
+  const first = LANDING_CANDIDATES.find(reachable);
+  return first ? first.to : "/dashboard/unauthorized";
 }

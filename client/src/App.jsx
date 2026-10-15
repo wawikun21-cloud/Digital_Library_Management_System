@@ -10,6 +10,7 @@ import { useLocalStorage } from "./hooks/useLocalStorage";
 import { STORAGE_KEYS } from "./constants/index.js";
 import { ROLES, ROLE_DEFAULT_ROUTES } from "./constants/roles.js";
 import { useAuth } from "./hooks/useAuth.js";
+import { getLandingRoute } from "./utils/permissionUtils";
 import {
   ProtectedRoute,
   PermissionRoute,
@@ -122,9 +123,7 @@ function LandingRouteGuard() {
   if (status === "checking") return null;
 
   if (status === "authed") {
-    const role     = user?.role ?? ROLES.ADMIN;
-    const fallback = ROLE_DEFAULT_ROUTES[role] ?? "/dashboard";
-    return <Navigate to={fallback} replace />;
+    return <Navigate to={getLandingRoute(user)} replace />;
   }
 
   return (
@@ -237,7 +236,7 @@ export default function App() {
             />
             <Route
               path="courses"
-              element={<LicenseRoute featureSet="library"><PermissionRoute permission="manage_courses"><Page><Courses /></Page></PermissionRoute></LicenseRoute>}
+              element={<LicenseRoute featureSet="lexora"><PermissionRoute permission="manage_courses"><Page><Courses /></Page></PermissionRoute></LicenseRoute>}
             />
             <Route
               path="course-library"
@@ -245,7 +244,7 @@ export default function App() {
             />
             <Route
               path="courses/create"
-              element={<LicenseRoute featureSet="library"><PermissionRoute permission="manage_courses"><Page><CourseCreate /></Page></PermissionRoute></LicenseRoute>}
+              element={<LicenseRoute featureSet="lexora"><PermissionRoute permission="manage_courses"><Page><CourseCreate /></Page></PermissionRoute></LicenseRoute>}
             />
             <Route
               path="courses/:id"
@@ -261,25 +260,25 @@ export default function App() {
             />
             <Route
               path="courses/:id/builder"
-              element={<LicenseRoute featureSet="library"><PermissionRoute permission="manage_courses"><Page><CourseBuilder /></Page></PermissionRoute></LicenseRoute>}
+              element={<LicenseRoute featureSet="lexora"><PermissionRoute permission="manage_courses"><Page><CourseBuilder /></Page></PermissionRoute></LicenseRoute>}
             />
 
             {/* ── Organization: schools / departments / categories ── */}
             <Route
               path="organization"
-              element={<PermissionRoute permission="manage_organization"><Page><OrganizationOverview /></Page></PermissionRoute>}
+              element={<PermissionRoute permission="manage_organization" action="create"><Page><OrganizationOverview /></Page></PermissionRoute>}
             />
             <Route
               path="organization/schools"
-              element={<PermissionRoute permission="manage_organization"><Page><Schools /></Page></PermissionRoute>}
+              element={<PermissionRoute permission="manage_organization" action="create"><Page><Schools /></Page></PermissionRoute>}
             />
             <Route
               path="organization/departments"
-              element={<PermissionRoute permission="manage_organization"><Page><Departments /></Page></PermissionRoute>}
+              element={<PermissionRoute permission="manage_organization" action="create"><Page><Departments /></Page></PermissionRoute>}
             />
             <Route
               path="organization/categories"
-              element={<PermissionRoute permission="manage_organization"><Page><Categories /></Page></PermissionRoute>}
+              element={<PermissionRoute permission="manage_organization" action="create"><Page><Categories /></Page></PermissionRoute>}
             />
 
             {/* ── User Management: Super Admin + Admin ────── */}
@@ -305,7 +304,7 @@ export default function App() {
             {/* ── Tools Management: Admin+ ────────────────── */}
             <Route
               path="tools"
-              element={<PermissionRoute permission="manage_tools"><Page><Tools /></Page></PermissionRoute>}
+              element={<LicenseRoute featureSet="lexora"><PermissionRoute permission="manage_tools"><Page><Tools /></Page></PermissionRoute></LicenseRoute>}
             />
 
             {/* ── Tools catalog: students ─────────────────── */}

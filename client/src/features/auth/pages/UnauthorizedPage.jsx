@@ -5,14 +5,18 @@
  *
  * This page was already compliant (83 lines, composition only) — moved
  * verbatim from pages/Unauthorized.jsx so both auth-domain screens live
- * together in the feature. No behavior change.
+ * together in the feature.
+ *
+ * The "Go to My Dashboard" target now comes from getLandingRoute(user),
+ * which honors the user's permissions and school license, instead of a
+ * raw role→route lookup that could ignore a denied surface.
  */
 
 import { useNavigate, useLocation } from "react-router-dom";
 import { ShieldOff } from "lucide-react";
 import { useLocalStorage } from "../../../hooks/useLocalStorage";
 import { STORAGE_KEYS } from "../../../constants/index.js";
-import { ROLE_DEFAULT_ROUTES } from "../../../constants/roles.js";
+import { getLandingRoute } from "../../../utils/permissionUtils";
 
 export default function UnauthorizedPage() {
   const navigate = useNavigate();
@@ -21,11 +25,15 @@ export default function UnauthorizedPage() {
 
   // Detect ?reason=license → school license doesn't cover this surface.
   const isLicenseDenied = new URLSearchParams(location.search).get("reason") === "license";
-  const role     = user?.role ?? "admin";
-  const fallback = ROLE_DEFAULT_ROUTES[role] ?? "/dashboard";
+
+  // getLandingRoute resolves the reachable home from the user's permissions
+  // and school license. When nothing is reachable it returns this page's own
+  // route, so fall back to /login instead of linking to ourselves.
+  const fallback = getLandingRoute(user);
+  const goTo = fallback === "/dashboard/unauthorized" ? "/login" : fallback;
 
   const handleGoBack = () => {
-    navigate(fallback, { replace: true });
+    navigate(goTo, { replace: true });
   };
 
   return (

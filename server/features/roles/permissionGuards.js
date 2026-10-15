@@ -198,6 +198,13 @@ function requireEntityTypeAccess(entityType, idParam = "id") {
     }
   };
 }
+/** Does the session user hold `permissionName`? (super_admin always does.) */
+async function userHasPermission(req, permissionName) {
+  const user = req.session?.user;
+  if (!user) return false;
+  await ensureResolved(req);
+  return hasResolvedPermission(req, permissionName);
+}
 
 module.exports = {
   resolvePermissions,
@@ -205,6 +212,7 @@ module.exports = {
   requirePermissionAction,
   requireEntityTypeAccess,
   canAccessEntity,
+  userHasPermission,
   can,
   ensureResolved,
   ALL_PERMISSION_NAMES,

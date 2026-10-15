@@ -21,6 +21,7 @@ module.exports = {
   requirePermissionAction: guards.requirePermissionAction,
   requireEntityTypeAccess: guards.requireEntityTypeAccess,
   canAccessEntity:       guards.canAccessEntity,
+  userHasPermission:     guards.userHasPermission,
 
   // Resolvers used by the auth response wiring
   getAuthPermissionPayload:  rolesService.getAuthPermissionPayload,

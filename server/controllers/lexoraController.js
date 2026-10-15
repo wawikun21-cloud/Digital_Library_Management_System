@@ -7,6 +7,8 @@ const path            = require("path");
 const fs              = require("fs/promises");
 const crypto          = require("crypto");
 const { lexoraUploadsDir } = require("../config/uploads");
+const { userHasPermission } = require("../features/roles");
+
 
 // ── Uploads directory ───────────────────────────────────────
 const UPLOAD_DIR = lexoraUploadsDir;
@@ -118,7 +120,7 @@ async function resolveAccessibleBook(req) {
   if (!book.success) return { error: { status: 404, message: book.error } };
 
   const user = req.session?.user;
-  const isManager = user?.role === "admin" || user?.role === "librarian";
+  const isManager = user ? await userHasPermission(req, "manage_lexora_books") : false;
   const isOwner = user && Number(book.data.created_by) === Number(user.id);
   const isPublic = book.data.status === "published" && book.data.visibility === "public";
   if (!isPublic && !isManager && !isOwner) {

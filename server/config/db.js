@@ -12,6 +12,7 @@ const {
   SEED_ROLES,
   SEED_ROLE_GRANTS,
   SEED_BATCHES,
+  getRoleGrantRows,
 } = require("../features/roles/permissionCatalog");
 
 const dbConfig = {
@@ -1113,8 +1114,6 @@ async function seedPermissions(conn) {
       );
       return rows.length > 0;
     } catch (err) {
-      // Table missing (migrations disabled) — treat as not applied and let
-      // the seed fail loudly rather than silently skipping.
       console.warn(`  ⚠️  Seed guard check failed for ${batch}: ${err.message}`);
       return false;
     }
@@ -1142,9 +1141,6 @@ async function seedPermissions(conn) {
   }
 
   // ── v1_permissions ───────────────────────────────────────
-  // ON DUPLICATE KEY UPDATE never touches `actions` on later runs —
-  // actions are server-owned. On this first run the drop above already
-  // cleared any legacy rows, so writing actions here is safe.
   if (!(await batchApplied(SEED_BATCHES.PERMISSIONS))) {
     for (const perm of PERMISSION_CATALOG) {
       await conn.query(
@@ -1154,7 +1150,6 @@ async function seedPermissions(conn) {
         [perm.name, perm.display_name, perm.category, JSON.stringify(perm.actions)]
       );
     }
-    // Remove any permission row that is not part of the catalog.
     const catalogNames = PERMISSION_CATALOG.map((p) => p.name);
     const placeholders = catalogNames.map(() => "?").join(", ");
     await conn.query(
@@ -1166,8 +1161,6 @@ async function seedPermissions(conn) {
   }
 
   // ── v1_action_backfill ───────────────────────────────────
-  // Guarantees `actions` is populated even for rows that existed
-  // before the column was added.
   if (!(await batchApplied(SEED_BATCHES.ACTION_BACKFILL))) {
     for (const perm of PERMISSION_CATALOG) {
       await conn.query(
@@ -1184,7 +1177,6 @@ async function seedPermissions(conn) {
     for (const [roleName, granted] of Object.entries(SEED_ROLE_GRANTS)) {
       await conn.query("DELETE FROM role_permissions WHERE role_name = ?", [roleName]);
       for (const permissionName of granted) {
-        // actions = NULL → all actions defined on the permission.
         await conn.query(
           "INSERT INTO role_permissions (role_name, permission_name, actions) VALUES (?, ?, NULL)",
           [roleName, permissionName]
@@ -1196,8 +1188,6 @@ async function seedPermissions(conn) {
   }
 
   // ── v2_organization ─────────────────────────────────────
-  // Adds manage_organization (granted to super_admin + admin) and seeds the
-  // single default school. Batch-guarded like every other batch.
   if (!(await batchApplied(SEED_BATCHES.ORGANIZATION))) {
     const orgPerm = PERMISSION_CATALOG.find((p) => p.name === "manage_organization");
     if (orgPerm) {
@@ -1215,9 +1205,6 @@ async function seedPermissions(conn) {
       }
     }
 
-    // Default school — the legacy single-institution record. Created
-    // unconditionally (INSERT IGNORE on the unique code) so existing
-    // installs get exactly one; super_admin renames it later.
     const [schoolRows] = await conn.query(
       `INSERT IGNORE INTO schools (code, name, description, is_default)
        VALUES ('DEFAULT_SCHOOL', ?, 'Default school seeded during organization setup', 1)`,
@@ -1231,9 +1218,61 @@ async function seedPermissions(conn) {
     console.log("  ✅ Seed batch: v2_organization");
   }
 
+  // ── v2_organization_staff_view ────────────────────────────────
+  if (!(await batchApplied(SEED_BATCHES.ORGANIZATION_STAFF_VIEW))) {
+    const orgPerm = PERMISSION_CATALOG.find((p) => p.name === "manage_organization");
+    if (orgPerm) {
+      for (const roleName of ["staff"]) {
+        await conn.query(
+          `INSERT INTO role_permissions (role_name, permission_name, actions)
+           VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE actions = VALUES(actions)`,
+          [roleName, orgPerm.name, JSON.stringify(["view"])]
+        );
+      }
+      console.log("  ✅ Granted manage_organization:view to staff");
+    }
+    await markBatch(SEED_BATCHES.ORGANIZATION_STAFF_VIEW);
+    console.log("  ✅ Seed batch: v2_organization_staff_view");
+  }
+
+  // ── v3_librarian_transactions ────────────────────────────────
+  if (!(await batchApplied(SEED_BATCHES.LIBRARIAN_TRANSACTIONS))) {
+    const txnPerm = PERMISSION_CATALOG.find((p) => p.name === "manage_transactions");
+    if (txnPerm) {
+      await conn.query(
+        `INSERT INTO role_permissions (role_name, permission_name, actions)
+         VALUES (?, ?, NULL)
+         ON DUPLICATE KEY UPDATE actions = VALUES(actions)`,
+        ["librarian", txnPerm.name]
+      );
+      console.log("  ✅ Granted manage_transactions to librarian");
+    }
+    await markBatch(SEED_BATCHES.LIBRARIAN_TRANSACTIONS);
+    console.log("  ✅ Seed batch: v3_librarian_transactions");
+  }
+
+  // ── v4_staff_librarian_reconcile ─────────────────────────────
+  // One-time reconcile so EXISTING databases match the catalog matrix.
+  // Earlier batches never re-run, so catalog edits alone don't reach them.
+  // NOTE: this resets any custom grants a Super Admin set on these two roles.
+  if (!(await batchApplied(SEED_BATCHES.STAFF_LIBRARIAN_RECONCILE))) {
+    for (const roleName of ["librarian", "staff"]) {
+      await conn.query("DELETE FROM role_permissions WHERE role_name = ?", [roleName]);
+      for (const row of getRoleGrantRows(roleName)) {
+        await conn.query(
+          "INSERT INTO role_permissions (role_name, permission_name, actions) VALUES (?, ?, ?)",
+          [roleName, row.permission_name, row.actions ? JSON.stringify(row.actions) : null]
+        );
+      }
+      console.log(`  ✅ Reconciled default grants for ${roleName}`);
+    }
+    await markBatch(SEED_BATCHES.STAFF_LIBRARIAN_RECONCILE);
+    console.log("  ✅ Seed batch: v4_staff_librarian_reconcile");
+  }
+
   console.log("✅ Permission catalog + default role grants ready");
 }
-
 async function testConnection() {
   try {
     const connection = await pool.getConnection();

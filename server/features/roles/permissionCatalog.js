@@ -33,11 +33,22 @@ const PERMISSION_CATEGORIES = {
 };
 
 /**
- * The 20 permissions. `actions` lists every action the permission
+ * The 21 permissions. `actions` lists every action the permission
  * defines — it is server-owned and never user-editable.
  *
- * `check` marks the default (seeded) grant. Grants are stored with
- * `actions = NULL`, meaning "all defined actions".
+ * `grants` marks the default (seeded) role grants. Grants are stored with
+ * `actions = NULL`, meaning "all defined actions" (see
+ * SEED_ROLE_ACTION_OVERRIDES for the narrowed exceptions).
+ *
+ * Default matrix:
+ *   super_admin — everything
+ *   admin       — everything except manage_permissions
+ *   librarian   — manage_books, manage_lexora_books, view_lexora_books,
+ *                 manage_transactions, manage_courses, view_course_library,
+ *                 manage_tools, use_tools
+ *   staff       — manage_attendance, use_kiosk, manage_students,
+ *                 manage_faculty, manage_rfid, manage_organization:view
+ *   student     — view_lexora_books, view_course_library, use_tools
  */
 const PERMISSION_CATALOG = [
   {
@@ -73,14 +84,14 @@ const PERMISSION_CATALOG = [
     display_name: "View Lexora E-Books",
     category: "lexora",
     actions: ["view", "read", "download"],
-    grants: ["super_admin", "admin", "librarian", "staff", "student"],
+    grants: ["super_admin", "admin", "librarian", "student"],
   },
   {
     name: "manage_transactions",
     display_name: "Manage Transactions",
     category: "transactions",
     actions: ["view", "create", "edit", "return", "extend", "delete", "pay_fine"],
-    grants: ["super_admin", "admin"],
+    grants: ["super_admin", "admin", "librarian"],
   },
   {
     name: "manage_trash",
@@ -139,14 +150,14 @@ const PERMISSION_CATALOG = [
       "view", "create", "edit", "delete", "publish", "archive",
       "enroll", "grade", "approve", "submit_review",
     ],
-    grants: ["super_admin", "admin", "staff"],
+    grants: ["super_admin", "admin", "librarian"],
   },
   {
     name: "view_course_library",
     display_name: "View Course Library",
     category: "courses",
     actions: ["view", "enroll", "complete"],
-    grants: ["super_admin", "admin", "librarian", "staff", "student"],
+    grants: ["super_admin", "admin", "librarian", "student"],
   },
   {
     name: "manage_users",
@@ -167,14 +178,14 @@ const PERMISSION_CATALOG = [
     display_name: "Manage Tools",
     category: "tools",
     actions: ["view", "create", "edit", "delete"],
-    grants: ["super_admin", "admin", "staff"],
+    grants: ["super_admin", "admin", "librarian"],
   },
   {
     name: "use_tools",
     display_name: "Use Tools",
     category: "tools",
     actions: ["view", "download"],
-    grants: ["super_admin", "admin", "librarian", "staff", "student"],
+    grants: ["super_admin", "admin", "librarian", "student"],
   },
   {
     name: "manage_permissions",
@@ -189,6 +200,11 @@ const PERMISSION_CATALOG = [
     category: "organization",
     actions: ["view", "create", "edit", "delete"],
     grants: ["super_admin", "admin"],
+    // NOTE: staff receives manage_organization with actions=["view"] ONLY
+    // (see SEED_ROLE_ACTION_OVERRIDES below). Staff can see their own
+    // school's departments for student/user forms, but cannot
+    // create/edit/delete org structure. Librarian is excluded —
+    // org management is super-admin/admin only.
   },
 ];
 
@@ -200,6 +216,33 @@ const SEED_ROLE_GRANTS = {
   staff:       PERMISSION_CATALOG.filter((p) => p.grants.includes("staff")).map((p) => p.name),
   student:     PERMISSION_CATALOG.filter((p) => p.grants.includes("student")).map((p) => p.name),
 };
+
+/**
+ * Roles that receive a permission with a NARROWER action set than "all".
+ * Staff sees its own school's departments (for forms) but cannot edit them.
+ */
+const SEED_ROLE_ACTION_OVERRIDES = {
+  staff: { manage_organization: ["view"] },
+};
+
+/**
+ * Grant rows for a role: catalog grants plus action-narrowed extras.
+ * `actions: null` means "all actions defined on the permission".
+ * Used by the v4 reconcile batch and by `restoreRoleDefaults`.
+ */
+function getRoleGrantRows(roleName) {
+  const overrides = SEED_ROLE_ACTION_OVERRIDES[roleName] || {};
+  const rows = (SEED_ROLE_GRANTS[roleName] || []).map((name) => ({
+    permission_name: name,
+    actions: overrides[name] || null,
+  }));
+  for (const [name, actions] of Object.entries(overrides)) {
+    if (!rows.some((r) => r.permission_name === name)) {
+      rows.push({ permission_name: name, actions });
+    }
+  }
+  return rows;
+}
 
 /** Entity types that support per-entity overrides. */
 const ENTITY_TYPES = ["users", "books", "lexora_books", "courses", "tools"];
@@ -219,12 +262,12 @@ const SEED_ROLES = [
   {
     name: "librarian",
     display_name: "Librarian",
-    description: "Manages the Books catalog and Lexora E-Books, plus read access to the course library and tools.",
+    description: "Manages Books, Lexora E-Books, borrowing (transactions), Courses and Tools, with read access to the Course Library.",
   },
   {
     name: "staff",
     display_name: "Staff",
-    description: "Manages attendance, kiosk, students, faculty, RFID cards, courses, and tools.",
+    description: "Manages attendance, kiosk, students, faculty and RFID cards. View-only access to organization.",
   },
   {
     name: "student",
@@ -240,6 +283,9 @@ const SEED_BATCHES = {
   ROLE_GRANTS:  "v1_role_grants",
   ACTION_BACKFILL: "v1_action_backfill",
   ORGANIZATION: "v2_organization",
+  ORGANIZATION_STAFF_VIEW: "v2_organization_staff_view",
+  LIBRARIAN_TRANSACTIONS: "v3_librarian_transactions",
+  STAFF_LIBRARIAN_RECONCILE: "v4_staff_librarian_reconcile",
 };
 
 function getPermissionDefinition(name) {
@@ -254,9 +300,11 @@ module.exports = {
   PERMISSION_CATEGORIES,
   PERMISSION_CATALOG,
   SEED_ROLE_GRANTS,
+  SEED_ROLE_ACTION_OVERRIDES,
   SEED_ROLES,
   SEED_BATCHES,
   ENTITY_TYPES,
+  getRoleGrantRows,
   getPermissionDefinition,
   definedActionsFor,
 };

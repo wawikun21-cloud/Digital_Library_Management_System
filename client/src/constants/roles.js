@@ -13,7 +13,9 @@ export const ROLES = {
 };
 
 /**
- * Routes each role lands on after a successful login.
+ * Preferred landing route per role. Use getLandingRoute(user)
+ * (utils/permissionUtils) for the actual redirect — it falls back when the
+ * school license or permissions make this route unreachable.
  */
 export const ROLE_DEFAULT_ROUTES = {
   [ROLES.SUPER_ADMIN]: "/dashboard",
@@ -39,9 +41,9 @@ export const ROLE_LABELS = {
  */
 export const ROLE_DESCRIPTIONS = {
   [ROLES.SUPER_ADMIN]: "Full system access. Can manage all user types including Admins and other Super Admins.",
-  [ROLES.ADMIN]:       "Full access to dashboard, books, lexora, attendance, students, courses, and user management. Cannot manage Admins or Super Admins.",
-  [ROLES.LIBRARIAN]:   "Can manage Books catalog and Lexora E-Books. No access to attendance, students, or user management.",
-  [ROLES.STAFF]:       "Can manage Student Attendance, Students, Faculty, RFID cards, and Courses. No access to books or user management.",
+  [ROLES.ADMIN]:       "Full access to dashboard, books, lexora, transactions, trash, audit, attendance, students, faculty, RFID, courses, users, settings, and tools. Cannot manage Admins or Super Admins.",
+  [ROLES.LIBRARIAN]:   "Manages Books, Lexora E-Books, borrowing (transactions), Courses and Tools, with read access to the Course Library.",
+  [ROLES.STAFF]:       "Manages Attendance, Kiosk, Students, Faculty and RFID cards. View-only access to organization.",
   [ROLES.STUDENT]:     "Read-only access to Lexora E-Books catalog, Course Library, and Tools.",
 };
 

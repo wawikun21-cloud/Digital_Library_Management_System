@@ -162,7 +162,7 @@ describe("RoleForm", () => {
 describe("RolesTable", () => {
   const roles = [
     { name: "staff", display_name: "Staff", user_count: 2, permission_count: 5 },
-    { name: "librarian", display_name: "Librarian", user_count: 1, permission_count: 2 },
+    { name: "librarian", display_name: "Librarian", user_count: 1, permission_count: 6 },
   ];
 
   it("renders a row per role with counts and actions", () => {

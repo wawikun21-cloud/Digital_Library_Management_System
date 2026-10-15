@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import authApi from "../../../services/api/authApi";
 import { ROLES, ROLE_DEFAULT_ROUTES } from "../../../constants/roles.js";
 import { STORAGE_KEYS } from "../../../constants/index.js";
+import { getLandingRoute } from "../../../utils/permissionUtils";
 
 const EMPTY_FORM = { username: "", password: "", rememberMe: false };
 
@@ -59,7 +60,7 @@ export function useLogin() {
       }
       // Role-based post-login redirect
       const role    = user?.role ?? ROLES.ADMIN;
-      const landing = ROLE_DEFAULT_ROUTES[role] ?? "/dashboard";
+      const landing = getLandingRoute(user);
       navigate(landing, { replace: true });
     } catch (err) {
       setError(err.message || "Login failed. Please try again.");

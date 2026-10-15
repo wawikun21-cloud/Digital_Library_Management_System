@@ -21,16 +21,30 @@ export default function SchoolSelect({
 }) {
   const { schools, loading, loadSchools } = useSchools();
 
+  // When the school is fixed (scoped caller), skip the API call — the
+  // select is disabled anyway and the value is already set by the parent.
+  // This avoids unnecessary round-trips and prevents 403 errors for any
+  // role that lacks manage_organization:view permission.
+  const shouldFetch = fixedSchoolId == null;
+
   useEffect(() => {
-    loadSchools();
-  }, [loadSchools]);
+    if (shouldFetch) loadSchools();
+  }, [loadSchools, shouldFetch]);
+
+  const effectiveLoading = shouldFetch && loading;
 
   // Scoped callers only ever receive their own school from the API;
   // the fixed id is a belt-and-braces filter for the display value.
-  const options = useMemo(
-    () => (fixedSchoolId != null ? schools.filter((s) => Number(s.id) === Number(fixedSchoolId)) : schools),
-    [schools, fixedSchoolId]
-  );
+  // If the API failed or was skipped, fall back to a synthetic option
+  // so the select always shows the fixed school as selected.
+  const options = useMemo(() => {
+    if (fixedSchoolId != null) {
+      const match = schools.find((s) => Number(s.id) === Number(fixedSchoolId));
+      if (match) return [match];
+      return [{ id: fixedSchoolId, name: "Your school", status: "active" }];
+    }
+    return schools;
+  }, [schools, fixedSchoolId]);
 
   const locked = fixedSchoolId != null || disabled;
 
@@ -43,11 +57,11 @@ export default function SchoolSelect({
         name={name}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
-        disabled={locked || loading}
+        disabled={locked || effectiveLoading}
         className="rp-field px-3 py-2.5 text-sm"
       >
         <option value="">
-          {loading ? "Loading schools…" : "Select school"}
+          {effectiveLoading ? "Loading schools…" : "Select school"}
         </option>
         {options.map((school) => (
           <option key={school.id} value={school.id}>

@@ -94,17 +94,21 @@ export const NAV_ITEMS = [
   // Tools —  operational feature for Lexora Only
   { section: "CATALOG", to: "/dashboard/tools",          label: "Tools",            Icon: Package, permission: "manage_tools", featureSet: "lexora" },
 
-  // ── Organization ────────────────────────────────────────
+   // ── Organization ────────────────────────────────────────
   // Overview is the section landing: the whole hierarchy tree with
   // links into the management pages below it.
-  { section: "ORGANIZATION", to: "/dashboard/organization", label: "Overview", Icon: LayoutDashboard, permission: "manage_organization" },
+  // Organization management is super_admin/admin only — staff and
+  // librarian consume their school scope through the form-level
+  // SchoolSelect/DepartmentSelect (which no longer call the org API
+  // when the school is fixed), but they must never see these pages.
+  { section: "ORGANIZATION", to: "/dashboard/organization", label: "Overview", Icon: LayoutDashboard, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN] },
   // Schools is the one role-gated item here: "create/manage schools"
   // is a super-admin capability, not an action inside
   // manage_organization (admins hold that permission for
   // departments/categories). The page itself re-checks the role.
   { section: "ORGANIZATION", to: "/dashboard/organization/schools", label: "Schools", Icon: School, roles: [ROLES.SUPER_ADMIN] },
-  { section: "ORGANIZATION", to: "/dashboard/organization/departments", label: "Departments", Icon: Building2, permission: "manage_organization" },
-  { section: "ORGANIZATION", to: "/dashboard/organization/categories", label: "Categories", Icon: Tag, permission: "manage_organization" },
+  { section: "ORGANIZATION", to: "/dashboard/organization/departments", label: "Departments", Icon: Building2, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN] },
+  { section: "ORGANIZATION", to: "/dashboard/organization/categories", label: "Categories", Icon: Tag, roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN] },
 
 
   // ── Transactions ──────────────────────────────────────

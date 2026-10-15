@@ -24,7 +24,7 @@ import OrgListError from "../components/OrgListError";
 import OrgDeleteConfirm from "../components/OrgDeleteConfirm";
 
 export default function CategoriesPage() {
-  const { user, isSuperAdmin } = useAuth();
+  const { user, isSuperAdmin, hasPermissionAction } = useAuth();
   const { toast, success, hideToast } = useToast();
 
   const { schools, loadSchools } = useSchools();
@@ -50,9 +50,11 @@ export default function CategoriesPage() {
     if (departmentParam) setDepartmentFilter(departmentParam);
   }, [departmentParam]);
 
+  // Super admins need the school list for the selector; scoped callers
+  // already know their school — skip the fetch to avoid unneeded calls.
   useEffect(() => {
-    loadSchools();
-  }, [loadSchools]);
+    if (isSuperAdmin) loadSchools();
+  }, [loadSchools, isSuperAdmin]);
 
   useEffect(() => {
     if (!isSuperAdmin && !selectedSchoolId && ownSchoolId) {
@@ -129,7 +131,11 @@ export default function CategoriesPage() {
     }
   };
 
-  const canManage = isSuperAdmin || (ownSchoolId != null && schoolId === ownSchoolId);
+  // Same gate as DepartmentsPage: view-only roles can see categories but
+  // not create/edit/delete them.
+  const canManage =
+    hasPermissionAction("manage_organization", "create") &&
+    (isSuperAdmin || (ownSchoolId != null && schoolId === ownSchoolId));
 
   return (
     <div className="flex flex-col gap-5">

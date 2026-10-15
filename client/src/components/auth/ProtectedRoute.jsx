@@ -11,7 +11,7 @@ import authApi from "../../services/api/authApi";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { STORAGE_KEYS } from "../../constants/index.js";
 import { ROLES, ROLE_DEFAULT_ROUTES } from "../../constants/roles.js";
-import { hasPermission } from "../../utils/permissionUtils";
+import { hasPermission, hasPermissionAction } from "../../utils/permissionUtils";
 
 // ── Tiny inline spinner (no external dep) ─────────────────
 function FullPageLoader() {
@@ -39,33 +39,37 @@ function FullPageLoader() {
 //     Redirects to /login if not authenticated.
 // ─────────────────────────────────────────────────────────
 export function ProtectedRoute({ children }) {
-  const [status, setStatus] = useState("checking");
-  const [cachedUser, setCachedUser] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
+    const [status, setStatus] = useState("checking");
+    const [cachedUser, setCachedUser] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
 
-  useEffect(() => {
-    let active = true;
+    useEffect(() => {
+        let active = true;
+        authApi.me()
+            .then((data) => {
+                if (!active) return;
+                if (data?.user) {
+                    // Write to localStorage synchronously so child routes
+                    // (LicenseRoute, PermissionRoute) read the fresh /me
+                    // payload during their initial render. useLocalStorage's
+                    // useEffect only persists AFTER commit, so without this
+                    // direct write child routes would see the stale
+                    // login-time value for one frame — enough for
+                    // LicenseRoute to redirect on a feature_set mismatch.
+                    localStorage.setItem(
+                        STORAGE_KEYS.LEXORA_USER,
+                        JSON.stringify(data.user)
+                    );
+                    setCachedUser(data.user);
+                }
+                setStatus("ok");
+            })
+            .catch(() => { /* unchanged */ });
+        return () => { active = false; };
+    }, []);
 
-    authApi.me()
-      .then((data) => {
-        if (!active) return;
-        // Persist the server's resolved permission fields so nav items and
-        // button gating are accurate immediately after a reload.
-        if (data?.user) setCachedUser(data.user);
-        setStatus("ok");
-      })
-      .catch(() => {
-        if (!active) return;
-        sessionStorage.removeItem("lexora_user");
-        localStorage.removeItem(STORAGE_KEYS.LEXORA_USER);
-        setStatus("unauth");
-      });
-
-    return () => { active = false; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (status === "checking") return <FullPageLoader />;
-  if (status === "unauth")   return <Navigate to="/login" replace />;
-  return children;
+    if (status === "checking") return <FullPageLoader />;
+    if (status === "unauth")   return <Navigate to="/login" replace />;
+    return children;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -100,6 +104,10 @@ export function RoleRoute({ allow, children }) {
 //     so a role whose grants were edited by a Super Admin still
 //     follows the server's decision.
 //
+//     Optionally pass an `action` to require a specific sub-action
+//     (e.g. "create" for management pages, "view" for read-only).
+//     Without `action`, any granted action passes (backward compatible).
+//
 //  On denial the user lands on /unauthorized, which says why, instead
 //  of bouncing silently to their role's default route — a dead redirect
 //  with no explanation looked exactly like the bug it was hiding
@@ -109,8 +117,15 @@ export function RoleRoute({ allow, children }) {
 //    <PermissionRoute permission="manage_trash">
 //      <RecentlyDeletedPage />
 //    </PermissionRoute>
-// ─────────────────────────────────────────────────────────
-export function PermissionRoute({ permission, children }) {
+//
+//    <PermissionRoute permission="manage_organization" action="create">
+//      <DepartmentsPage />
+//    </PermissionRoute>
+//
+//  When `action` is set, a user who holds the permission but only with
+//  a narrower action subset (e.g. staff has manage_organization:view)
+//  is redirected to /unauthorized instead of reaching the management UI.
+export function PermissionRoute({ permission, action, children }) {
   const [user] = useLocalStorage(STORAGE_KEYS.LEXORA_USER, null);
 
   // No cached user at all → not authenticated (or the cache was just
@@ -125,6 +140,10 @@ export function PermissionRoute({ permission, children }) {
   }
 
   if (!hasPermission(user, permission)) {
+    return <Navigate to="/dashboard/unauthorized" replace />;
+  }
+
+  if (action && !hasPermissionAction(user, permission, action)) {
     return <Navigate to="/dashboard/unauthorized" replace />;
   }
 

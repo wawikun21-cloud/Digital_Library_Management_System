@@ -9,13 +9,16 @@
 
 const ROLES = require("../../middleware/authMiddleware").ROLES;
 const rolesRepo = require("./roles.repository");
+
 const {
   PERMISSION_CATALOG,
   PERMISSION_CATEGORIES,
   SEED_ROLE_GRANTS,
   ENTITY_TYPES,
   getPermissionDefinition,
+  getRoleGrantRows,
 } = require("./permissionCatalog");
+
 
 const ALL_ROLE_NAMES = Object.keys(SEED_ROLE_GRANTS);
 
@@ -386,10 +389,7 @@ async function restoreRoleDefaults(roleName, grantedBy) {
     err.code = "BAD_REQUEST";
     throw err;
   }
-  const defaults = (SEED_ROLE_GRANTS[roleName] || []).map((name) => ({
-    permission_name: name,
-    actions: null,
-  }));
+  const defaults = getRoleGrantRows(roleName);
   await rolesRepo.replaceRoleGrants(roleName, grantedBy, defaults);
   return getRoleDetail(roleName);
 }

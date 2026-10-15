@@ -21,7 +21,7 @@ import OrgListError from "../components/OrgListError";
 import OrgDeleteConfirm from "../components/OrgDeleteConfirm";
 
 export default function DepartmentsPage() {
-  const { user, isSuperAdmin } = useAuth();
+  const { user, isSuperAdmin, hasPermissionAction } = useAuth();
   const { toast, success, error: showError, hideToast } = useToast();
 
   const { schools, loadSchools } = useSchools();
@@ -45,12 +45,12 @@ export default function DepartmentsPage() {
     if (isSuperAdmin && schoolParam) setSelectedSchoolId(Number(schoolParam));
   }, [isSuperAdmin, schoolParam]);
 
-  // Super admins get the school list for the selector; scoped callers
-  // only need their own entry resolved (also covers the first render
-  // before the cached user carries school_id).
+  // Super admins need the school list for the selector; scoped callers
+  // already know their school and don't use this list — skip the fetch to
+  // avoid an unnecessary call (and a potential 403 for view-only roles).
   useEffect(() => {
-    loadSchools();
-  }, [loadSchools]);
+    if (isSuperAdmin) loadSchools();
+  }, [loadSchools, isSuperAdmin]);
 
   useEffect(() => {
     if (!isSuperAdmin && !selectedSchoolId && ownSchoolId) {
@@ -96,7 +96,12 @@ export default function DepartmentsPage() {
     }
   };
 
-  const canManage = isSuperAdmin || (ownSchoolId != null && schoolId === ownSchoolId);
+  // Gate on the actual create permission, not just "has a school". After the
+  // backend grants view-only manage_organization to staff, a staff user can
+  // SEE departments but must NOT see the create/edit/delete controls.
+  const canManage =
+    hasPermissionAction("manage_organization", "create") &&
+    (isSuperAdmin || (ownSchoolId != null && schoolId === ownSchoolId));
 
   return (
     <div className="flex flex-col gap-5">

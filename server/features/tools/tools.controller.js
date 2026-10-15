@@ -4,13 +4,12 @@ const path = require("path");
 const fs = require("fs/promises");
 const crypto = require("crypto");
 
-// Roles allowed to see and manage unpublished tools.
-const MANAGE_ROLES = ["super_admin", "admin", "staff"];
-
 const TOOLS_DIR = path.join(uploadsDir, "tools");
 
-function canManage(role) {
-  return MANAGE_ROLES.includes(role);
+// Anyone holding manage_tools may see and manage unpublished tools.
+function canManage(req) {
+  if (req.session?.user?.role === "super_admin") return true;
+  return Array.isArray(req.permissions) && req.permissions.includes("manage_tools");
 }
 
 /**
@@ -47,8 +46,6 @@ async function storeToolAsset(file, namePrefix = "") {
 
 function listTools(req, res) {
   return runAsync(req, res, async () => {
-    const role = req.session?.user?.role;
-
     const filters = {
       search: req.query.search,
       category: req.query.category,
@@ -61,7 +58,8 @@ function listTools(req, res) {
 
     // Non-managers may only browse active tools. Set after reading the query
     // so a crafted `is_active=false` cannot reveal unpublished entries.
-    if (!canManage(role)) filters.is_active = "true";
+    if (!canManage(req)) filters.is_active = "true";
+
 
       const result = await toolsService.listTools(filters, req.schoolScope);
     res.status(200).json({ success: true, ...result });
@@ -74,7 +72,7 @@ function getTool(req, res) {
     if (!tool) {
       return res.status(404).json({ success: false, error: "Tool not found" });
     }
-    if (!tool.is_active && !canManage(req.session?.user?.role)) {
+    if (!tool.is_active && !canManage(req)) {
       return res.status(404).json({ success: false, error: "Tool not found" });
     }
     res.status(200).json({ success: true, data: tool });
@@ -185,7 +183,7 @@ function deleteTool(req, res) {
 
 function getCategories(req, res) {
   return runAsync(req, res, async () => {
-    const activeOnly = !canManage(req.session?.user?.role);
+    const activeOnly = !canManage(req);
     const categories = await toolsService.listCategories(activeOnly);
     res.status(200).json({ success: true, data: categories });
   });
@@ -207,7 +205,7 @@ function downloadTool(req, res) {
     }
 
     // Managers may download an unpublished tool to verify the upload.
-    if (!tool.is_active && !canManage(req.session?.user?.role)) {
+    if (!tool.is_active && !canManage(req)) {
       return res.status(403).json({ success: false, error: "Tool is not available" });
     }
 
